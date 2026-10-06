@@ -11,6 +11,7 @@ typedef struct { char name[24]; uint32_t off, size; } Entry;
 struct ResArchive {
     FILE *f;
     int count;
+    int named;              /* entries have file names (RCS, Mrcs); the others are numbered */
     Entry *e;
 };
 
@@ -29,10 +30,8 @@ const char *res_dir(void) { return g_dir; }
 
 void res_path(char *out, size_t cap, const char *name) { snprintf(out, cap, "%s/%s", g_dir, name); }
 
-uint8_t *res_load_file(const char *name, size_t *size)
+static uint8_t *read_whole(const char *p, size_t *size)
 {
-    char p[1024];
-    res_path(p, sizeof p, name);
     FILE *f = plat_fopen(p, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
@@ -43,6 +42,43 @@ uint8_t *res_load_file(const char *name, size_t *size)
     fclose(f);
     if (d) { d[n] = 0; if (size) *size = (size_t)n; }
     return d;
+}
+
+/* -1 = not looked yet, 0 = no mods folder, 1 = there is one */
+static int g_mods = -1;
+
+int res_mod_find(char *out, size_t cap, const char *sub, const char *name)
+{
+    const char *dirs[2] = { plat_user_dir(), plat_base_dir() };
+    char p[1024];
+    if (g_mods < 0) {
+        g_mods = 0;
+        for (int i = 0; i < 2; i++) {
+            snprintf(p, sizeof p, "%smods", dirs[i]);
+            if (plat_exists(p)) g_mods = 1;
+        }
+    }
+    if (!g_mods || !name || !*name) return 0;
+    for (int i = 0; i < 2; i++) {
+        snprintf(p, sizeof p, "%smods/%s/%s", dirs[i], sub, name);
+        FILE *f = plat_fopen(p, "rb");
+        if (f) {
+            fclose(f);
+            snprintf(out, cap, "%s", p);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+uint8_t *res_load_path(const char *path, size_t *size) { return read_whole(path, size); }
+
+uint8_t *res_load_file(const char *name, size_t *size)
+{
+    char p[1024];
+    if (res_mod_find(p, sizeof p, "data", name)) return read_whole(p, size);
+    res_path(p, sizeof p, name);
+    return read_whole(p, size);
 }
 
 void res_user_path(char *out, size_t cap, const char *name)
@@ -77,7 +113,7 @@ ResArchive *res_open(const char *base)
     a->f = f;
     a->count = ind[0] | ind[1] << 8;
     a->e = calloc((size_t)a->count + 1, sizeof *a->e);
-    int named = isz == 2 + (size_t)a->count * 24;
+    int named = a->named = isz == 2 + (size_t)a->count * 24;
     if (!named && isz != 2 + (size_t)a->count * 4) { free(ind); res_close(a); return NULL; }
     for (int i = 0; i < a->count; i++) {
         if (named) {
@@ -120,6 +156,8 @@ int res_find(const ResArchive *a, const char *name)
 uint8_t *res_read(ResArchive *a, int i, size_t *size)
 {
     if (!a || i < 0 || i >= a->count) return NULL;
+    char p[1024];
+    if (a->named && res_mod_find(p, sizeof p, "data", a->e[i].name)) return read_whole(p, size);
     uint8_t *d = malloc(a->e[i].size + 1);
     if (!d) return NULL;
     fseek(a->f, (long)a->e[i].off, SEEK_SET);

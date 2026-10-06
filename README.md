@@ -62,6 +62,17 @@ Linux), or next to `A2RacerRE.exe` when a `data` folder is there (portable). The
 there in their original formats, so they can be edited the same way: `Game.ini` and `Raser.ini` (commented), `SLOTS.RAS`
 (the nine save slots), `options.ras`.
 
+### Texture packs and mods
+A `mods` folder in the user folder (or next to the program) replaces the game's files without touching them:
+- `mods/textures/NAME.png` replaces texture `NAME` (also `.tga`, `.pcx`, `.jpg`, `.bmp`), at any resolution: the
+  game's textures are 64 to 256 pixels, so 4x upscales are a good start. Transparency comes from the PNG's alpha, or
+  from the original's colour key pink (255, 0, 127).
+- `mods/data/NAME` replaces any other game file by name: sounds (`.wav`), images of the menu and the overlay (`.pcx`),
+  films (`.smk`), track and object files.
+
+`A2RacerRE --dump-textures FOLDER` writes all 147 textures of the game as PNG with their names, the starting point of a
+pack. Textures are drawn with mipmaps and 8x anisotropic filtering where the graphics card has it.
+
 ## Building from source
 Windows 10 or 11; nothing needs to be installed first:
 ```bat

@@ -18,6 +18,9 @@ const Texture *tex_get(const char *name);
 /* the decoded image (RGBA) of name, as tex_get picks it; 0 = missing. Free with image_free. */
 int tex_image(const char *name, Image *out);
 void tex_free_all(void);
+/* every texture of the game (the .tga where there is one, else the .pcx) as DIR/NAME.png, the starting point of a
+ * texture pack (mods/textures, res.h); the colour key (255,0,127) stays in. Returns the number written. */
+int tex_dump_all(const char *dir);
 /* Game.ini [GFX OPTIONS] gamma=1 ("dark", the CD's setting): every colour channel c -> c*c/256 when an image is
  * converted to the screen format (pformat_set_gamma 0x468220), except the sky backdrop */
 void tex_set_gamma(int on);

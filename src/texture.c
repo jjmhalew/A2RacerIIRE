@@ -4,6 +4,7 @@
 #include "texture.h"
 #include "gfx.h"
 #include "plat.h"
+#include "res.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,14 +30,62 @@ static void base_name(const char *name, char *out, size_t cap)
     if (dot) *dot = 0;
 }
 
-int tex_image(const char *name, Image *out)
+/* a texture pack's image: mods/textures/NAME with one of these extensions (res.h) */
+static int mod_image(const char *b, Image *out)
 {
-    char b[32], n[40];
-    base_name(name, b, sizeof b);
+    static const char *EXT[5] = { "png", "tga", "pcx", "jpg", "bmp" };
+    char n[48], p[1024];
+    for (int i = 0; i < 5; i++) {
+        snprintf(n, sizeof n, "%s.%s", b, EXT[i]);
+        if (!res_mod_find(p, sizeof p, "textures", n)) continue;
+        size_t sz = 0;
+        uint8_t *d = res_load_path(p, &sz);
+        int ok = d && image_decode(n, d, sz, out);
+        free(d);
+        if (ok) return 1;
+        fprintf(stderr, "texture pack: %s could not be read\n", p);
+    }
+    return 0;
+}
+
+static int orig_image(const char *b, Image *out)
+{
+    char n[40];
     snprintf(n, sizeof n, "%s.tga", b);
     if (image_load(n, out)) return 1;
     snprintf(n, sizeof n, "%s.pcx", b);
     return image_load(n, out);
+}
+
+int tex_image(const char *name, Image *out)
+{
+    char b[32];
+    base_name(name, b, sizeof b);
+    return mod_image(b, out) || orig_image(b, out);
+}
+
+int tex_dump_all(const char *dir)
+{
+    ResArchive *a = res_open("RCS");
+    int n = 0;
+    char done[512][24];
+    for (int i = 0; i < res_count(a); i++) {
+        const char *name = res_name(a, i), *e = strrchr(name, '.');
+        if (!e || (_stricmp(e, ".pcx") && _stricmp(e, ".tga"))) continue;
+        char b[32], p[1024];
+        base_name(name, b, sizeof b);
+        int seen = 0;
+        for (int k = 0; k < n && !seen; k++) seen = !_stricmp(done[k], b);
+        if (seen || n >= 512) continue;
+        Image img;
+        if (!orig_image(b, &img)) continue;
+        snprintf(p, sizeof p, "%s/%s.png", dir, b);
+        if (image_write_png(p, &img)) snprintf(done[n++], sizeof done[0], "%s", b);
+        else fprintf(stderr, "cannot write %s\n", p);
+        image_free(&img);
+    }
+    res_close(a);
+    return n;
 }
 
 /* the transparent colour of the textures, (255, 0, 127) (docs/FORMAT_IMAGES.md) -> alpha 0. Keyed texels take the

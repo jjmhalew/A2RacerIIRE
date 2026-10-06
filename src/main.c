@@ -14,7 +14,13 @@
 #include "objects.h"
 #include "paths.h"
 #include "race.h"
+#include "texture.h"
 #include "track.h"
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -175,6 +181,22 @@ int main(int argc, char **argv)
     printf("data: %s\n", data);
     for (int i = 1; i < argc; i++)
         if (!strcmp(argv[i], "--verify")) { rc = data_verify(data) ? 1 : 0; plat_shutdown(); return rc; }
+    const char *dump = arg_value(argc, argv, "--dump-textures");   /* the start of a texture pack (res.h) */
+    if (dump) {
+#ifdef _WIN32
+        _mkdir(dump);
+#else
+        mkdir(dump, 0755);
+#endif
+        char m[1200];
+        int n = tex_dump_all(dump);
+        snprintf(m, sizeof m, "%d textures written to %s as PNG. Edit them and put them in the folder mods/textures "
+                 "in the user folder (%s) or next to the program.", n, dump, plat_user_dir());
+        printf("%s\n", m);
+        plat_message(m, n == 0);
+        plat_shutdown();
+        return n ? 0 : 1;
+    }
     g_shot = arg_value(argc, argv, "--shot");
     audio_init();
     const char *film = arg_value(argc, argv, "--film");

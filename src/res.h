@@ -30,4 +30,12 @@ void res_user_path(char *out, size_t cap, const char *name);
 
 /* the race archive RCS, opened on first use; then the loose files */
 uint8_t *res_load(const char *name, size_t *size);
+
+/* Mods: a "mods" folder in the user folder or next to the program (the user folder wins).
+ *   mods/data/NAME       replaces the game file NAME, loose or in a named archive (RCS, Mrcs): sounds, images, ...
+ *   mods/textures/NAME.png (.tga .pcx .jpg .bmp)   replaces texture NAME at any size (texture.c), alpha or the
+ *                        colour key (255,0,127) for transparency; A2RacerRE --dump-textures DIR writes the originals.
+ * res_mod_find puts the path of mods/SUB/NAME in out; 0 = no such file. */
+int res_mod_find(char *out, size_t cap, const char *sub, const char *name);
+uint8_t *res_load_path(const char *path, size_t *size);     /* a whole file by path; NULL when missing */
 #endif

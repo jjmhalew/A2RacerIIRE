@@ -1,5 +1,5 @@
 /* image.h - the game's image formats decoded to 32-bit RGBA: PCX (8-bit with a palette at the end, or 24-bit in three
- * planes) and TGA (uncompressed or RLE; 8-bit mapped, 15/16, 24 or 32 bits).
+ * planes) and TGA (uncompressed or RLE; 8-bit mapped, 15/16, 24 or 32 bits); for texture packs also PNG, JPEG and BMP.
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_IMAGE_H

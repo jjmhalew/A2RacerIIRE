@@ -9,6 +9,14 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STBIW_WINDOWS_UTF8
 #include "stb/stb_image_write.h"
+/* PNG, JPEG and BMP for texture packs (mods/textures, res.h); the game's own PCX and TGA are decoded below */
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_BMP
+#define STBI_NO_STDIO
+#define STBI_FAILURE_USERMSG
+#include "stb/stb_image.h"
 
 static int rd16(const uint8_t *p) { return p[0] | p[1] << 8; }
 
@@ -144,6 +152,19 @@ int image_decode(const char *name, const uint8_t *d, size_t n, Image *out)
 {
     const char *e = strrchr(name, '.');
     if (e && !_stricmp(e, ".tga")) return image_decode_tga(d, n, out);
+    if (e && (!_stricmp(e, ".png") || !_stricmp(e, ".jpg") || !_stricmp(e, ".jpeg") || !_stricmp(e, ".bmp"))) {
+        int w, h, c;
+        memset(out, 0, sizeof *out);
+        uint8_t *p = n <= 0x7fffffff ? stbi_load_from_memory(d, (int)n, &w, &h, &c, 4) : NULL;
+        if (!p) return 0;
+        out->w = w;
+        out->h = h;
+        out->bpp = c * 8;
+        out->rgba = malloc((size_t)w * h * 4);         /* image_free uses free() */
+        if (out->rgba) memcpy(out->rgba, p, (size_t)w * h * 4);
+        stbi_image_free(p);
+        return out->rgba != NULL;
+    }
     return image_decode_pcx(d, n, out);
 }
 

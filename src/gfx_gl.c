@@ -37,6 +37,7 @@ typedef ptrdiff_t GLsizeiptr, GLintptr;
 #define GL_CW 0x0900
 #define GL_LEQUAL 0x0203
 #define GL_TEXTURE_2D 0x0DE1
+#define GL_EXTENSIONS 0x1F03
 #define GL_UNSIGNED_BYTE 0x1401
 #define GL_UNSIGNED_SHORT 0x1403
 #define GL_UNSIGNED_INT 0x1405
@@ -72,6 +73,8 @@ typedef ptrdiff_t GLsizeiptr, GLintptr;
     X(void, Viewport, (GLint, GLint, GLsizei, GLsizei)) X(void, Scissor, (GLint, GLint, GLsizei, GLsizei)) \
     X(void, GenTextures, (GLsizei, GLuint *)) X(void, DeleteTextures, (GLsizei, const GLuint *)) \
     X(void, BindTexture, (GLenum, GLuint)) X(void, TexParameteri, (GLenum, GLenum, GLint)) \
+    X(void, TexParameterf, (GLenum, GLenum, GLfloat)) X(const GLubyte *, GetString, (GLenum)) \
+    X(void, GetFloatv, (GLenum, GLfloat *)) \
     X(void, TexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)) \
     X(void, TexSubImage2D, (GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void *)) \
     X(void, PixelStorei, (GLenum, GLint)) X(void, ReadPixels, (GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *)) \
@@ -105,6 +108,7 @@ static GLuint g_prog, g_white, g_stream_vbo;
 static GLint u_mvp, u_tex, u_alpha_test, u_fog, u_fogcol, u_fogrange, u_tint, u_mv;
 static Mat4 g_proj, g_view, g_model;
 static int g_w, g_h, g_has_mipmap;
+static float g_aniso;           /* anisotropic filtering of mipmapped textures (GL_EXT_texture_filter_anisotropic), 0 = none */
 static float g_fog[5];
 static float g_tint[4] = { 1, 1, 1, 1 };
 static int g_depth_off;         /* gfx_set_depth_off */
@@ -153,6 +157,14 @@ int gfx_init(void)
     GLFUNCS
 #undef X
     g_has_mipmap = glGenerateMipmap != NULL;
+    {   /* the original's bilinear filtering blurs the road into the distance; 8x anisotropic keeps it sharp */
+        const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+        if (ext && (strstr(ext, "_texture_filter_anisotropic"))) {
+            float mx = 0;
+            glGetFloatv(0x84FF, &mx);                   /* GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT */
+            g_aniso = mx > 8 ? 8 : mx;
+        }
+    }
     GLuint vs = compile(GL_VERTEX_SHADER, VS), fs = compile(GL_FRAGMENT_SHADER, FS);
     if (!vs || !fs) return 0;
     g_prog = glCreateProgram();
@@ -217,6 +229,7 @@ unsigned gfx_texture(const uint8_t *rgba, int w, int h, int flags)
     GLint mag = (flags & TEX_NEAREST) ? GL_NEAREST : GL_LINEAR;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mip ? GL_LINEAR_MIPMAP_LINEAR : mag);
+    if (mip && g_aniso > 1) glTexParameterf(GL_TEXTURE_2D, 0x84FE, g_aniso);   /* GL_TEXTURE_MAX_ANISOTROPY_EXT */
     /* GLES 2.0 only repeats power-of-two textures */
     GLint wrap = ((flags & TEX_CLAMP) || (!pot && plat_is_gles())) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
