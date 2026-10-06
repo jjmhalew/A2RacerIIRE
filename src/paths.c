@@ -29,7 +29,7 @@ typedef struct {
     int sample;                 /* object +0x14, played every frame by the update (sndfx_play_object_sample 0x428bc0) */
 } Active;
 
-#define SND_KEY 1000            /* sfx_object keys of the path objects: SND_KEY + slot (race objects use 0..255) */
+#define SND_KEY 1000            /* sfx_object keys of the path objects: SND_KEY + slot (race objects use 0..511) */
 
 static Path g_path[20];         /* g_paths 0x4e0710, max 20 */
 static int g_npaths, g_lap = -1;

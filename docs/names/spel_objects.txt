@@ -100,8 +100,15 @@
 0x48c2a8 g_track_object_types ; 11 x {type, obj_handler, coll_handler}
 0x429310 init_track_object_types ; registers g_track_object_types
 0x428bc0 sndfx_play_object_sample ; (obj, on): the object's positional looping sample (+0x14), called every frame by its handler
-0x428ea0 object_flyup_check_collision ; string; state 0x10
-0x429020 object_fall_over ; (obj, ...) velocity damping, rotation steps -64/-32/-48 (?)
+0x428ea0 object_flyup_check_collision ; (obj, mass) the player car hits it: world velocity from the car's, +0x10 = 1 (FORMAT_OBJECTS.md 2.1)
+0x429020 object_fall_over ; (obj, rest pitch, rest height) one frame of the flight; 1 = touched the road (bounce, lies down when vy < 2)
+0x429350 object_hit_by_player ; (obj, int *who) sub_446930 against g_plr_obj
+0x446930 obj_radius_overlap ; (a, b) XZ distance < mesh radius a + mesh radius b
+0x429690 objtype_6_timer_init ; timer 5, 500 ms
+0x4297b0 objtype_arrow_timer_init ; timer 7, 500 ms
+0x4295a0 traffic_light_timer_init ; timer 1, 5000 ms, state 0
+0x4dc96c g_arrow_state ; 0: arrows frame 1 (500 ms), 1: frame 0 (1000 ms)
+0x4dc968 g_objtype6_state
 0x429380 objtype_solid ; types 1 and 5
 0x4293f0 objtype_pylon ; type 2
 0x4297d0 objtype_barrier ; type 3

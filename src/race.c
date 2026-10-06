@@ -635,6 +635,7 @@ int race_init(Race *r, int etappe, int car)
     r->turbo = r->upg_turbo ? 100 : 0;
     r->plr_obj = -1;
     r->hud_message = r->hud_msg_shown = -1;
+    objects_race_init(r);                              /* road_load_omp's bodies (types 5, 8, 10), objects.c */
     ai_init_cops(r);                                   /* road_load_omp's type-9 objects come first in the object list */
     /* init_player_car 0x4256a0: add_car at g_startchunk - [PLAYER] position, lane 4, the right-hand side (ai.c) */
     int o = ai_init_player(r->plr_car, handle_player_car, plr_collision_cb);
@@ -691,6 +692,7 @@ static void race_tick(void)
     R->cam_draw0 = R->cam_pos;
     R->tgt_draw0 = R->cam_target;
     lights_tick(R);             /* the brake lights, at the start of handle_player_car (last tick's brake_light) */
+    objects_tick();             /* the handlers of the .omp objects without a body (objects.c) */
     for (int o = 0; o < R->nobj; o++)
         if (R->obj[o].used && R->obj[o].active && R->obj[o].update && ai_obj_in_window(o)) R->obj[o].update(o);
     wheels_tick(R);             /* car_update_wheels(_ai), run by the cars' handlers in the original */

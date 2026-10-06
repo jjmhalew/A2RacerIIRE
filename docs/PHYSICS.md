@@ -973,7 +973,12 @@ T6 86.5. With the real top gear T0 and T1 would give d < 0 and return 0, so a fa
 Files: bbox.cpp (0x449a30..0x44b980), obj_phys.cpp (0x448e30..0x4499e0), obj_main.cpp (0x441490), plr_car.cpp
 (0x427190..0x427fd0), plr_main.cpp (0x4281f0, 0x428390), obj_dmg.cpp (0x448780..0x448db0). Collisions are 2D
 oriented rectangles in the XZ plane; y is ignored. Only **rails** (road edges / guard rails from the .cmp file) and
-**objects in the physics list** (cars: player, racers, cops, ADAC, traffic) can be hit.
+**objects in the physics list** can be hit. The physics list holds the cars (player, racers, cops, ADAC, traffic,
+path police cars) and three kinds of `.omp` track objects, which `road_load_omp` 0x4451d0 gives a body while the
+track loads (8.1): type 5 (immovable: raised medians and verges `E0x_MID*`, the flat grass verges `E0x_COL*`, columns
+`E00_ZUIL`, walls `N_WALS`, petrol pumps, huts, tanks, people boards), type 8 (the arrow boards, pushable) and type 10
+(parked police cars, pushable). Pylons, road-works barriers and speed-camera poles (types 2, 3, 7) are not in the
+list: they never stop a car, but are knocked over by the player (a radius test, FORMAT_OBJECTS.md 2.1).
 
 ### 8.0 Conventions
 
@@ -1002,6 +1007,21 @@ c->restitution = e; c->vel = vel; c->yawrate = w0;
 - traffic: N_GOLF 1270, N_ASTRA 1070, N_BUS 15000 (11.5 x 2.5 m), N_VRTAUT 15000, N_POLO 1070, N_BESTEL 1700,
   N_CALIBR 1300
 - len x wid is 4.5 x 1.7 except RACER_6 (3.995 x 1.715) and the bus.
+
+The `.omp` bodies (`road_load_omp` 0x44542e, jump table 0x4454d8 on the type, then `obj_init_physics_idx` 0x44549e
+and `physics_list_add` 0x4454a7) get vel 0, w0 0, len 4.0, wid 1.0 (which only set the inertia; the box is the mesh's,
+8.2) and:
+
+| type | mass | e | handler (+0x44) per frame |
+|---|---|---|---|
+| 5 | 0 (immovable: inverse mass and inertia 0) | 0.1 | `objtype_solid` 0x429380: only its sample |
+| 8 | 13000 | 0.2 | `objtype_arrow` 0x4296b0: velocity +0x6c..+0x74 and yaw rate x0.95, blinks |
+| 10 | 1300 | 0.2 | `objtype_police_car` 0x4293a0: velocity and yaw rate x0.9 |
+
+They are moved, collided and put on the waypoint obstacle lists (side +0x28 = 0, not important) by obj_physics_step
+like the cars, and get the chunk orientation (6.1). A car that hits one gets the object-object response of 8.5
+(J = num / inv_mass(car) for a mass-0 body; the body keeps velocity 0), so the player takes damage, crash sounds and
+sparks as against another car. Their collision callbacks (+0x48) are NULL.
 
 ### 8.2 Boxes (`g_bboxes` 0x4e6790, 200 x 0x4c bytes, count `g_bbox_count` 0x4ea2f0, rebuilt for every sweep)
 

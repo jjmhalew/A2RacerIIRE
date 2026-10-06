@@ -25,6 +25,7 @@ int  add_car(int car_type, int chunk, int lane, int side, int dir, int (*handler
 
 /* engine hooks of obj_move_all / rceng_handle_objects */
 int  ai_obj_in_window(int o);                  /* chunk within player_chunk +-2*visiblechunks, or always updated */
+int  ai_chunk_in_window(int chunk);            /* the same window test for a chunk */
 void ai_wp_remove(int o);                      /* rceng_remove_object_in_waypoint_obstacle_list 0x442520 */
 void ai_wp_add(int o);                         /* rceng_add_object_in_waypoint_obstacle_list 0x4424b0 */
 

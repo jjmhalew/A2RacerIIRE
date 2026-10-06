@@ -53,7 +53,7 @@ static struct {
     int extra_at;               /* highway "EXTRA TIJD" box */
     int limit_ms, last_tick_sec;
     /* money and events */
-    int money, position, poles, radar_off_until_chunk;
+    int money, position, poles;
     int speed_limit;            /* 0x48c480, -1 = none */
     int difficulty, copland, invincible;
     int gameover_reason;
@@ -221,7 +221,6 @@ static void trigger(Race *r, int id, int prev, int cur)
     int n = r->track.nchunks, fwd = moving_forward(prev, cur, n);
     switch (id) {
     case 1:                                          /* speed camera 0x42a2e0 */
-        if (cur < G.radar_off_until_chunk) break;
         if (r->speed_kmh > G.speed_limit && fwd) { sfx_play(SFX_FLITS); G.flash = 1; }
         break;
     case 2:                                          /* quick service 0x42a4d0 */
@@ -291,7 +290,6 @@ void rules_radar_bonus(Race *r)
 {
     G.poles++;
     rules_message(51);
-    G.radar_off_until_chunk = player(r)->chunk + 20;
 }
 
 /* ---- per tick ---------------------------------------------------------------------------------------------------- */

@@ -179,7 +179,13 @@ static int calc_chunk_window(int c, int r, int *lo, int *hi, int *lo2, int *hi2)
 int ai_obj_in_window(int o)
 {
     if (!R || R->plr_obj < 0 || o == R->plr_obj || OBJ(o)->always_update) return 1;
-    int lo, hi, lo2, hi2, c = OBJ(o)->chunk;
+    return ai_chunk_in_window(OBJ(o)->chunk);
+}
+
+int ai_chunk_in_window(int c)
+{
+    if (!R || R->plr_obj < 0) return 1;
+    int lo, hi, lo2, hi2;
     int wrapped = calc_chunk_window(OBJ(R->plr_obj)->chunk, 2 * g_visible_chunks, &lo, &hi, &lo2, &hi2);
     return (c >= lo && c <= hi) || (wrapped && c >= lo2 && c <= hi2);
 }

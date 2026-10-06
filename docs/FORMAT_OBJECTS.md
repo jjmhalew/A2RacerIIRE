@@ -36,12 +36,13 @@ count x 68 bytes:
   +8   f32  x, y, z      world position (same space as the road, 1 unit ~ 10 cm, y up)
   +20  f32  rx, ry, rz   rotation in degrees; in the data only ry (yaw) is used (rx = -1 on 2 objects)
   +32  char anim[32]     NUL-terminated anim name; bytes after the NUL are stale editor buffer content
-  +64  i32  variant      0, 1 or 2 (-> main_object+0x14)
+  +64  i32  variant      0, 1 or 2: the object's sample (-> main_object+0x14): 1 werk02 (road works), 2 kerkklok
 ```
 
 Every field is read with its own `fread(p, 4, 1)` (0x470b70), the name with `fread(buf, 1, 0x20)` (0x44533f).
-Then (0x445385..0x4453b9) the rotation is converted to the engine's 1024-steps-per-turn angles:
-`rx' = rx * 1024/360`, `ry' = -ry * 1024/360`, `rz' = rz * 1024/360` (`[0x49b014] = 1024.0`, `* 0.00277778`).
+Then (0x445385..0x4453b9) the rotation is converted to the engine's angle units:
+`rx' = rx * U/360`, `ry' = -ry * U/360`, `rz' = rz * U/360` (`U = [0x49b014]`, `* 0.00277778`; 1024.0 in .data,
+4096 at run time, see src/track.h).
 
 Object creation: `main_object_add(pos, rot', anim, frame 0, g_static_handlers[type].obj, g_static_handlers[type].coll,
 0, variant)` 0x43f770 -> `main_object_init` 0x43fa40 -> `object3d_new(pos, rot, anim, frame)` 0x458340; the chunk is
@@ -50,24 +51,82 @@ stored at `main_object+0x18` (0x44542a). Then, by type (jump table 0x4454d8, typ
 | type | handler (`init_track_object_types` 0x429310, table 0x48c2a8) | extra at load | objects (all 7 tracks) |
 |---|---|---|---|
 | 0 | none | - | scenery: buildings, trees, lamp posts, signs, bridges (4584) |
-| 1 | 0x429380: `object_hit` 0x428bc0(obj, 1) | - | a few solid objects (`E00_OUDK`, `C_KEET`, `E02_GROT`) |
-| 2 | 0x4293f0: by `+0x10`: 0 -> `object_flyup_check_collision` 0x428ea0 (state 0x10), 1 -> 0x429020 (state 0x11), then 0x428bc0(obj, 0) | - | pylons `A_PILON1`/`C_PILON1`, `A_CNSTR1` |
-| 3 | 0x4297d0 (same pattern) | - | road-works barriers/fences `*_CNSTR0/2`, `C_HEK1/2` |
+| 1 | 0x429380 `objtype_solid`: `sndfx_play_object_sample` 0x428bc0(obj, 1) (its sample, looping) | - | a few objects without a body (`E00_OUDK`, `C_KEET`, `E02_GROT`) |
+| 2 | 0x4293f0 `objtype_pylon`: by `+0x10`: 0 -> `object_flyup_check_collision` 0x428ea0(obj, 4.0) (sample 0x10 pionb1), 1 -> `object_fall_over` 0x429020(obj, 0x4fb, 4.0) (sample 0x11 pionb3), then 0x428bc0(obj, 0) | - | pylons `A_PILON1`/`C_PILON1`, `A_CNSTR1` |
+| 3 | 0x4297d0 `objtype_barrier` (same pattern: 8.0; 0x400, 2.0; samples 0x12 / 0x13 paal) | - | road-works barriers/fences `*_CNSTR0/2`, `C_HEK1/2` |
 | 4 | 0x429480: frame = traffic-light state `g_traffic_light_state` 0x48c484 (timers 5000/500 ms via 0x421680) | - | `C_STOPLG`, `C_STPLR2` |
-| 5 | 0x429380 (as 1) | physics: mass 0 (immovable), restitution 0.1, 4.0, 1.0 | columns `E0x_COL*`, `E0x_MID*`, `N_WALS`, pumps, `A_TANK2`, parked police |
+| 5 | 0x429380 (as 1) | physics: mass 0 (immovable), restitution 0.1, 4.0, 1.0 | raised medians `E0x_MID*`, flat grass verges `E0x_COL*`, columns `E00_ZUIL`, `N_WALS`, pumps, `A_TANK2`, huts, a few `MPOLIZEI` |
 | 6 | 0x4295d0 | - | not used |
-| 7 | 0x428d30: speed camera (`flitspaal`, sets 0x4882c0 = 0x33) | - | `A_FLTSRP`, `C_FLTSRP` |
-| 8 | 0x4296b0 | physics: mass 13000, restitution 0.2, 4.0, 1.0 | blinking arrows `A_PIJL1`, `A_LPIJL1`, `C_PIJL1` |
+| 7 | 0x428d30 `objtype_speed_camera` (as 3: 10.0; 0x400, 4.0; 0x12 / 0x13), knocked over: RADAR BONUS | - | `A_FLTSRP`, `C_FLTSRP` |
+| 8 | 0x4296b0 `objtype_arrow`: damps velocity and yaw rate by 0.95, blinks | physics: mass 13000, restitution 0.2, 4.0, 1.0 | arrow boards `A_PIJL1`, `A_LPIJL1`, `C_PIJL1` |
 | 9 | none | `car_cops_add_static` 0x40c920 (AI police car on the waypoint graph) | `MPOLIZEI` |
 | 10 | 0x4293a0 (damps velocity +0x6c..+0x74 and +0x7c by 0.9) | physics: mass 1300, restitution 0.2, 4.0, 1.0 | `MPOLIZEI` |
 
-Physics init = `obj_init_physics_idx` 0x43f8a0 -> `obj_init_physics` 0x4403b0 (mass < epsilon -> inverse mass/inertia 0; restitution
-must be in [0,1], `'Invalid coef. of restitution'`), followed by `physics_list_add` 0x4426c0. Type and handler
-semantics beyond this are the gameplay/physics agents' area. The handler table `g_static_handlers` 0x4e5dd0
-(257 x {object, collision}) is cleared by `rceng_init_engine` 0x441de0 and filled for types 0..10, so types 21/43
-behave as type 0. Variant: 1 on 47/47/44 road-works objects of the highway tracks and a few others, 2 on 2 objects;
-it only initialises `main_object+0x14`, which the handlers later overwrite with state codes - its effect is not traced
-**(?)**.
+Physics init = `obj_init_physics_idx` 0x43f8a0 -> `obj_init_physics` 0x4403b0 (vel 0, yaw rate 0, mass, restitution,
+length 4.0, width 1.0; mass < epsilon -> inverse mass/inertia 0; restitution must be in [0,1], `'Invalid coef. of
+restitution'`), followed by `physics_list_add` 0x4426c0: the cars collide with these objects (PHYSICS.md 8.1). The
+collision handlers of all types are NULL. The handler table `g_static_handlers` 0x4e5dd0 (257 x {object, collision})
+is cleared by `rceng_init_engine` 0x441de0 and filled for types 0..10, so types 21/43 behave as type 0.
+`init_track_object_types` also starts the blink timers: 5 (type 6, 500 ms), 7 (arrows, 500 ms) and 1 (traffic lights,
+5000 ms, state 0).
+
+Variant = the object's **sample** (`main_object+0x14`, an index into the race sample table, SOUND.md 3): 1 `werk02`
+(road works) on 47/47/44 road-works objects of the highway tracks and a few others, 2 `kerkklok` (church bell) on
+`E00_OUDK` (etappe 0/6) and `E02_GROT` (etappe 2). The handlers of types 1, 2, 3, 5 and 7 play it, see 2.1.
+
+### 2.1 The object types in the race (gm_init.cpp)
+
+`rceng_handle_objects` 0x440850 calls the handler of every object whose chunk (+0x18) is within player chunk +-
+2*visiblechunks, once per frame; the `.omp` objects come first in the object list.
+
+**Sound.** `sndfx_play_object_sample(obj, loop)` 0x428bc0 plays the object's sample +0x14 at its position (heard by
+the player car, SOUND.md 5) and returns 1 = done when there is none, when it is out of range (|dx| + |dz| >= 2500), when
+no slot is free or when a one-shot has ended. A slot that is playing is only updated (0x428b5d): it keeps the sample
+it was started with. Types 1 and 5 call it with loop = 1 and never clear the sample, so the bell and road-works
+sounds loop while the player is within range. Types 2, 3, 7 call it with loop = 0 and clear the sample when done:
+the variant's werk02 plays once, and only if the object is within range when it enters the handling window (at the
+start, or never, since the window is wider than the sound range); afterwards the sample holds the hit sounds.
+
+**Knocking over** (types 2, 3, 7; +0x10: 0 standing, 1 flying, 2 lying):
+```c
+int object_flyup_check_collision(int obj, float mass)        // 0x428ea0
+{
+    if (mass == 0) fatal("(object_flyup_check_collision) massa is zero");
+    if (!sub_429350(obj, &p)) return 0;      // -> sub_446930(obj, g_plr_obj): only the player car, when
+                                             // dx*dx + dz*dz < (radius(obj) + radius(player))^2 (mesh +0x74, XZ)
+    vec3 v = objs[p].vel;                    // the car's local m/s
+    int a = ftol(inst(p).yaw) + 125 - rand() % 250;  if (a > units) a -= units;  a &= mask;
+    o.vel.x = COS[a]*v.x - SIN[a]*v.z*1.5;   // world, units per frame: forward part x1.5
+    o.vel.z = SIN[a]*v.x - COS[a]*v.z*-1.5;
+    o.vel.y = (v.x + v.z) / mass;            // 4 pylon, 8 barrier, 10 speed-camera pole
+    o.+0x30 (gravity) = 1.0;  o.+0x10 = 1;  return 1;
+}
+int object_fall_over(int obj, int rest_pitch, float rest_height)   // 0x429020, once per frame while +0x10 == 1
+{
+    o.vel.x *= 0.98; o.vel.z *= 0.98; o.vel.y -= o.gravity;
+    inst.pos += o.vel;  rceng_update_object_chunk(obj);
+    h = chunk_height_at(chunk(o.+0x18), pos.x, pos.z);  r = mesh radius (+0x74);  ret = 0;
+    if (r*r > (pos.y - h)^2) {               // touches the road plane
+        o.vel.y *= -0.6;  pos.y = h + 1;
+        if (o.vel.y < 2) { pos.y = h + rest_height; inst.pitch = rest_pitch; o.+0x10 = 2; inst.roll = 0; }
+        o.gravity *= 0.5;  ret = 1;
+    }
+    inst.pitch += 64; inst.yaw += 32; inst.roll += 48;   // tumbling (ANGLE_UNITS 4096)
+    inst_build_matrix(inst);  return ret;
+}
+```
+The handler sets the sample to the hit sound when the flight starts and to the second one at a bounce (ignored while
+the first still plays, see above). The flight is frame-based (a pylon hit at 100 km/h leaves at 42 units per frame and
+rises 7 units per frame); when it does not rise above its radius in the first frame (a slow hit) it lies down at
+once. The objects never stop a car.
+
+**Speed-camera pole** (type 7): when it flies, `disable_speed_cameras_ahead` 0x428de0 clears the speed-camera trigger
+(1) of the 20 chunks from the pole's chunk on (the player's if that is invalid) for the rest of the race, the pole
+counter `g_radar_bonus_count` 0x4dc964 is incremented (2000 money each at the finish, `finish_done` 0x415690) and the
+HUD shows text 51 RADAR BONUS (`g_hud_message` 0x4882c0 = 0x33).
+
+**Arrow boards** (type 8): the frame is 1 while `0x4dc96c` is 0 and 0 while it is 1; when timer 7 expires the state
+toggles, 0 -> 1 for 1000 ms, 1 -> 0 for 500 ms. One state for all arrows.
 
 **Placement transform** (verified against the road direction of the `.pmp` chunk line: on etappe 0 the 17 type-9
 police cars are parallel to the road with a mean |sin(angle difference)| of 0.004 for this sign, 0.82 for the
@@ -177,15 +236,16 @@ damping, pitch factor, height damping, height factor (`Rolhoek/Pitchhoek/Hoogte 
 ## 6. Run-time structures (for reference)
 
 - `g_objects` (`[0x4e48e0]`, T_ARRAY "main_objects" 0x43f570, 0xa0 bytes): +0 physics on, +8 object3d index,
-  +0x10 sub-state (0 from `.omp`), +0x14 state (initialised with the `.omp` variant), +0x18 chunk, +0x1c previous
-  chunk, +0x44 object handler, +0x48 collision handler, +0x60.. physics (inverse mass/inertia, restitution 0x68,
-  velocity 0x6c).
+  +0x10 state (0 from `.omp`; knocked-over objects 1 flying, 2 lying), +0x14 sample (initialised with the `.omp`
+  variant), +0x18 chunk, +0x1c previous chunk, +0x30 gravity of a flying object, +0x44 object handler, +0x48
+  collision handler, +0x60.. physics (inverse mass/inertia, restitution 0x68, velocity 0x6c; world units per frame
+  for a flying object).
 - `g_instances` (`[0x4ea9e0]`, 0x88 bytes, 2500 created by `init_3d_library`): +0 kind (2 = anim/frame based, 1 =
   direct mesh at +0x8d), +4 anim, +8 frame, +0x50 position, +0x74/+0x78/+0x7c rotation (1024ths), +0x84 visible.
 - `g_paths` 0x4e0710 (20 x 0x33c), `g_npaths` 0x4e47c0, `g_active_paths` 0x4e0580 (10 x 0x28).
 
 ## 7. Open questions
 
-- Meaning of the `.omp` variant (1/2) and of path type 1; whether type-2 objects ever get `+0x10 = 1`.
+- Meaning of path type 1.
 - Rotation order for rx/rz (only two objects use them, by 1 degree).
 - The duplicated last object of etappe 2/6: verify in the running game that it appears (rotated) twice.

@@ -164,6 +164,8 @@ Environment: `A2_HIDDEN=1` opens no visible window (screenshots still work; with
 it N seconds after the start with game over reason R (0 total loss, 1 time up, 2 arrested; continues 8 s later),
 `A2_TEST_CAM=N` holds camera view N (0..10, the original's player views, e.g. 6 front-left, 8 low rear-left),
 `A2_TEST_FOG=1` makes Game.ini `fog=1`/`2` apply in every race instead of a random half (with `--menu-userdir`),
+`A2_TEST_OBJ=N[,C]` starts the player car C chunks (default 3) before `.omp` object N, in line with it (to drive into
+a pylon, speed-camera pole or median with `--drive 0`),
 `A2_NO_FILMS=1` skips the films, `A2_TEST_PAD="T:EL=V ...; T:..."` attaches a virtual game controller and sets its
 elements T seconds after the start (e.g. `"0:RT=1; 5:LEFTX=-0.5; 7:START=1; 7.2:START=0"`, also `T:unplug` / `T:plug`;
 `A2_TEST_PAD_NAME` names it, e.g. `"DualSense Wireless Controller"`), `A2_TEST_JOY` the same for a raw wheel-like
