@@ -8,13 +8,18 @@
 #include "gfx.h"
 #include "vmath.h"
 
+/* The engine's angle unit: math3d_init_tables 0x450280 is called with 0x1000 entries (sub_431610), which sets
+ * c_angle_units 0x49b014 = 4096.0 and the mask 0x49b018 = 4095 at run time (the .data defaults 1024 / 1023 are
+ * overwritten before anything uses them). Object yaw/pitch/roll, chunk and rail angles are 4096ths of a turn. */
+#define ANGLE_UNITS 4096
+
 enum { G_ROAD, G_LAND, G_RAIL, G_EXTRA, G_COUNT };   /* draw order (0x445550); the .rmp lists are road, land, extra, rail */
 
 typedef struct {
     int range[G_COUNT][2];      /* [start, end) into the group's index buffer (chunk +0x00..+0x1c) */
     Vec3 pos;                   /* +0x24 start of the chunk on the centre line */
     Vec3 right, up, fwd;        /* +0x30 / +0x3c / +0x48 */
-    int pitch, yaw;             /* +0x54 / +0x58, 1024 per turn */
+    int pitch, yaw;             /* +0x54 / +0x58, ANGLE_UNITS per turn */
     float plane_d;              /* +0xdc */
     int trigger[2];             /* +0xec / +0xf0 */
     int nrails, rails[12];      /* .cmp indices */
@@ -29,7 +34,7 @@ typedef struct {
 
 typedef struct {
     Vec3 p, d;                  /* start, vector to the end */
-    float yaw, len;             /* 1024ths of a turn; horizontal length */
+    float yaw, len;             /* ANGLE_UNITS per turn; horizontal length */
 } Rail;
 
 typedef struct {

@@ -73,8 +73,8 @@ static void chunk_frame(Chunk *c, Vec3 next)
     c->right = v3_norm(v3(f.z, 0, -f.x));
     c->up = v3_norm(v3_cross(f, c->right));
     c->plane_d = v3_dot(c->up, c->pos);
-    c->pitch = (int)(atan2f(f.y, sqrtf(f.x * f.x + f.z * f.z)) * 1024.0f / (2 * PI_F));
-    c->yaw = (int)((atan2f(f.z, f.x) - PI_F / 2) * 1024.0f / (2 * PI_F));
+    c->pitch = (int)(atan2f(f.y, sqrtf(f.x * f.x + f.z * f.z)) * (float)ANGLE_UNITS / (2 * PI_F));
+    c->yaw = (int)((atan2f(f.z, f.x) - PI_F / 2) * (float)ANGLE_UNITS / (2 * PI_F));
 }
 
 typedef struct { GfxVertex *v; uint16_t *idx; int nv, ni, cap_v, cap_i; } Pool;
@@ -111,7 +111,7 @@ int track_load(Track *t, int etappe)
         l->p = rd_vec(&r);
         l->d = rd_vec(&r);
         l->len = sqrtf(l->d.x * l->d.x + l->d.z * l->d.z);
-        l->yaw = (atan2f(l->d.z, l->d.x) - PI_F / 2) * 1024.0f / (2 * PI_F);
+        l->yaw = (atan2f(l->d.z, l->d.x) - PI_F / 2) * (float)ANGLE_UNITS / (2 * PI_F);
     }
     free((void *)r.d);
     /* .dmp driver map (drmap_load 0x443c40) */

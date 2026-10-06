@@ -44,9 +44,9 @@ int objects_load(ObjectSet *s, const Track *t)
             o->yaw = o->rot[1] * PI_F / 180;
         } else if (i > 0) {
             /* etappe2/6.omp count one record more than they hold: the loader keeps the previous record's values,
-             * with the rotation converted to 1024ths a second time (FORMAT_OBJECTS.md 2) */
+             * with the rotation converted to ANGLE_UNITS a second time (FORMAT_OBJECTS.md 2) */
             *o = s->obj[i - 1];
-            o->yaw = -o->rot[1] * (1024.0f / 360.0f) * PI_F / 180;
+            o->yaw = -o->rot[1] * ((float)ANGLE_UNITS / 360.0f) * PI_F / 180;
         }
         if (o->chunk < 0 || o->chunk >= t->nchunks) o->chunk = 0;
         o->anim = anim_find(o->name);

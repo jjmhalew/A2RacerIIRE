@@ -12,6 +12,7 @@
 typedef struct {
     GfxMesh *mesh;
     Vec3 min, max;              /* bounds in model space */
+    float radius;               /* largest vertex distance from the origin (stands in for the mesh +0x74 radius) */
     int nverts, nfaces;
 } Model;
 

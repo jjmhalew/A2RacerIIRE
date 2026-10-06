@@ -3162,11 +3162,12 @@ update (rceng_handle_objects), not in these functions.
 #### ai_heading_diff (0x40fe90)
 ```c
 float dx = p[0] - O3D(obj)->x, dz = p[2] - O3D(obj)->z;
-if (dz == 0.0f) dz = 0.0f;
-if (dz > 0.0f && dz <  0.1f) dz =  0.1f;
-if (dz < 0.0f && dz > -0.1f) dz = -0.1f;
-float a = atanf(dx / dz) * 0.15915494f * 4096.0f;        /* 1/(2pi) */
-if (dz > 0.0f) a += 3072.0f; else a += 1024.0f;           /* written as a - (-3072) / a - (-1024) */
+/* (corrected from the listing: the clamps and the sign test are on dx, the quotient is dz/dx, as in 0x401690) */
+if (dx == 0.0f) dx = 0.0f;
+if (dx > 0.0f && dx <  0.1f) dx =  0.1f;
+if (dx < 0.0f && dx > -0.1f) dx = -0.1f;
+float a = atanf(dz / dx) * 0.15915494f * 4096.0f;        /* 1/(2pi) */
+if (dx > 0.0f) a += 3072.0f; else a += 1024.0f;           /* written as a - (-3072) / a - (-1024) */
 a -= O3D(obj)->yaw;
 if (a > 2048.0f) a -= 4096.0f;
 if (a < -2048.0f) a += 4096.0f;                           /* written as a - (-4096) */
@@ -4484,6 +4485,10 @@ The sections were written separately, so a few functions have two names in the t
 - init_traffic passes `side` as the `dir` argument of add_car. This is only correct for DIRECTION = 0, which is
   the value in every shipped Game.ini.
 - next_waypoint picks forks with `(int)dt() % 2`, which is always 0.
+- change_lane's "LEFT" (lower lane index) calls 0x406d90, which follows link +0x1c, and "RIGHT" calls 0x406d10
+  (+0x18). In the .dmp data +0x18 leads to lane - 1 and +0x1c to lane + 1 (lane 0 is next to the centre line,
+  FORMAT_ROAD.md 3.4), so the switches go the other way than the bookkeeping. Traffic, which is spawned in lane 0,
+  can then never "keep right" (+0x18 of lane 0 is -1) and stays in lane 0 unless it is blocked.
 - change_lane: refuelling (driver type 7) and the default case set `l_chosen_lane = p_object`, and `l_lane` is
   uninitialised when the waypoint is on the other side.
 - find_obstacle_here compares a stale distance; pick_lane can index lane -1.

@@ -56,6 +56,8 @@ static int load_mesh(Model *m, const char *name, unsigned tex)
         if (v[i].x > m->max.x) m->max.x = v[i].x;
         if (v[i].y > m->max.y) m->max.y = v[i].y;
         if (v[i].z > m->max.z) m->max.z = v[i].z;
+        float r = sqrtf(v[i].x * v[i].x + v[i].y * v[i].y + v[i].z * v[i].z);
+        if (r > m->radius) m->radius = r;
     }
     int ni = 0;
     for (uint32_t i = 0; i < nf; i++) {
