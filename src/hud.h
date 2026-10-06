@@ -21,4 +21,5 @@ int  hud_font_height(int font);      /* the height of 'A' (the line height of as
 /* one pixel row (0 = top) of hud_print(font, x, y, 0, s), drawn at y + row (the game-over scanline sweep) */
 void hud_print_row(int font, int x, int y, int row, const char *s);
 void hud_item_pos(int item, int *x, int *y);
+int  hud_item_rect(int item, int *x, int *y, int *w, int *h);              /* where its first frame lies; 0 = none */
 #endif

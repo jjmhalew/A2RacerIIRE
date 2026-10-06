@@ -82,6 +82,26 @@ void plat_rumble(float low, float high, int ms);   /* the device used last */
 void plat_mouse(int *x, int *y, unsigned *buttons, unsigned *clicked);
 void plat_show_cursor(int on);              /* the system's pointer (the menu draws its own hand) */
 
+/* Touch screens (phones, tablets, Windows touch screens): every finger by its id, in drawable pixels. A finger that
+ * went down and up again between two polls (a quick tap) is listed for that one poll with down = 0, fresh = 1.
+ * Touches still reach the menus as SDL's emulated mouse. */
+#define PLAT_MAX_FINGERS 10
+typedef struct {
+    int64_t id;
+    float x, y;                             /* drawable pixels */
+    int down;                               /* still on the screen */
+    int fresh;                              /* went down since the previous plat_poll */
+} PlatFinger;
+int  plat_fingers(const PlatFinger **list); /* the number of fingers in *list */
+/* what was used last: PLAT_INPUT_TOUCH after a finger, PLAT_INPUT_OTHER after a key or a controller (the Android
+ * back button does not count: it is how a touch player pauses), PLAT_INPUT_NONE before either */
+enum { PLAT_INPUT_NONE, PLAT_INPUT_TOUCH, PLAT_INPUT_OTHER };
+int  plat_input_kind(void);
+void plat_touch_capture(int on);            /* 1 = the race: touches do not press the emulated mouse */
+/* the accelerometer (SDL's sensor API) in m/s^2 in the device's own axes (gravity included); it is opened by the
+ * first call. 0 = none */
+int  plat_accel(float xyz[3]);
+
 /* ---- sound ----------------------------------------------------------------------------------------------------- */
 /* The mixer callback fills `frames` stereo frames of signed 16-bit at plat_audio_rate(); runs on the audio thread. */
 typedef void (*PlatAudioFn)(int16_t *out, int frames, void *user);
