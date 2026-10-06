@@ -10,6 +10,7 @@
 #include "res.h"
 #include "model.h"
 #include "objects.h"
+#include "paths.h"
 #include "race.h"
 #include "track.h"
 #include <stdio.h>
@@ -105,7 +106,7 @@ static int view_track(int etappe, int chunk)
     if (!track_load(&t, etappe)) { fprintf(stderr, "cannot load etappe%d\n", etappe); return 1; }
     ObjectSet objs;
     objects_load(&objs, &t);
-    printf("%d objects\n", objs.n);
+    printf("%d objects, %d paths\n", objs.n, paths_load(etappe));
     printf("etappe%d: %s, %d chunks, %d waypoints, %d rails, %s\n", etappe, t.name, t.nchunks, t.nwaypoints, t.nrails,
            t.city ? "city" : "highway");
     float s = (float)(chunk % t.nchunks), speed = g_shot ? 0 : 0.5f, height = 12, look = 0;
@@ -141,6 +142,8 @@ static int view_track(int etappe, int chunk)
         int start = track_visible_start(&t, c, dir, 2, 30);
         track_draw(&t, start, 30, 0);
         objects_draw(&objs, &t, start, 30);
+        paths_update(c, 0, dt > 0 ? dt : 1.0f / 30);
+        paths_draw();
         if (shot_frame()) break;
         plat_swap();
     }
