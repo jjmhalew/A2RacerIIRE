@@ -21,7 +21,7 @@ Playable from start to end, still being polished. What runs today:
   service, game over, pause and quit
 - the Smacker films, sound effects and engine sounds, the first-start copy from the CD or an ISO image
 
-Not yet: the countdown's 3D letters are not animated, wheels of the cars are not drawn separately, a few events
+Not yet: wheels of the cars are not drawn separately, a few events
 (game over) use simplified cameras. Linux and Android builds come from CI and have not been tried on a device yet.
 See [docs/](docs) for everything known about the original.
 
