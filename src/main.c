@@ -166,6 +166,7 @@ int main(int argc, char **argv)
 {
     PlatConfig cfg = { 960, 720, 0, 1, "A2RacerRE" };
     if (getenv("A2_HIDDEN")) setvbuf(stdout, NULL, _IONBF, 0);   /* tests are often stopped by a timeout */
+    if (getenv("SteamDeck")) cfg.fullscreen = 1;     /* Steam sets it on the Deck, also in its desktop mode */
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--fullscreen")) cfg.fullscreen = 1;
         if (!strcmp(argv[i], "--windowed")) cfg.fullscreen = 0;
