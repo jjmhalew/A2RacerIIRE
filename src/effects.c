@@ -134,6 +134,13 @@ void fx_smoke(const FxCar *c, int slip, float dt)
     puff_spawn(car_point(c, -9, 3, z), v, dt);
 }
 
+void fx_cloud(Vec3 pos, Vec3 vel, float dt)                   /* cloud_emit 0x41fff0: two puffs */
+{
+    if (!g_on_smoke) return;
+    puff_spawn(pos, vel, dt);
+    puff_spawn(pos, vel, dt);
+}
+
 void fx_sparks(Vec3 pos, Vec3 dir, float speed, float dt)
 {
     int n = (int)(speed / 10 + 5);

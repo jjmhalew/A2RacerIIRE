@@ -42,7 +42,18 @@
 0x416cb0 countdown_done ; state 0, COP MODE text if copland
 0x416fe0 start_camera_done ; starts countdown
 0x415690 finish_done ; money += prize + 2000*radar poles; finished=1; state 4
-0x416440 gameover_done ; state 4, finished stays 0
+0x416440 gameover_done ; frees the two text surfaces, state 4, finished stays 0
+0x48676c g_finish_start_tick ; -1 until the first finish_update call (GetTickCount)
+0x4a70ec g_finish_flag_started ; flag_start(1) done once (hw accel only)
+0x4867a8 g_gameover_start_tick ; -1 until the first gameover_update call
+0x4a74f8 g_gameover_orbit_frames ; ftol(8 / frame dt)
+0x4a74fc g_gameover_orbit_radius ; |(x, z)| of the chase offset = 60
+0x4a7504 g_gameover_orbit_angle ; starts -1024 (behind; 4096 units per turn)
+0x4a7508 g_gameover_orbit_step ; 4096 / frames: one turn in 8 s
+0x4a750c g_gameover_cam_offset ; vec3, the copied position lock offset (y = 25 used)
+0x4a7548 g_gameover_text_reason ; sweep text record (0x40): t 40/41/42 at H/4, 1.5 s, active
+0x4a7588 g_gameover_text_raceover ; sweep text record: t 43 RACE OVER at H/2, 3.0 s, starts inactive
+0x4a75c4 g_wreck_smoke_tick ; gameover_wreck_smoke 200 ms clock
 0x428de0 disable_speed_cameras_ahead ; 20 chunks
 0x429860 finish_lap ; Tr_finis.cpp, lap record, LAATSTE RONDE
 0x429950 trigger_finish ; id 14

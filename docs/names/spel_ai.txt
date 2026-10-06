@@ -147,13 +147,13 @@
 0x411650 racer_finished ; (obj) stamp finish time of the racer
 0x4150f0 cop_speech_start_chase
 0x415170 cop_speech_give_up
-0x4151f0 cops_event_camera ; event camera above next chunk looking at player, camera mode 6
+0x4151f0 cops_event_camera ; event camera (slot 6) above next chunk looking at player
 0x415300 cops_init ; game action 8 init: g_times_caught++, warning text, arrest voice, start tick
 0x415420 cops_handle ; done after 4000 ms; 3rd arrest -> game over reason 2 (GEARRESTEERD)
 0x415490 cops_exit ; restore camera/view, game_action_start(0)
 0x415990 nullsub ; bare ret, shared no-op callback
-0x4159a0 ev_unused_player_effect ; unreferenced: random effect near player every 200 ms
-0x415b20 game_over_camera ; copy current camera into event camera attached to player, mode 6
+0x4159a0 gameover_wreck_smoke ; from gameover_update when damage >= 99: every 200 ms cloud_emit at the car front (+-9 side, 13..18 fwd, y+5)
+0x415b20 game_over_camera ; event camera (slot 6) locked to the player with the active camera's lock offsets; change_active_camera(6)
 0x416760 game_action_register ; (slot, init, handle, exit) call init if slot free
 0x4168c0 game_actions_run ; per frame: handle(); if !=0 exit() and free slot
 0x424d20 game_action_start ; sets g_game_action and registers game action (8 -> slot 11 cops)

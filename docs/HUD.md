@@ -169,8 +169,8 @@ After the frame is flipped `0x4248d0` blocks: timers 8,9,10,0,3,11 and sound pau
 any key; quit: `J` or `Y` -> `0x424d20(4)` (race ends), `Esc`/`N` -> resume.
 
 ### 4.7 Result panels (after finishing) `0x419ad0`
-Drawn by the finish event callback `0x4155d0` (state 4) 1500 ms after the finish, until Esc/Enter/Space; in 16-bit mode
-it also starts the 3D finish flag (`0x41abc0(1)`). Values: money `0x428140`, prize `0x4280c0`, radar bonus
+Drawn by the finish event callback `0x4155d0` (state 3, game action 4) from 1500 ms after the finish until Esc/Enter/Space
+(then it waits for their release); with hardware acceleration it also starts the 3D finish flag (`0x41abc0(1)`). Values: money `0x428140`, prize `0x4280c0`, radar bonus
 `[0x4dc964]*2000`, new budget = sum. Font 15 for all numbers, t 17 GEFINISHT in font 14 (item 63: lo 29,32 / hi 68,78),
 position badge item 64 (anim 2/3, frame = position, HS, lo 246,35 / hi 494,83).
 
@@ -203,7 +203,7 @@ works, tested in `0x423d20` with LORADAR/HIRADAR), `disable_overlay`==0 and `ove
 |---|---|---|
 | Loading progress bar | `0x41c1f0` init, `0x41c410` step, `0x41c4c0` draw | while loading: redraws the wait screen (`0x41bde0`: `[wait_lo]` pcx in 8-bit, `[wait_hi]` name with .tga in 16-bit) and blits the left pct% of item 14 (lo 246,177 / hi 489,425, width min 2 px). pct per step from Raser.ini `[progress] percent0..10`; with `calculate=1` the step times are measured and written back (`0x41c2b0`) |
 | Start countdown "3","2","1","GO!" | gfx_3dft `0x417140` (spawn, from `0x4168c0`), `0x417870` (draw) | 3D letter objects (FONT3D_ANIM, charset at `0x486b68`, after the letter spacing 12.5f at `0x486b64`), records at `0x4869d8` {text[10], sound 0x2a/0x2b, effect serie 1/2} |
-| Game-over texts | `0x416060` -> `0x415c50` (prepare) / `0x415e80` (sweep) | text rendered to an off-screen surface, its scanlines slide in alternately from left/right (sine table), centred on x; t 40 TOTAL LOSS / t 41 TIJD IS OM / t 42 GEARRESTEERD at y = H/4 (speed 1.5) and t 43 RACE OVER at y = H/2 (speed 3.0), font 14 |
+| Game-over texts | `0x416060` -> `0x415c50` (prepare) / `0x415e80` (sweep) | text rendered to an off-screen surface, its scanlines slide in alternately from the left (odd) and the right (even), position = sin of a quarter wave, centred on x; t 40 TOTAL LOSS / t 41 TIJD IS OM / t 42 GEARRESTEERD at y = H/4 (in 1.5 s), then t 43 RACE OVER at y = H/2 (in 3.0 s), then the first line slides back out; font 14. Pseudocode: [GAMEFLOW.md](GAMEFLOW.md) "Game over" |
 | Finish flag | gfx_flag `0x41aea0` init, `0x41abc0` start, `0x41aee0` draw | 3D waving chequered flag (10 strips of 17x2 lit vertices, texture S_SFX.PCX, shading from sine table), world object; Game.ini `finish_flag` |
 | Speed-camera flash | `0x4156d0`/`0x415710`/`0x415750` (game action registered by `0x42a2e0` when passing a radar trap) | 8-bit: all palette entries (235,235,235) for 2 frames then restore; 16-bit: screen filled with palette colour 15 once (per coordinator, see FORMAT_IMAGES) |
 | Background | gfx_bkg `0x4190d0` | 16-bit only scrolling backdrop quads (u from car heading); not overlay |

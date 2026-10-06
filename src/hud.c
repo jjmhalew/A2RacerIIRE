@@ -252,6 +252,26 @@ void hud_print(int font, int x, int y, int center, const char *s)
     }
 }
 
+int hud_font_height(int font)
+{
+    return font >= 0 && font < 17 && g_font[font].loaded ? g_font[font].h['A'] : 0;
+}
+
+void hud_print_row(int font, int x, int y, int row, const char *s)
+{
+    if (font < 0 || font >= 17 || !g_font[font].loaded || row < 0) return;
+    const Font *f = &g_font[font];
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        int c = *p;
+        if (f->w[c] && row < f->h[c]) {
+            float u0 = (float)f->x[c] / f->tw, u1 = (float)(f->x[c] + f->w[c]) / f->tw;
+            float v0 = (float)(f->y[c] + row) / f->th, v1 = (float)(f->y[c] + row + 1) / f->th;
+            gfx_2d_quad(f->tex, (float)x, (float)(y + row), (float)f->w[c], 1, u0, v0, u1, v1, 0xffffffffu, BLEND_ALPHA);
+        }
+        x += f->w[c] + f->xspace;
+    }
+}
+
 void hud_item_text(int item, int font, int center, const char *s)
 {
     int x, y;

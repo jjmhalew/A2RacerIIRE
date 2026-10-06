@@ -222,12 +222,20 @@ racing (`g_game_event 0x4d9a7c == 0`); not configurable, no cycle key. `3` is mo
 `M` cycles the camera between the AI racers and the player (`0x4149b0`). Modes 2 and 10 are unreachable.
 
 ### Event cameras
+"Slot" is the game camera slot of `change_active_camera(slot)` `0x4142b0` (`g_cam_slot[slot]` 0x4a7078 -> camera
+index; `init_game_cameras` 0x413ed0): 0 player (`init_player_camera`), 1 start, 3 topview, 4 tankstation, 5 finish
+(0x4a708c, a plain `cam_add_camera`), 6 event camera (0x4a7090, "any camera", shared by the arrest, the game over and
+the path camera), 7 temp, 8 ai cockpit. Selecting slot 5 also sets the camera's use-object-up flag (+0x7c) to 0 (world
+up); slot 6 keeps the constructor's 1 (up from its own previous orientation: stays upright). The "camera mode 6" of
+some notes is this slot 6. A fresh camera (ctor `0x446fa0`) has no dampening and no locks; the event code never turns
+dampening on, so all event cameras are undamped.
+
 | Slot | Camera | Behaviour |
 |---|---|---|
 | 1 | start (ev_stcam.cpp `0x416ce0`/`0x416e00`) | target lock (0,10,0) on the player car, position offset (-120, 100, 200); after 1000 ms flies linearly in 2.0 s (N = 2/dt frames) to (0, 20, -60); then slot 0, mode 1 |
-| 5 | finish (`0x4154d0`) | fixed position = road point of chunk c+3, y + 40; target lock (0, 20, 0) on the car; world up |
+| 5 | finish (`0x4154d0`) | still: position = road point (chunk +0x24) of chunk `g_road_chunk_order[c + 3]` (c = player chunk at the finish, no wrap) + (0, 40, 0), set once; target lock (0, 20, 0) on the car (car space); world up; until the race ends |
 | 6 | cops caught (`0x4151f0`) | road point of chunk c+1, y + 20; target lock (0, 20, 0); previous camera restored after |
-| 6 | game over (`0x416060`/`0x4162e0`) | orbit at radius 60 (from mode 1), height 25, about one turn per 2 s, undamped |
+| 6 | game over (`0x416060` -> `game_over_camera` `0x415b20`, `0x4162e0`) | `set_player_cam_mode(1)` first, then the slot-6 camera copies slot 0's lock offsets: position lock (0, 25, -60), target lock (0, 10, 0), both on the player car (car space). Each frame `gameover_update` sets the position offset to (cos a * 60, 25, sin a * 60) with a = -1024 + k * ftol(4096 / ftol(8 / dt)) (4096 units): starts straight behind (continuing the chase view), turns via the right side and the front, **one turn in 8 s**, undamped, until the race ends |
 | 6 | path camera (`0x432a10`, .pth path type 1) | position along a path spline, looks at the next path point or a target object |
 | 3, 4, 7, 8 | topview, tankstation, temp, ai_cockpit | set up but never activated (dead code) |
 

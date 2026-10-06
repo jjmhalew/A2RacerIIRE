@@ -236,14 +236,75 @@ WAARSCHUWING"; random arrest speech (1st: sounds 48-53, 2nd: 54-58, 3rd: 59-63);
 `cop_stop_update`: after 4000 ms back to racing (state 0); at the **3rd catch -> game over reason 2 "GEARRESTEERD"**.
 No fines. Cop radio: chase start "achter*" (sounds 64-76), give-up "opgev*" (77-81).
 
-### Game over (ev_g_ovr.cpp, state 6)
+### The end events (game actions 4 and 12)
+`set_game_state` 0x424d20 registers one game action per state (ev_main.cpp: `game_action_register(slot, init,
+update, done)` calls init at once; `game_actions_run` 0x4168c0 calls update once per frame after the 3D scene and
+calls done when update returns non-zero). Both end events set `g_event_running` 0x4d9aa0 = 1, which hides the whole
+dashboard **including the flashing messages** (so "LAATSTE RONDE" / "NIEUW RONDE RECORD" of the finishing lap is never
+seen; a message posted during an event is only taken over by `draw_dashboard` once the event is over - the police
+warnings appear after the 4 s stop). In states 3, 6 and 8 the player car brakes (handbrake forced, no gas). Their
+timers are GetTickCount stamps taken at the first update call (initialised to -1 and never reset: one race per process).
+Cameras: [RENDER.md](RENDER.md) "Event cameras".
+
+### Game over (ev_g_ovr.cpp, state 6, game action 12)
 `g_gameover_reason` 0x4867a4: **0 = TOTAL LOSS (text 40), 1 = TIJD IS OM (41), 2 = GEARRESTEERD (42)**, second line
-43 "RACE OVER". `gameover_init` 0x416060: orbit camera, two texts slide in line by line (0x415c50 / 0x415e80);
-`gameover_update` 0x4162e0: after the texts and 1000 ms, Esc/Enter/Space -> `gameover_done` -> state 4. finished stays
-0. There is no out-of-fuel or breakdown game over.
+43 "RACE OVER". Set by total loss (damage >= 99), the highway time limit, or `cops_handle` 0x415420 at the 3rd arrest
+(it starts state 6 from inside the arrest action; `cops_exit` then does nothing because the state is no longer 8).
+```
+ev_gameover_init 0x416060:
+  set_player_cam_mode(1)                    ; chase view on camera slot 0 (also makes the player car visible again)
+  game_over_camera 0x415b20                 ; slot-6 camera: position lock (0,25,-60) + target lock (0,10,0) on the car
+  sweep_text_init(&txt1, text[40+reason], font 14, y = H/4, 1.5 s, active)     ; 0x4a7548
+  sweep_text_init(&txt2, text[43],        font 14, y = H/2, 3.0 s, inactive)   ; 0x4a7588
+  orbit_frames = ftol(8 / dt); radius = |(off.x, off.z)| = 60; angle = -1024; step = ftol(4096 / orbit_frames)
+ev_gameover_update 0x4162e0, every frame:
+  if damage >= 99: gameover_wreck_smoke 0x4159a0      ; every 200 ms: rand()%6, rand()%18 ->
+        cloud_emit(car + right*(r18-9) + fwd*(r6-3+16) + (0,5,0), vel 0)   ; 2 smoke puffs over the bonnet
+  camera position lock offset = (cos(angle)*radius, off.y, sin(angle)*radius); angle += step
+  r1 = sweep_text_draw(&txt1); r2 = sweep_text_draw(&txt2)
+  if r2: txt1.out = 1                       ; RACE OVER is in place -> the reason line sweeps back out
+  if r1: txt2.active = 1                    ; the reason line is in place -> RACE OVER starts
+  if first call: start = now
+  if now - start >= 1000 and (Esc or Enter or Space held): return 1    ; no release wait, no automatic end
+gameover_done 0x416440: free both surfaces; state 4 (finished stays 0)
+```
+Sweep text (`ev_sweep_text_init` 0x415c50 / `ev_sweep_text_draw` 0x415e80, 0x40-byte record {inited, active, out,
+surface, screen, width, height, y, frames, frame, char text[20]}): the text is printed once at (0,0) into an
+off-screen surface of text_width x height('A') filled with the colour key; frames = ftol(seconds / dt).
+```
+draw: if !active: return 0
+  cx = (screen_w - width) / 2
+  if frame == frames-1 and !out: blit the whole surface at (cx, y); return 1
+  s = sin((1024 / frames) * frame)            ; 4096 units per turn: a quarter wave, 0 -> ~1
+  for each scanline i: x = i odd ? ftol(s * (cx + width)) - width      ; from off the left edge
+                             : screen_w - ftol(s * (screen_w - cx))    ; from off the right edge
+      blit row i at (x, y + i), clipped to the screen
+  if !out: if ++frame >= frames: frame = frames-1, return 1
+  else:    if --frame < 0: frame = 0, return 1
+  return 0
+```
+So: the reason line comes together from both sides in 1.5 s and stays; then RACE OVER does the same in 3 s; then the
+reason line slides back apart in 1.5 s and is gone (it keeps returning 1 at s = 0, drawing nothing), leaving RACE
+OVER. The key works from 1 s on. There is no out-of-fuel or breakdown game over.
+
+### Finish (state 3, game action 4)
+```
+ev_finish_cam_init 0x4154d0:
+  slot-5 camera: target lock (0,20,0) on the player car; set_position(road point of chunk (player chunk + 3) + (0,40,0))
+  c_camera_update; change_active_camera(5) (world up); sndfx_play(21 juich.wav)
+finish_update 0x4155d0 (ev_finish_results_cb), every frame:
+  if first call: start = now
+  if now - start < 1500: return 0
+  if hw accel and not yet: flag_start(1)    ; the 3D waving chequered flag (gfx_flag.cpp, Game.ini finish_flag)
+  hud_draw_results 0x419ad0                 ; the results panel, below
+  if Esc or Enter or Space held: wait (busy loop) until all three are up; return 1
+finish_done 0x415690: money += prize; money += 2000 x poles; finished = 1; state 4
+```
+The camera stays where it was put; the braking car (and the racers) drive on below it. The player's view mode is not
+changed: in the cockpit view (mode 3) the player car stays invisible during the finish. No automatic end.
 
 ### Results panel (`finish_update` 0x4155d0, `draw_results` 0x419ad0; layout in [HUD.md](HUD.md))
-After 1500 ms the panel is drawn until Esc/Enter/Space. Times as "%02d:%02d:%d" (mm:ss:tenths).
+From 1500 ms after the finish until Esc/Enter/Space (released). Times as "%02d:%02d:%d" (mm:ss:tenths).
 - Highway (0x419870): background anim 5, text 17 "GEFINISHT", position digit (anim 2, frame = position), race time,
   then four numbers: money " %d", prize "+%d", radar bonus "+%d", total " %d" (= money + prize + bonus).
 - City (0x4194e0): background anim 7, lap 1, lap 2 (only two laps shown whatever Nrlaps is), total time, and the same

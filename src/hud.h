@@ -17,5 +17,8 @@ void hud_item_part(int item, int frame, float part);
 int  hud_text_width(int font, const char *s);
 void hud_print(int font, int x, int y, int center, const char *s);         /* hud_draw_text 0x41bfc0 */
 void hud_item_text(int item, int font, int center, const char *s);
+int  hud_font_height(int font);      /* the height of 'A' (the line height of ascii_printf) */
+/* one pixel row (0 = top) of hud_print(font, x, y, 0, s), drawn at y + row (the game-over scanline sweep) */
+void hud_print_row(int font, int x, int y, int row, const char *s);
 void hud_item_pos(int item, int *x, int *y);
 #endif

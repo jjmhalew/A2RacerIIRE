@@ -121,9 +121,9 @@
 0x4149b0 set_camera_car ; tweak key M
 0x416ce0 ev_stcam_init ; start camera (-120,100,200)
 0x416e00 ev_stcam_update ; 2 s fly-in to (0,20,-60)
-0x4154d0 ev_finish_cam_init
-0x416060 ev_gameover_init ; orbit camera
-0x4162e0 ev_gameover_update
+0x4154d0 ev_finish_cam_init ; game action 4 init: slot 5 camera at chunk c+3 + (0,40,0), target lock (0,20,0), juich.wav
+0x416060 ev_gameover_init ; game action 12 init: view 1, game_over_camera, the two sweep texts, orbit set-up
+0x4162e0 ev_gameover_update ; wreck smoke, orbit step (1 turn / 8 s), sweeps, after 1000 ms Esc/Enter/Space held -> done
 0x446d80 cam_init_cameras
 0x446e30 cam_add_camera
 0x446fa0 c_camera_ctor ; 0x160 bytes
@@ -131,9 +131,12 @@
 0x4475a0 c_camera_enable_dampening
 0x4476d0 c_camera_disable_dampening
 0x4476f0 c_camera_set_position_lock
+0x447720 c_camera_get_position_lock_offset ; fatal unless position lock
 0x447770 c_camera_set_position_lock_offset
 0x4477c0 c_camera_release_position_lock
 0x4477f0 c_camera_set_target_lock
+0x447820 c_camera_get_target_lock_offset ; fatal unless target lock
+0x447870 c_camera_set_target_lock_offset
 0x4478c0 c_camera_release_target_lock
 0x447ab0 c_camera_update ; lerp factor per frame, rigid z distance, rebuild orientation
 0x41eac0 gfx_sky_set_heading ; sw sky scroll offset = -(v+1)*w/2 wrapped
@@ -185,9 +188,12 @@
 0x41d280 radar_rotate_quad ; rotate radar quad by camera heading
 0x41d360 radar_draw ; DrawPrimitive of the radar quad (listing continues with gfx_shdw code)
 0x410a10 car_heading_matches_track ; 0 = driving against track direction (HUD U-turn sign)
-0x415c50 ev_sweep_text_init ; render game-over text to off-screen surface
-0x415e80 ev_sweep_text_draw ; scanline slide-in of the text
-0x4155d0 ev_finish_results_cb ; finish event: after 1.5 s draw result panel until Esc/Enter/Space
+0x415c50 ev_sweep_text_init ; (rec, text, font, y, seconds, active): text to a colour-keyed surface, frames = ftol(seconds/dt)
+0x415e80 ev_sweep_text_draw ; scanlines slide in (odd from the left, even from the right), s = sin(1024/frames*frame); 1 = in place / gone
+0x49e72c g_screen_w ; 2D screen width (sweep texts)
+0x49e730 g_screen_h ; 2D screen height (sweep texts at H/4, H/2)
+0x4ead08 g_ascii_font ; current font record (ascii_set_font)
+0x4155d0 ev_finish_results_cb ; finish_update: after 1.5 s flag_start(1) (hw) + result panel; Esc/Enter/Space, then waits until released -> done
 0x424ee0 game_check_keys ; check_game_keys(): D detail, P pause, Esc quit, T horn, cheats
 0x4248d0 game_pause_loop ; blocking pause / quit-confirm (J/Y/N/Esc) loop
 0x431900 anims_init ; Menuanim.cpp: init_anims (rc.img)

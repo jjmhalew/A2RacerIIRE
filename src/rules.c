@@ -3,6 +3,7 @@
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "rules.h"
+#include "effects.h"
 #include "font3d.h"
 #include "gfx.h"
 #include "hud.h"
@@ -21,6 +22,15 @@
 
 /* gm_clock.cpp: 12 timers {duration, start, countdown}; here start = -1 = not running */
 typedef struct { int duration, start, countdown, frozen, frozen_at; } Timer;
+
+/* ev_g_ovr.cpp: a game-over text line (0x40-byte records at 0x4a7548 / 0x4a7588, ev_sweep_text_init 0x415c50) */
+typedef struct {
+    int active;                 /* +0x04: sweeping / drawn */
+    int out;                    /* +0x08: 0 = sweeping in, 1 = back out */
+    int frames, frame;          /* +0x20 = ftol(duration / frame dt), +0x24 */
+    int y;                      /* +0x1c: top of the text */
+    int text;                   /* +0x28: language text (drawn in font 14) */
+} Sweep;
 
 static struct {
     RulesHooks h;
@@ -45,11 +55,16 @@ static struct {
     int difficulty, copland, invincible;
     int gameover_reason;
     int flash;                  /* speed-camera flash, frames */
-    int message, message_at;    /* 0x4882c0 / 0x4882c4 */
-    int results_done, finish_sound;
+    int message_new;            /* 0x4882c0: posted, -1 = none; taken over by the dashboard outside events */
+    int message, message_at;    /* 0x4882c4 and its start (0x4a7d84) */
     int pause;                  /* 1 pause, 2 quit question */
-    int cont;                   /* a continue key was pressed since the last tick (keys are read per frame) */
     int done;
+    /* the end events */
+    int ev_ticks;               /* game ticks (= the original's frames) since the state was entered */
+    Vec3 fin_cam;               /* ev_finish_cam_init 0x4154d0: the still finish camera */
+    int fin_key;                /* finish_update: a continue key went down; it ends when all are up again */
+    Sweep sweep[2];             /* the game-over texts: reason (40..42) at H/4, "RACE OVER" (43) at H/2 */
+    int smoke_at;               /* 0x4a75c4: the wreck smoke's 200 ms clock */
     char cd_text[4][11];        /* the countdown words and their font3d effect series (ev_start 0x4869d8) */
     int cd_serie[4];
     float prize, total;
@@ -73,18 +88,23 @@ static void timer_start(int i, int duration, int countdown)
 static void timer_freeze(int i) { if (!G.t[i].frozen) { G.t[i].frozen = 1; G.t[i].frozen_at = G.clock; } }
 static int timer_expired(int i) { return G.t[i].start >= 0 && G.t[i].countdown && timer_get(i) == 0; }
 
+static void event_init(Race *r, int s);
+
 static void set_state(Race *r, int s)                /* set_game_state 0x424d20 */
 {
     G.prev_state = G.state;
     G.state = s;
     G.state_since = G.clock;
+    G.ev_ticks = 0;
     r->game_event = s;
-    r->event_running = s == GS_GAMEOVER || s == GS_COPSTOP;      /* g_event_running: no dashboard */
+    /* g_event_running: no dashboard (and no messages) during the finish, the game over and the police stop */
+    r->event_running = s == GS_FINISHED || s == GS_GAMEOVER || s == GS_COPSTOP;
     if (s == GS_RACING) { r->race_started = 1; r->control = 1; }
     if (s == GS_QUIT) G.done = 1;
+    event_init(r, s);                                /* the init callback of the state's game action */
 }
 
-void rules_message(int text) { G.message = text; G.message_at = G.clock; }
+void rules_message(int text) { G.message_new = text; }
 
 static Obj *player(Race *r) { return &r->obj[r->plr_obj]; }
 
@@ -140,7 +160,7 @@ void rules_init(Race *r, const RulesHooks *hooks)
     }
     ini_free(g);
     G.speed_limit = -1;
-    G.message = -1;
+    G.message = G.message_new = -1;
     G.last_check_chunk = -100;
     G.last_tick_sec = -1;
     /* the highway time limit (init_game 0x423d20) */
@@ -312,11 +332,61 @@ static int prize_money(Race *r)                      /* get_prize_money 0x4280c0
     return m;
 }
 
-static int continue_key(void)
+/* Esc, Enter or Space held (key_down 0x466910 = GetAsyncKeyState), or a controller's A / B / Start */
+static int continue_key_down(void)
 {
-    int c = G.cont;
-    G.cont = 0;
-    return c;
+    return plat_key(VK_ESCAPE) || plat_key(VK_RETURN) || plat_key(VK_SPACE)
+        || (plat_pad()->buttons & (PAD_A | PAD_B | PAD_START));
+}
+
+/* ---- the end events (ev_main.cpp game actions 4 and 12) ---------------------------------------------------------- */
+#define SWEEP_UNITS 1024                             /* the sweep's phase runs 0..1024 of 4096 = a quarter turn */
+#define ORBIT_TURN_S 8                               /* gameover_init: 4096 / ftol(8 / dt) per frame */
+
+static void sweep_init(Sweep *s, int text, int y, float seconds, int active)    /* ev_sweep_text_init 0x415c50 */
+{
+    s->text = text;
+    s->y = y;
+    s->frames = (int)(seconds * RACE_HZ + 0.5f);     /* ftol(seconds / frame dt) */
+    if (s->frames < 1) s->frames = 1;
+    s->frame = 0;
+    s->out = 0;
+    s->active = active;
+}
+
+/* ev_sweep_text_draw 0x415e80, its counting part (the drawing is in sweep_draw): 1 = in place / gone */
+static int sweep_step(Sweep *s)
+{
+    if (!s->active) return 0;
+    if (s->frame == s->frames - 1 && !s->out) return 1;           /* in place: drawn whole */
+    if (!s->out) {
+        if (++s->frame >= s->frames) { s->frame = s->frames - 1; return 1; }
+    } else if (--s->frame < 0) { s->frame = 0; return 1; }
+    return 0;
+}
+
+static void event_init(Race *r, int s)
+{
+    const Obj *c = player(r);
+    switch (s) {
+    case GS_FINISHED: {                              /* ev_finish_cam_init 0x4154d0 */
+        /* camera slot 5: fixed at the road point of the chunk 3 ahead of the player + 40 up, looking at (0, 20, 0)
+         * on the car, world up; juich.wav (played by trigger_finish here) */
+        const Chunk *ch = &r->track.chunks[track_wrap(&r->track, c->chunk + 3)];
+        G.fin_cam = v3(ch->pos.x, ch->pos.y + 40, ch->pos.z);
+        G.fin_key = 0;
+        break;
+    }
+    case GS_GAMEOVER: {                              /* ev_gameover_init 0x416060 */
+        r->cam_mode = 1;                             /* set_player_cam_mode(1): the orbit starts from the chase view */
+        int reason = G.gameover_reason < 0 || G.gameover_reason > 2 ? 0 : G.gameover_reason;
+        sweep_init(&G.sweep[0], 40 + reason, 480 / 4, 1.5f, 1);
+        sweep_init(&G.sweep[1], 43, 480 / 2, 3.0f, 0);
+        G.smoke_at = G.clock - 200;
+        break;
+    }
+    default: break;
+    }
 }
 
 void rules_tick(Race *r)
@@ -367,31 +437,57 @@ void rules_tick(Race *r)
             G.armed = 1;
             trigger(r, 14, 0, 1);
         }
+        if (getenv("A2_TEST_GAMEOVER") && in_state >= atoi(getenv("A2_TEST_GAMEOVER")) * 1000) {
+            /* tests: "N[,reason]" = game over N s after the start (reason 0 total loss, 1 time up, 2 arrested) */
+            const char *k = strchr(getenv("A2_TEST_GAMEOVER"), ',');
+            G.gameover_reason = r->game_over_reason = k ? atoi(k + 1) : 0;
+            if (G.gameover_reason == 0) r->damage = 100;
+            set_state(r, GS_GAMEOVER);
+        }
         break;
     /* GS_COPSTOP: the 4 s stop and the third arrest's game over are run by ai.c (game_actions_run) */
     case GS_FINISHED:                                /* finish_update 0x4155d0 */
-        if (in_state >= 1500 && (continue_key() || (getenv("A2_TEST_FINISH") && in_state >= 3000))) {
-            int prize = prize_money(r);
-            G.money += prize + 2000 * G.poles;       /* finish_done 0x415690 */
-            if (G.money < 0) G.money = 0;
-            if (G.money > 999999) G.money = 999999;
-            write_results(r);
-            set_state(r, GS_QUIT);
+        /* the results panel after 1500 ms (rules_draw_hud); then Esc / Enter / Space, and the event ends when all
+         * three are released again (it waits for that in a loop); A2_TEST_FINISH: 3 s after the finish */
+        if (in_state >= 1500) {
+            if (continue_key_down()) G.fin_key = 1;
+            else if (G.fin_key || (getenv("A2_TEST_FINISH") && in_state >= 3000)) {
+                int prize = prize_money(r);
+                G.money += prize + 2000 * G.poles;   /* finish_done 0x415690 */
+                if (G.money < 0) G.money = 0;
+                if (G.money > 999999) G.money = 999999;
+                write_results(r);
+                set_state(r, GS_QUIT);
+            }
         }
         break;
-    case GS_GAMEOVER:                                /* gameover_update 0x4162e0 */
-        if (in_state >= 2500 && continue_key()) set_state(r, GS_QUIT);
+    case GS_GAMEOVER: {                              /* gameover_update 0x4162e0 */
+        if (r->damage >= 99 && G.clock - G.smoke_at >= 200) {      /* 0x4159a0: the wreck smokes */
+            G.smoke_at = G.clock;
+            const Obj *c = player(r);
+            float fwd = (float)(rand() % 6 - 3 + 16), side = (float)(rand() % 18 - 9);
+            Vec3 f = car_fwd(c), rt = v3(f.z, 0, -f.x);
+            Vec3 p = v3_add(c->pos, v3_add(v3_scale(rt, side), v3_scale(f, fwd)));
+            p.y = c->pos.y + 5;
+            fx_cloud(p, v3(0, 0, 0), r->dt);
+        }
+        /* the reason sweeps in (1.5 s); then "RACE OVER" (3 s); then the reason sweeps back out */
+        int r1 = sweep_step(&G.sweep[0]), r2 = sweep_step(&G.sweep[1]);
+        if (r2) G.sweep[0].out = 1;
+        if (r1) G.sweep[1].active = 1;
+        /* Esc / Enter / Space held, from 1000 ms on (no release wait); A2_TEST_GAMEOVER: after 8 s */
+        if (in_state >= 1000 && (continue_key_down() || (getenv("A2_TEST_GAMEOVER") && in_state >= 8000)))
+            set_state(r, GS_QUIT);
         break;
+    }
     default: break;
     }
+    G.ev_ticks++;
     font3d_tick(player(r)->pos);                     /* the 3D letters (run by font3d_draw 0x417870 per frame) */
 }
 
 void rules_keys(Race *r)                             /* check_game_keys 0x424ee0 */
 {
-    if (plat_key_pressed(VK_ESCAPE) || plat_key_pressed(VK_RETURN) || plat_key_pressed(VK_SPACE)
-        || (plat_pad()->pressed & (PAD_A | PAD_B | PAD_START)))
-        G.cont = G.state == GS_FINISHED || G.state == GS_GAMEOVER;
     if (G.pause) {                                   /* handle_pause 0x4248d0 */
         if (G.pause == 1 && plat_any_key_pressed()) { G.pause = 0; sfx_pause(0); }
         else if (G.pause == 2) {
@@ -440,10 +536,17 @@ int rules_camera(Race *r, Vec3 *eye, Vec3 *target)
         *target = car_point(c, v3(0, 10, 0));
         return in_state < 3000;
     }
-    case GS_FINISHED: case GS_GAMEOVER: {            /* orbit around the car */
-        float a = in_state * 0.0004f;
-        *eye = v3_add(c->pos, v3(cosf(a) * 90, 35, sinf(a) * 90));
-        *target = v3_add(c->pos, v3(0, 10, 0));
+    case GS_FINISHED:                                /* ev_finish_cam_init 0x4154d0: still, follows the car */
+        *eye = G.fin_cam;
+        *target = car_point(c, v3(0, 20, 0));
+        return 1;
+    case GS_GAMEOVER: {
+        /* game_over_camera 0x415b20 + gameover_update 0x4162e0: camera slot 6 locked to the car with the chase
+         * offsets of view 1, (0, 25, -60) -> radius 60 at height 25, looking at (0, 10, 0); undamped. The offset
+         * angle starts at -1024 (behind) and grows by 4096 / ftol(8 / dt) per frame: one turn in 8 s. */
+        int a = -1024 + 4096 / (ORBIT_TURN_S * RACE_HZ) * G.ev_ticks;
+        *eye = car_point(c, v3(race_cos(a) * 60, 25, race_sin(a) * 60));
+        *target = car_point(c, v3(0, 10, 0));
         return 1;
     }
     default: return 0;
@@ -463,12 +566,32 @@ static void fmt_time(char *b, size_t n, int ms)
     else snprintf(b, n, "%02d:%02d:%d", ms / 60000, ms / 1000 % 60, ms / 100 % 10);
 }
 
+/* ev_sweep_text_draw 0x415e80, the drawing: the text (font 14, centred on x, its top at y) whole when in place;
+ * else every scanline on its own, the odd ones coming from the left edge, the even ones from the right, both
+ * reaching the centre at s = 1, with s = sin((1024 / frames) * frame) (4096 units per turn). alpha (0..1)
+ * interpolates between the game ticks */
+static void sweep_draw(const Sweep *s, float alpha)
+{
+    if (!s->active) return;
+    const char *t = hud_text(s->text);
+    int W = 640, w = hud_text_width(14, t), cx = (W - w) / 2;
+    if (s->frame == s->frames - 1 && !s->out) { hud_print(14, cx, s->y, 0, t); return; }
+    float f = s->frame + (s->out ? -alpha : alpha);
+    if (f < 0) f = 0;
+    if (f > s->frames - 1) f = (float)(s->frames - 1);
+    float k = sinf((float)(SWEEP_UNITS / s->frames) * f * 2 * PI_F / ANGLE_UNITS);
+    for (int i = 0, h = hud_font_height(14); i < h; i++) {
+        int x = i & 1 ? (int)(k * (cx + w)) - w : W - (int)(k * (W - cx));
+        if (x + w > 0 && x < W) hud_print_row(14, x, s->y, i, t);
+    }
+}
+
 void rules_draw_hud(Race *r)
 {
     char b[96];
     int D = r->detail;
     if (G.flash) gfx_2d_rect(0, 0, 640, 480, 0xebebebffu);          /* speed-camera flash (palette colour 15) */
-    if (G.state == GS_RACING || G.state == GS_COPSTOP) {
+    if (!r->event_running) {                         /* draw_dashboard 0x41a8a0: nothing of it during an event */
         if (!r->track.city && D >= 3 && G.t[11].start >= 0) {      /* 4.4 checkpoint box and the time left */
             hud_item(73, 0);
             hud_item_text(74, 10, 1, "CHECKPOINT");
@@ -486,10 +609,13 @@ void rules_draw_hud(Race *r)
         const Obj *c = player(r);
         const Chunk *ch = &r->track.chunks[c->chunk];
         if (v3_dot(ch->fwd, car_fwd(c)) < 0 && (G.clock / 300 & 1)) hud_item(29, 0);
+        /* 4.5 messages: a posted message starts its 2 s here, so one posted during an event (the police warnings,
+         * the finish lap) waits until the event is over */
+        if (G.message_new >= 0) { G.message = G.message_new; G.message_at = G.clock; G.message_new = -1; }
+        if (G.message >= 0 && G.clock - G.message_at <= 2000) {
+            if ((G.clock - G.message_at) / 100 & 1) hud_item_text(76, 10, 1, hud_text(G.message));
+        } else G.message = -1;
     }
-    if (G.message >= 0 && G.clock - G.message_at < 2000) {          /* 4.5 messages */
-        if ((G.clock - G.message_at) / 100 & 1) hud_item_text(76, 10, 1, hud_text(G.message));
-    } else G.message = -1;
     if (G.state == GS_FINISHED && G.clock - G.state_since >= 1500) {   /* 4.7 results */
         int prize = prize_money(r), bonus = 2000 * G.poles;
         hud_print(14, 68, 78, 0, hud_text(17));
@@ -512,12 +638,10 @@ void rules_draw_hud(Race *r)
         }
         hud_item(64, G.position);
     }
-    if (G.state == GS_GAMEOVER) {                    /* ev_g_ovr.cpp: the two texts slide in */
-        int t = G.clock - G.state_since;
-        float k = t < 1000 ? t / 1000.0f : 1;
-        int w1 = hud_text_width(14, hud_text(40 + G.gameover_reason)), w2 = hud_text_width(14, hud_text(43));
-        hud_print(14, (int)(-w1 + (320 - w1 / 2 + w1) * k), 120, 0, hud_text(40 + G.gameover_reason));
-        hud_print(14, (int)(640 - (320 + w2 / 2) * k), 240, 0, hud_text(43));
+    if (G.state == GS_GAMEOVER) {                    /* ev_g_ovr.cpp: the two texts sweep in */
+        float alpha = (float)(r->accum * RACE_HZ);
+        sweep_draw(&G.sweep[0], alpha);
+        sweep_draw(&G.sweep[1], alpha);
     }
     if (G.pause) {                                   /* 4.6 pause / quit dialog */
         hud_item(34, 0);
