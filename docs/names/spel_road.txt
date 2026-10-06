@@ -1,0 +1,152 @@
+0x444bf0 road_load_track_files ; etappeN.cmp/.dmp/.pmp/.rmp/.omp (rd_main.cpp)
+; ---- road module (win3ddp rd_main.cpp / rd_chunk.cpp / rd_drmap.cpp / rd_rail.cpp), see docs/FORMAT_ROAD.md
+; rceng_* interface (string names from the asserts)
+0x441db0 road_global_ctor ; ecx = g_road -> 0x444550 (T_ARRAY<int> m_chunks init); 0x441dd0 = atexit dtor -> 0x444600
+0x441de0 rceng_init_engine ; (?, tex_weg, tex_gras, tex_vang, tex_gra2): stores texture ids at g_road+0x4a/+0x4e/+0x52/+0x56, clears trigger table, sets g_rceng_initialised
+0x441e90 rceng_set_hw_uv ; g_road+0x9a = arg (= g_hw_accel): 1 = raw UVs + per-group SetTexture, 0 = UVs remapped into the software texture atlas
+0x441ea0 rceng_load_etappe ; (name) -> road_load_track_files(g_road)
+0x441fc0 rceng_set_trigger_handler ; (id 0..255, fn) -> g_trigger_handlers[id]
+0x442020 rceng_update_object_chunk ; obj+0x1c = obj+0x18; obj+0x18 = road_find_chunk(obj+0x18, object position)
+0x442090 rceng_get_chunk_position ; (out vec3, chunk) = chunk.pos
+0x4420f0 rceng_get_waypoint_position ; (out vec3, chunk, lane, side) = driver_map[rceng_get_waypoint_index()].pos
+0x442150 rceng_get_waypoint_index ; (chunk, lane, side 0=left/1=right) -> chunk.wp_left/right[min(lane, n-1)]
+0x442230 rceng_set_object_to_chunk_angle ; (obj, chunk, dir 0/1) sets object yaw from chunk fwd (dir 1 = reversed)
+0x442390 rceng_set_object_to_chunk_orientation ; copies chunk+0x9c rotation matrix into the object (keeps position)
+0x4424b0 rceng_add_object_in_waypoint_obstacle_list ; drmap_find_closest_waypoint + waypoint_add_object
+0x442520 rceng_remove_object_in_waypoint_obstacle_list
+0x442590 rceng_check_chunk_triggers ; on chunk change calls g_trigger_handlers[chunk.trigger_a/_b](obj) of the chunk crossed
+0x442670 get_free_physics_list_entry ; 8-byte slots at 0x4e4988..0x4e5928
+0x4426a0 physics_list_clear
+0x4426c0 physics_list_add ; (obj)
+0x4426e0 rceng_wrap_chunk ; i >= n -> i-n; i < 0 -> n-|i|
+0x442700 rceng_chunk_distance ; circular |a-b| (min(d, n-d))
+0x442730 rceng_get_valid_lane ; (chunk, side, lane) -> lane clamped to [0, count-1]
+; chunks (rd_chunk.cpp), element 0x184 bytes in g_chunks
+0x4427d0 chunks_static_init ; T_ARRAY 'g_chunks'
+0x442940 chunks_alloc ; (n) chunks T_ARRAY + plane pool (152 planes)
+0x442960 chunks_free
+0x4429e0 chunk_new_load ; (pmp FILE*, rmp FILE*) -> chunk index
+0x442ac0 chunk_release
+0x442ad0 chunk_ctor
+0x442b00 chunk_load_pmp ; pos, triggers, rails[], wp_left[], wp_right[] ('chunk waypoint left overflow')
+0x442cb0 chunk_calc_frame ; (next pos) right/up/fwd vectors +0x30/+0x3c/+0x48, plane d +0xdc, matrix +0x5c
+0x442f20 chunk_calc_matrix ; rewrites +0x5c (4x4)
+0x442fe0 chunk_calc_angles ; +0x58 yaw, +0x54 pitch (1024 units), +0x9c rotation matrix
+0x4431b0 chunk_load_rmp ; road (<=16) / land (<=24) / extra (<=12) / rail (<=12) planes
+0x4433d0 chunk_build_geometry ; planes -> g_road vertex/index pools, chunk+0x00..+0x1c index ranges
+0x4437d0 chunks_tarray_alloc
+; planes (temporary, rmp quads)
+0x44bab0 planes_static_init ; T_ARRAY 'g_planes'
+0x44bc20 planes_alloc
+0x44bc30 planes_free
+0x44bcb0 plane_new_load ; (FILE*) -> plane index
+0x44bd70 plane_release
+0x44bd80 plane_ctor ; 4 x D3DLVERTEX colour 0x00FFFFFF, specular 0
+0x44bdb0 plane_load ; 4 x (x,y,z,tu,tv) + 6 x i32 -> i16 indices at +0x80
+0x44be60 plane_load_thunk
+0x44be80 planes_tarray_alloc
+; driver map (rd_drmap.cpp), element 0x50 bytes in g_driver_map
+0x443940 drmap_static_init ; T_ARRAY 'g_driver_map'
+0x443ab0 drmap_alloc
+0x443ac0 drmap_free
+0x443b40 drmap_new_waypoint ; (flags, flags2, vec3 pos, link0, link3, link2, link1)
+0x443c30 drmap_release
+0x443c40 drmap_load ; etappeN.dmp
+0x443da0 drmap_find_closest_waypoint ; (obj, side 0/1/-1) closest waypoint of the object's chunk
+0x444210 waypoint_ctor
+0x444260 waypoint_get_object ; (slot 0..9)
+0x4442a0 waypoint_add_object ; max 10 per waypoint
+0x4442d0 waypoint_remove_object
+0x4443a0 waypoint_set
+0x444400 drmap_tarray_alloc
+; road object (rd_main.cpp)
+0x444650 road_alloc_pools ; (n*16 road, n*24 land, n*12 rail, n*12 extra planes)
+0x444790 road_road_icount
+0x4447a0 road_add_road_tri
+0x4447f0 road_land_icount
+0x444800 road_add_land_tri
+0x444860 road_rail_icount
+0x444870 road_add_rail_tri
+0x4448c0 road_extra_icount
+0x4448d0 road_add_extra_tri
+0x444940 road_add_land_vertex ; atlas UV remap when !hw
+0x4449c0 road_add_road_vertex
+0x444a30 road_add_rail_vertex
+0x444aa0 road_add_extra_vertex
+0x444b20 road_free_pools
+0x444cd0 road_load_dmp ; -> drmap_load
+0x444ce0 road_load_cmp ; -> rails_load_cmp
+0x444cf0 road_load_rmp_pmp ; 'Data-chunk count does not match draw-chunk count'
+0x4454f0 road_draw ; (start chunk, count) -> 1 or 2 road_draw_range calls (wrap)
+0x445550 road_draw_range ; (first, last) 4 DrawIndexedPrimitive calls: road, land, rail, extra
+0x445a10 road_find_chunk ; (start, x, y, z) chunk whose start line the point has passed
+0x445cf0 calc_start_and_end_chunk ; (start, count, &s, &e, &s2, &e2) -> wrapped flag
+0x445d70 calc_chunk_window ; (centre, range, &s, &e, &s2, &e2) used by the object drawer
+0x445e10 colour_average ; dead code (lighting bake)
+0x445ea0 road_clear_vertex_colours ; dead code
+0x445fb0 road_light_vertices ; dead code (only covers chunks 0..20)
+0x4465a0 road_light_triangle ; dead code ('normal ... lightvector')
+; rails (rd_rail.cpp), element 0x60 bytes in g_rails
+0x44bff0 rails_static_init ; T_ARRAY 'g_rails'
+0x44c160 rails_alloc
+0x44c170 rails_free
+0x44c1f0 rail_new ; (vec3 p, vec3 d)
+0x44c2e0 rail_release
+0x44c2f0 rails_load_cmp ; etappeN.cmp
+0x44c410 rail_ctor
+0x44c440 rail_set ; p, d, yaw +0x18, horizontal length +0x5c
+0x44c600 rails_tarray_alloc
+0x449c10 bbox_add_rail ; (chunk, k) rail box x[-10,0] z[-1,len+1] into g_bboxes
+0x44a010 bbox_collect_static ; (obj) rails of chunks c-1..c+1 + nearby physics objects
+; game side
+0x4225d0 gm_load_track_info ; Raser.ini [MAPS] -> g_maps
+0x4252b0 road_visible_start ; (behind=2) first chunk to draw from camera chunk + view direction
+; globals
+0x4e5d28 g_road ; road object (packed struct, see FORMAT_ROAD.md)
+0x4e5d2c g_road_chunk_order ; m_chunks.data: int[n] chunk index (identity)
+0x4e5d30 g_road_nchunks ; m_chunks.size
+0x4e5d72 g_road_tex_weg ; +0x4a road group texture
+0x4e5d76 g_road_tex_gras ; +0x4e land group texture
+0x4e5d7a g_road_tex_vang ; +0x52 rail group texture
+0x4e5d7e g_road_tex_gra2 ; +0x56 extra group texture
+0x4e5d82 g_road_rail_verts ; +0x5a
+0x4e5d86 g_road_rail_index ; +0x5e
+0x4e5d8a g_road_rail_nverts ; +0x62
+0x4e5d8e g_road_rail_nindex ; +0x66
+0x4e5d92 g_road_road_verts ; +0x6a
+0x4e5d96 g_road_road_index ; +0x6e
+0x4e5d9a g_road_road_nverts ; +0x72
+0x4e5d9e g_road_road_nindex ; +0x76
+0x4e5da2 g_road_land_verts ; +0x7a
+0x4e5da6 g_road_land_index ; +0x7e
+0x4e5daa g_road_land_nverts ; +0x82
+0x4e5dae g_road_land_nindex ; +0x86
+0x4e5db2 g_road_extra_verts ; +0x8a
+0x4e5db6 g_road_extra_index ; +0x8e
+0x4e5dba g_road_extra_nverts ; +0x92
+0x4e5dbe g_road_extra_nindex ; +0x96
+0x4e5dc2 g_road_hw_uv ; +0x9a
+0x4e4988 g_physics_list ; 8-byte {used, obj} slots
+0x4e5928 g_trigger_handlers ; void (*[256])(int obj)
+0x4e65d4 g_rceng_initialised
+0x4e65e0 g_chunks ; T_ARRAY data (0x184-byte chunks)
+0x4e65e4 g_chunks_count
+0x4e6628 g_driver_map ; T_ARRAY data (0x50-byte waypoints)
+0x4e662c g_driver_map_count
+0x4e6670 g_road_ptr ; = &g_road while loading
+0x4ea2f0 g_bbox_count ; max 200
+0x4e6790 g_bboxes ; 0x4c-byte boxes
+0x4ea2f8 g_planes ; T_ARRAY data (0x8c-byte planes)
+0x4ea2fc g_planes_count
+0x4ea340 g_rails ; T_ARRAY data (0x60-byte rails)
+0x4ea344 g_rails_count
+0x4eab9c g_atlas_u_scale ; software path UV scale (writer not found)
+0x4eaba0 g_atlas_v_scale
+0x48c488 g_trigger_handler_table ; 49 handlers copied into g_trigger_handlers[0..48] by 0x42a2b0
+0x49b014 c_angle_units ; 1024.0f (angles in 1024ths of a turn)
+0x4d8e98 g_maps_count
+0x4d8ea0 g_maps ; 0x89-byte records: +0 name, +0xe weg, +0x1c gras, +0x2a gra2, +0x38 vang (each '%s.pcx', 14 chars)
+0x4d9a74 g_cur_map
+0x4d9a8c g_visible_chunks ; game.ini visiblechunks (30)
+0x4d9aac g_hw_accel ; display modes 2,3 -> 1
+0x4a70cc g_cam_chunk ; chunk of the active camera (used by road_visible_start)

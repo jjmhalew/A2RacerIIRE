@@ -1,0 +1,22 @@
+0x421fd0 gm_ini_load_gfx_options ; reads [GFX OPTIONS] from game.ini into the globals below (Gm_ini.cpp)
+0x4d9ae0 g_opt_clouds ; game.ini [GFX OPTIONS] clouds
+0x4d9ae4 g_opt_finish_flag ; game.ini [GFX OPTIONS] finish_flag
+0x4d9ae8 g_opt_skidmarks ; game.ini [GFX OPTIONS] skidmarks
+0x4d9aec g_opt_fade_skmarks ; game.ini [GFX OPTIONS] fade_skmarks
+0x4d9af4 g_opt_particles ; game.ini [GFX OPTIONS] particles
+0x4d9af8 g_opt_part_rain ; game.ini [GFX OPTIONS] part_rain
+0x4d9afc g_opt_disable_overlay ; game.ini [GFX OPTIONS] disable_overlay
+0x4d9b00 g_opt_overlay_detail ; game.ini [GFX OPTIONS] overlay_detail
+0x4d9b0c g_opt_object_lights ; game.ini [GFX OPTIONS] object_lights
+0x4d9b14 g_opt_gamma ; game.ini [GFX OPTIONS] gamma -> pformat_set_gamma(1): 2D colour conversion c' = c*c/256
+0x4d9b18 g_opt_alpha_blending ; game.ini [GFX OPTIONS] alpha_blending
+0x468210 pformat_set_mode ; [0x4eacbc] = font/sprite pixel conversion mode (0 = 8-bit copy, 1 = 8->16, 2 = 8->24, 4 = 24->16)
+0x468220 pformat_set_gamma ; [0x4eacc0] = gamma flag (each channel c -> c*c/256 when converting to 16/24 bit)
+0x468230 pformat_rgb24_to_pixel ; 0xBBGGRR -> surface pixel via shifts at 0x4eaca4..0x4eacb8; nudges colours that collide with the colour key
+0x468380 pformat_convert ; (value, src_bits 8|16|24) -> surface pixel; 8-bit uses current palette [0x4eace0] (PALETTEENTRY[256])
+0x468530 pformat_index_to_rgb24 ; 8-bit index -> 3 bytes (24-bit surfaces)
+0x46a2d0 ascii_load_font ; Load_new_ascii_set: loads a .fnt (256 x {s16 w,h; u32 ofs}, 4 x s16, 8-bit glyph pixels, 0xff = transparent) into one DirectDraw surface per glyph
+0x418330 gfx_asci_init_fonts ; loads the 17 fonts of the current resolution from the table at 0x486d08 (2 res x 17 x 0x94-byte records)
+0x418290 gfx_asci_check_font_index ; asserts 0 <= font < 17
+0x4182c0 gfx_asci_check_res_index ; asserts 0 <= res < 2
+0x486d08 g_font_table ; [2][17] font records of 0x94 bytes: char name[0x64], +0x64 nchars(256), +0x68 glyph array (256 x 12 bytes {surface, w, h}), +0x70..+0x7c the 4 header shorts, +0x80/+0x84 w/h of the largest glyph, +0x90 = 0x457 when loaded

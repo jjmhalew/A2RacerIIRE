@@ -1,0 +1,247 @@
+# menu.dat (the menus): game flow, screens, save slots. See docs/MENU.md and docs/GAMEFLOW.md.
+# Format: 0xADDR name ; comment
+
+# --- A2menu.cpp / bestand.cpp
+0x401000 menu_mouse_on              ; A2menu.cpp: Set_help_key/Clear_screen/Mouse_on (start of a menu session)
+0x4011c0 menu_mouse_off             ; A2menu.cpp: Clear_help_keys, mouse_off
+0x401220 menu_session               ; arg=\FIRST flag: slot screen first (cancel -> 0xff), then main menu loop; returns exit code 0x28/0xff
+0x4012d0 file_exists                ; bestand.cpp
+0x401320 file_load                  ; bestand.cpp: fopen "rb", fread(buf,size)
+0x4013d0 file_save                  ; bestand.cpp: fopen "wb", fwrite(buf,size)
+
+# --- ini_io.cpp
+0x401480 ini_read_movies            ; raser.ini [movies] size -> 0x4341f8, on -> 0x4341fc
+0x4014c0 ini_read_car_props         ; garage.ini [prices] carN, [percents] carN_percM -> car table 0x42df50 (perc = (v-min)/(max-min)*100, clamp 1..100)
+0x401610 ini_read_item_props        ; garage.ini [prices] itemI_carC, [percents] itemI_percM -> item table 0x42b8b8
+0x401820 ini_write_options          ; raser.ini [Program] RESOLUTION, [Sound] SFXVOLUME/MUSICVOLUME = on ? 3100-30*vol : 0; game.ini [OPTIONS] Difficulty
+0x4018f0 ini_write_player_items     ; game.ini [PLAYER] MOTOR,BANDEN,DAMAGE,TURBO,ABS,VERSNELLINGSBAK, Car, COPLAND (=1 if name=="COPLAND")
+0x401a50 ini_write_money            ; game.ini [PLAYER] money
+0x401aa0 ini_write_save_game        ; menu.ini [PLAYER] save_game = active slot
+0x401ad0 ini_read_save_game         ; menu.ini [PLAYER] save_game -> g_active_slot (0..8)
+0x401b20 ini_write_controls         ; game.ini [INPUT] LEFT,RIGHT,UP,DOWN,EXTRA1,EXTRA2, Device (0->1,1->2,2->3,3->3), Sensitivity
+0x401c70 ini_write_etappe           ; game.ini [ETAPPE] etappe = slot.etappe
+0x401cc0 ini_write_race_setup       ; all writes before starting spel.dat (exit code 0x28)
+0x401ce0 ini_read_damage            ; game.ini [PLAYER] damage -> slot.items[2]
+0x401d30 ini_read_racer_results     ; game.ini [RACERS] COUNT(=3), "n"=car,pos,time -> slot.hiscore[etappe+1][pos] = {car,"racer n+1",time/1000}
+0x401ff0 ini_read_player_result     ; game.ini [PLAYER] money (clamp 0..999999), tracktime, position -> slot.hiscore[etappe+1][position]
+0x402330 ini_read_version           ; raser.ini [program] version -> float 0x43e7ec (shown "v%0.2f" in options)
+0x402390 read_race_results          ; racers + player + damage (only when [PLAYER] finished != 0)
+0x4023a0 ini_read_finished          ; game.ini [PLAYER] finished
+0x4023c0 ini_read_start_budget      ; menu.ini [PLAYER] start_budget -> 0x4354f0 (0..999998)
+0x402410 ini_read_all               ; item props, car props, start budget, version
+
+# --- janeereq.cpp (yes/no requester)
+0x402430 janee_open_screen          ; panel anim 0x47 centred, title (stdfont) + message (midfont)
+0x402570 janee_close_screen
+0x4025a0 janee_request              ; (message, title) -> 1 = JA, 0 = NEE/Esc
+0x402670 janee_init_form            ; static init: JA (key J) / NEE (key N) smallbt buttons
+
+# --- m_bediening.cpp (controls)
+0x402750 key_name                   ; VK code -> name from table 0x42a4a8 {vk, char*}
+0x4027c0 wait_key_press             ; returns index in key table, 0x1b = Esc, -1 none
+0x402840 swap_keys
+0x402990 set_key
+0x402a00 show_key                   ; key name at (x, 0x4d+31*i)
+0x402ac0 show_key_config_button     ; "Instellen" box (426,146)-(605,167)
+0x402ba0 show_key_panel             ; Links/Rechts/Gas/Rem/Turbo/Handrem + "Toetsen"
+0x402d90 get_possible_double_key
+0x402e10 show_key_panel_bg
+0x402e40 restore_key_help_area
+0x402e70 restore_key_background
+0x402f00 show_key_help_text         ; "Druk op een toets voor <function>"
+0x402fa0 configure_keys             ; asks the 6 keys in turn, Esc restores, duplicates swap or fout.wav
+0x403200 mbed_add_buttons           ; animated OK / Annuleren
+0x403260 show_sensitivity           ; slider (only device 2/3)
+0x403390 show_device                ; device icons, radio
+0x4034c0 mbed_open_screen           ; bedien.pcx
+0x403560 mbed_close_screen
+0x403590 menu_animate_frame         ; shared: header anim + animated buttons per frame
+0x4035f0 menu_bediening             ; controls screen loop
+
+# --- m_garage.cpp
+0x403a30 check_item_index           ; 0..5
+0x403a60 check_car_index            ; 0..6
+0x403a90 play_item_sound            ; motor/banden/repair/banden(turbo)/antiblok/versne~1.wav
+0x403b10 mr_add_buttons
+0x403ba0 show_item_button           ; item panel anim (frame 0 normal,1 glow,2 too expensive,3 owned), name, "Fl %d"
+0x403da0 show_item_buttons
+0x403fc0 mr_open_screen             ; garage.pcx, BUDGET, SCHADE, car picture, property bars
+0x404280 mr_close_screen
+0x4042b0 mr_animate_frame
+0x404330 mr_create_form
+0x404370 item_under_mouse
+0x4043e0 show_item_property_bars
+0x404550 item_unhighlight
+0x4045b0 item_highlight
+0x4046f0 menu_garage                ; garage loop (arg 1 = from new game)
+
+# --- m_highscore.cpp
+0x404f50 mhigh_show_header          ; "    Naam         Auto        Tijd"
+0x404f80 mhigh_show_table           ; 4 rows: name, car icon (anim 0x39), mm:ss
+0x405220 mhigh_show_tabs            ; 8 tabs: TOTAAL + track names
+0x4054f0 mhigh_add_buttons
+0x405530 mhigh_open_screen          ; hiscore.pcx
+0x4055e0 mhigh_close_screen
+0x405610 mhigh_create_form
+0x405630 menu_highscore             ; "Standen" loop
+
+# --- m_kopen.cpp (showroom, buy car)
+0x405880 build_car_list             ; all cars except the owned one (6 entries)
+0x4058f0 mk_add_buttons
+0x405950 mk_animate_frame
+0x4059c0 start_new_car_text         ; name / "Prijs : Fl %d" animated text
+0x405ac0 car_trade_in_value         ; price/2 + sum(bought item price/2) - repair_price*damage
+0x405c20 show_owned_car             ; picture (anim frame 5), name, "Waarde : Fl %d"
+0x405cc0 mk_open_screen             ; showroom.pcx
+0x405ed0 mk_close_screen
+0x405f00 mk_create_form
+0x405f10 menu_kopen                 ; buy-car loop (arg 1 = new game: OK continues to garage)
+
+# --- m_main.cpp
+0x406840 mm_init_janee_form
+0x406920 wait_esc_released
+0x406950 wait_enter_released
+0x406980 mm_show_damage_gauge       ; anim 0x14 frame min(damage/10,9) at (349,180)
+0x406a20 mm_show_box_titles         ; Spelerinformatie / Volgende etappe / Besturing
+0x406ad0 mm_show_player_info        ; Naam / Budget / Schade
+0x406c20 mm_show_control_icon       ; anim 0x15 frame device at (506,333)
+0x406ca0 read_track_info            ; raser.ini [maps] n -> type, name
+0x406e20 mm_show_next_etappe        ; anim 0x13 frame type, name, Kwalificatie/Stedenrace
+0x406fd0 mm_open_screen             ; hoofd.pcx
+0x407130 mm_close_screen
+0x407190 mm_add_buttons             ; 7 animated buttons fly in from x=-100
+0x4072c0 mm_animate_frame
+0x407320 reset_career               ; etappe=0, +0x1a=0, clear all 8 hiscore tables
+0x4074e0 stop_music
+0x407500 start_music                ; music_table[etappe % 7], looped
+0x407580 end_of_game                ; win.smk if player is first in TOTAAL else lose.smk; etappe=0
+0x4076a0 menu_main                  ; main loop, returns 0x28 (start race) / 0xff (quit)
+0x407c70 msn_add_buttons
+
+# --- m_nspeler.cpp (new player / load)
+0x407cd0 msn_show_slots
+0x407d80 msn_open_screen            ; newgame.pcx
+0x407e50 msn_close_screen
+0x407e80 msn_show_slot              ; row anim 0x25, name, money, etappe, total time, car icon
+0x408180 msn_select_slot
+0x4081b0 menu_nspeler               ; slot screen loop; returns 0 if cancelled
+0x408850 mo_init_ok_form
+0x408960 msn_init_janee_form
+
+# --- m_opties.cpp
+0x408a40 load_options               ; options.ras (18 bytes) -> 0x43e7d8
+0x408ab0 save_options
+0x408b00 init_options               ; defaults sfx=1 music=1 vol 80/80 res=0 difficulty=1
+0x408b70 revert_options
+0x408c00 mo_add_buttons
+0x408c60 mo_show_resolution         ; radio 320x200 / 640x480 / 3D Kaart (0/1/3)
+0x408d70 mo_show_difficulty         ; Makkelijk / Moeilijk
+0x408e00 mo_show_checkbox
+0x408e50 mo_open_screen             ; opties.pcx
+0x409160 mo_close_screen
+0x409190 menu_opties
+
+# --- main.cpp
+0x409660 screenshot_key             ; Ctrl+F10 -> scr%02d.pcx
+0x4096c0 read_helpdesk              ; raser.ini [HELPDESK] DEBUGON, SNDFRT, WINMSG
+0x409730 init_sound                 ; SNDFRT 0 = best (22050/16/stereo, fall back), 1 = safe (11025/8/mono)
+0x409870 advance_etappe             ; g_game_complete = (etappe >= 6); etappe++
+0x4098f0 menu_winmain               ; WinMain of menu.dat
+
+# --- Menuanim.cpp
+0x409c80 anim_frame                 ; m_af_image(anim, frame) -> sprite index
+0x409cd0 wait_key_released
+0x409d00 get_menu_event             ; form event; 0x2710 Esc, 0x2711..0x2714 cursor keys
+0x409de0 focus_prev                 ; (n) -> (focus+n-1) % n
+0x409e00 focus_next
+0x409e10 init_anims                 ; menurc.img
+0x409e80 load_menu_anims            ; menurc.img / menurc.ind
+0x409f20 free_menu_anims
+0x409f70 play_smacker               ; \data\<name>.smk; [MOVIES] SIZE 1 = (0,0)-(640,480) stretched, 0 = 320x240 centred
+0x40a080 play_lose_smk
+0x40a090 play_win_smk
+0x40a0a0 play_intro_smk
+0x40a0b0 play_exit_smk
+0x40a0c0 snd_handle_valid
+0x40a0e0 snd_stop
+0x40a150 snd_set_volume_pct         ; DirectSound volume = vol*30 - 3100
+0x40a170 play_sfx                   ; if sfx on: play once at sfx volume
+0x40a1c0 play_music                 ; if music on: play looped at music volume
+0x40a210 snd_set_volume
+0x40a250 snd_get_volume
+
+# --- req_nsp.cpp (name entry)
+0x40a280 nsp_req_open_screen        ; "Vul je naam in en wordt lid van de A2 racing club"
+0x40a3e0 nsp_req_close_screen
+0x40a430 nsp_req_get_name
+0x40a490 nsp_request                ; (name buffer, max 8, title) -> 1 = cancelled
+0x40a590 nsp_req_init_form          ; OK / Annuleren + edit box
+
+# --- slotio.cpp
+0x40a6a0 count_used_slots
+0x40a6e0 hiscore_total_for_name     ; sum of times in tables 1..etappe where name matches, car of last table
+0x40a970 hiscore_insert_total       ; sorted insert into table 0 (TOTAAL)
+0x40aeb0 hiscore_build_totals       ; racers 1..3 + player -> table 0
+0x40b060 check_hiscore_etappe       ; 0..7
+0x40b090 check_hiscore_place        ; 0..3
+0x40b0c0 check_key_index            ; 0..5
+0x40b0f0 check_slot_index           ; 0..8
+0x40b120 save_slots                 ; SLOTS.RAS = 9 * 536 bytes from 0x43ec28
+0x40b170 load_slots
+0x40b1f0 init_slot                  ; defaults: money=start_budget, keys 25/27/26/28/11/12 hex, sens 50
+0x40b6c0 init_slots                 ; create SLOTS.RAS if missing
+0x40b710 get_last_slot              ; slot with highest 'last used' counter
+0x40b780 slot_fix_order
+0x40b7f0 delete_slot
+0x40b820 slot_touch                 ; last used = max+1
+
+# --- special_anim.cpp
+0x40b880 show_percent_slider
+0x40b9c0 drag_percent_slider
+0x40bae0 begin_draw
+0x40bb10 end_draw
+0x40bb20 point_in_rect
+0x40bb60 anim_size
+0x40bba0 clip_rect
+0x40bc10 set_special_anim
+0x40bc20 handle_special_animation
+0x40bd00 init_anim_data
+0x40bd90 create_sine_table
+0x40be30 scroll_special_animation   ; car picture slides when browsing cars
+0x40c020 special_anim_step
+0x40c110 next_animated_text_frame
+0x40c250 init_anim_text
+0x40c320 init_animated_header       ; title bar animation per screen (0 nspeler,1 main,2 garage,3 kopen,5 opties,6 standen)
+0x40c3b0 next_animated_header_frame
+0x40c430 init_animated_buttons
+0x40c470 add_animated_button        ; (id, x0=-100, y, x, y, delay frames, text)
+0x40c660 show_button_frame
+0x40c890 handle_animated_buttons
+0x40c8f0 show_property_bars         ; 4 bars: snelheid, acceleratie, remmen, wegligging
+0x40c960 show_property_bar
+0x40cc80 show_part_of_property_bar
+0x40cef0 get_current_car_props      ; car perc + bought item perc
+0x40cfc0 print_centered_text
+0x40d040 get_centered_text
+
+# --- winlib bits used by the flow
+0x40d4b0 debug_printf               ; debug.txt
+0x40d650 debug_error
+0x40fcb0 play_help                  ; guided spoken help: list {form element, wav}, ends on key
+0x411ba0 create_form                ; table of 28-byte entries {x,y,type,ctrl*,style,0,0}, type -1 ends
+0x416ab0 smacker_init               ; skip keys Esc, Enter, Space, mouse
+0x416c60 smacker_frame_loop
+0x416e30 smacker_play
+
+# --- globals
+0x42df50 g_car_table                ; 7 x 48: {idx, anim, name[20], perc[4], price}
+0x42b8b8 g_item_table               ; 6 x 0x78: {anim, x, y, name[64], price[7], perc[4]}
+0x42ef10 g_music_per_etappe         ; speed, energy, jammin, moody, disco, speed2, moody (.wav)
+0x43e70c g_game_complete            ; set when etappe 7 was finished
+0x43e7d4 g_new_player               ; slot just created in this session
+0x43e7d8 g_options                  ; options.ras image (18 bytes)
+0x43ec28 g_slots                    ; 9 x 536 bytes = SLOTS.RAS
+0x43ff00 g_active_slot
+0x4341f8 g_movie_fullscreen
+0x4341fc g_movies_on
+0x4354f0 g_start_budget

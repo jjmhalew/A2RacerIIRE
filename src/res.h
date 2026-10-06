@@ -1,0 +1,27 @@
+/* res.h - the game's files: loose files in the data dir and the resource archives (<name>.IND index + <name>.IMG
+ * data, docs/FORMAT_IMG.md). Names are matched ignoring case, as on the original's file system.
+ *
+ * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+#ifndef A2_RES_H
+#define A2_RES_H
+#include <stddef.h>
+#include <stdint.h>
+
+void res_set_dir(const char *data_dir);        /* the folder with Game.ini, RCS.IMG, etappe0.rmp ... */
+const char *res_dir(void);
+void res_path(char *out, size_t cap, const char *name);   /* data_dir + name */
+
+/* a whole loose file; NULL when missing. Free with free(). */
+uint8_t *res_load_file(const char *name, size_t *size);
+
+typedef struct ResArchive ResArchive;
+ResArchive *res_open(const char *base);        /* "RCS" -> RCS.IND + RCS.IMG */
+void res_close(ResArchive *a);
+int res_count(const ResArchive *a);
+const char *res_name(const ResArchive *a, int i);   /* "0012" for the unnamed archives */
+int res_find(const ResArchive *a, const char *name);   /* index or -1, ignoring case */
+uint8_t *res_read(ResArchive *a, int i, size_t *size);   /* malloc'd */
+
+/* the race archive RCS, opened on first use; then the loose files */
+uint8_t *res_load(const char *name, size_t *size);
+#endif

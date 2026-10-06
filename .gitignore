@@ -1,0 +1,21 @@
+# game files: never in the repo (you supply them from your own CD)
+data/
+extract/
+game/
+*.iso
+# build output
+/A2RacerRE.exe
+*.pdb
+build/
+tools/zig/
+/a2racerre
+# per-player files the game writes next to itself
+a2racerre.cfg
+a2racerre.sav
+a2racerre.log
+mods/
+# developer scratch: dev builds, disassembly, exports (may hold game art or code)
+out/
+__pycache__/
+*.pyc
+.venv/

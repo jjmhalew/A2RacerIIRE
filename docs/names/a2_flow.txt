@@ -1,0 +1,10 @@
+# a2_II.exe (launcher). See docs/GAMEFLOW.md.
+# Format: 0xADDR name ; comment
+0x401000 run_program        ; (exe, arg): _spawnv(P_WAIT, exe, {exe, arg, NULL}); returns exit code; MessageBox on errno
+0x401120 launcher_winmain   ; hidden window class "MOTOR"; loop menu.dat -> (exit 40) spel.dat -> menu.dat ...
+0x401340 launcher_wndproc
+0x401520 strncpy
+0x401620 crt_winmain_startup
+0x403a90 spawnv
+0x408750 g_hwnd
+0x408be0 g_empty_arg        ; never written: "" (argument for every later run)
