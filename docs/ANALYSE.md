@@ -11,7 +11,7 @@ Rotterdam, with traffic, police, speed cameras ("flitspalen"), refuelling and a 
 | `data\a2_II.exe` | Launcher (28 KB): starts the menu and the race in turn |
 | `data\menu.dat` | The menus (PE exe, 253 KB, 1998-11-02): main menu, new player, garage, buy car, options, controls, high scores, save slots, Smacker films (`smackw32.dll`) |
 | `data\spel.dat` | The race (PE exe, 669 KB, 1998-11-05): DirectDraw + Direct3D (immediate mode, also RAMP/RGB software), DirectInput, DirectSound |
-| `data\qrace.exe`, `data\instlng.exe` | Quick-race starter, language installer |
+| `data\qrace.exe`, `data\instlng.exe` | Quick-race starter; the settings dialog "A2 Racer Instellingen" (Raser.ini `[DIRECTX]`, `[MOVIES]`, `[SOUND] on`, `[PROGRAM] focus`; Game.ini `[GFX OPTIONS] alpha_blending/gamma`, `[OPTIONS] fog/waitvbl/3dsound/texturecopy/resizetexture`) |
 | `data\Game.ini`, `Raser.ini`, `garage.ini`, `language.ini`, `menu.ini` | Commented settings; the menu and the race exchange the player's state (car, money, damage, upgrades, results) through `Game.ini` |
 | `data\RCS.IMG/IND` | Race resources: 448 `.d3d` meshes, 106 `.tga` + 147 `.pcx` images, 74 `.wav`, 31 `.fnt` |
 | `data\Mrcs.img/ind` | Menu resources: menu screens (`.pcx`), fonts (`.img`), music and spoken help (`.wav`) |
