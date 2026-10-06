@@ -755,7 +755,7 @@ void car_drive_old(int o, float delta /*steer rad*/, float accel /*-1..1*/)   //
     /* visual body roll, absolute (overwrites inst->roll every frame) */
     float ay = c->yawrate * c->vz;                                  // lateral acceleration
     if (fabs(ay) > 30) ay = (ay < 0 ? -1 : 1) * 30;
-    inst(c)->roll = ay * (1/30.f) * T->old_roll_max * 11.377778f;   // 11.3778 = 1024/90; [quirk] up to ~52 deg
+    inst(c)->roll = ay * (1/30.f) * T->old_roll_max * 11.377778f;   // 11.3778 = 1024/90; with 4096-unit angles: up to old_roll_max = 13 deg
 
     obj_add_force_at(c, Ff,   Pf);       // 0x4407e0: F += f; torque += P.x*f.z - P.z*f.x
     obj_add_force_at(c, Fr,   Pr);
