@@ -14,7 +14,7 @@
 #include "vmath.h"
 
 #define RACE_HZ 30
-#define MAX_OBJS 256
+#define MAX_OBJS 512                /* the cars and the bodies of the .omp objects (up to 152 per track, objects.c) */
 
 /* the original's object (0xa0 bytes) and its 3D instance (0x99 bytes) in one */
 typedef struct Obj {
@@ -54,7 +54,7 @@ typedef struct {
     float mass, length, width, cg_front, cg_rear;
 } CarType;
 
-typedef struct {
+typedef struct Race {
     Track track;
     ObjectSet objects;
     int etappe;

@@ -139,5 +139,7 @@ Environment: `A2_HIDDEN=1` opens no visible window (screenshots still work; with
 `A2_TEST_FINISH=N` finishes a race N seconds after the start (and continues 3 s later), `A2_TEST_GAMEOVER=N[,R]` ends
 it N seconds after the start with game over reason R (0 total loss, 1 time up, 2 arrested; continues 8 s later),
 `A2_TEST_CAM=N` holds camera view N (0..10, the original's player views, e.g. 6 front-left, 8 low rear-left),
+`A2_TEST_OBJ=N[,C]` starts the player car C chunks (default 3) before `.omp` object N, in line with it (to drive into
+a pylon, speed-camera pole or median with `--drive 0`),
 `A2_NO_FILMS=1` skips the films, `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
 `A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state.
