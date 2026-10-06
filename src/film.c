@@ -58,7 +58,10 @@ int film_play(const char *name, int fullscreen)
             if (!plat_poll()) { result = -2; goto done; }
             unsigned clicked = 0;
             plat_mouse(NULL, NULL, NULL, &clicked);
-            if (plat_any_key_pressed() || plat_pad()->pressed || clicked) { result = 0; goto done; }
+            /* smacker_init 0x416ab0 breaks off on Esc, Enter, Space and the left mouse button (a tap; Android's
+             * back button is Esc); PORT: a pad's A, B or Start */
+            if (plat_key_pressed(VK_ESCAPE) || plat_key_pressed(VK_RETURN) || plat_key_pressed(VK_SPACE) || (clicked & 1)
+                || (plat_pad()->pressed & (PAD_A | PAD_B | PAD_START))) { result = 0; goto done; }
             int ww, wh;
             plat_size(&ww, &wh);
             gfx_begin(ww, wh, 0, 0, 0);

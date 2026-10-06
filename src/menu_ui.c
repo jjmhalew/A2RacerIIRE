@@ -795,7 +795,9 @@ static int ctrl_at(int x, int y)
 
 /* the owner-drawn edit box keys (sub_4179d0): a character the font has goes in while both the cursor and the length
  * are below the maximum - overwriting by default (sub_4178d0), inserting after Insert (sub_417810) - so the default
- * "Speler" is typed over */
+ * "Speler" is typed over. Only the characters of Ownedit's set go in (0x43a58c, set by sub_417520; strstr at 0x417cf2). */
+static const char EDIT_CHARS[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.<,/?![]\\%$&*+-=>:;' ";
+
 static void edit_keys(MuiCtrl *c)
 {
     int len = (int)strlen(c->buf), changed = 0;
@@ -803,7 +805,7 @@ static void edit_keys(MuiCtrl *c)
     if (plat_key_pressed(VK_INSERT)) g_edit_insert = !g_edit_insert;
     for (const char *t = plat_text_input(); *t; t++) {
         unsigned char ch = (unsigned char)*t;
-        if (ch < 32 || !f->present[ch] || c->cursor >= c->maxlen || len >= c->maxlen) continue;
+        if (ch < 32 || !strchr(EDIT_CHARS, ch) || !f->present[ch] || c->cursor >= c->maxlen || len >= c->maxlen) continue;
         if (g_edit_insert) {
             memmove(c->buf + c->cursor + 1, c->buf + c->cursor, (size_t)(len - c->cursor + 1));
             len++;
