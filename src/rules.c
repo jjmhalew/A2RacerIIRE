@@ -14,6 +14,7 @@
 #include "res.h"
 #include "sfx.h"
 #include "texture.h"
+#include "txcopy.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -217,6 +218,7 @@ static void finish_lap(void)                         /* finish_lap 0x429860 */
 static void trigger(Race *r, int id, int prev, int cur)
 {
     int n = r->track.nchunks, fwd = moving_forward(prev, cur, n);
+    txcopy_trigger(r, id);                           /* speed-limit and direction sign textures */
     switch (id) {
     case 1:                                          /* speed camera 0x42a2e0 */
         if (cur < G.radar_off_until_chunk) break;

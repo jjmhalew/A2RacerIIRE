@@ -10,6 +10,7 @@
 #include "exetab.h"
 #include "model.h"
 #include "res.h"
+#include "txcopy.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1339,7 +1340,7 @@ static int ai_get_drive_direction(int o, int w)
 
 /* ---- police: sirens, voices (Car_cops.cpp, ev_cops.cpp) [8] --------------------------------------------------- */
 /* cop_siren 0x40c640: the siren sample (40) instead of the engine, the count of sirens and the active-cop list
- * (the radar's cop dots). The blinking siren-light texture copy (txt_blit_anim 14) is not done here. */
+ * (the radar's cop dots); the last siren off puts the siren-light texture copy back to frame 0 (0x40c768). */
 static void cop_siren(int o, int on)
 {
     int a = OBJ(o)->ai;
@@ -1355,7 +1356,7 @@ static void cop_siren(int o, int on)
     } else {
         if (OBJ(o)->sample == 40 && a >= 0) sndfx_set_object_sample(o, g_ai[a].old_sample);
         if (--g_siren_count < 0) g_siren_count = 0;
-        if (g_siren_count == 0) g_siren_light_frame = 0;
+        if (g_siren_count == 0) { g_siren_light_frame = 0; txcopy_blit(TXC_SIREN, 0); }
     }
     g_cop_siren_active = g_siren_count != 0;
 }
@@ -1363,7 +1364,11 @@ static void cop_siren(int o, int on)
 static void cop_siren_light_update(void)                              /* 0x40c860: every 200 ms */
 {
     if (!g_cop_siren_active) return;
-    if (now_ms() - g_siren_light_ms >= 200) { g_siren_light_ms = now_ms(); g_siren_light_frame = g_siren_light_frame == 0; }
+    if (now_ms() - g_siren_light_ms >= 200) {
+        g_siren_light_ms = now_ms();
+        txcopy_blit(TXC_SIREN, g_siren_light_frame);                 /* txt_blit_anim(14, frame), then toggle */
+        g_siren_light_frame = g_siren_light_frame == 0;
+    }
 }
 
 static void cop_voice(int target, int *handle, const int *samples, int n)   /* 0x4150f0 / 0x415170 */
@@ -1917,6 +1922,8 @@ static void ai_rank_racers(void)                                      /* 0x408cb
 
 int ai_player_position(void) { return g_player_position; }
 int ai_difficulty(void) { return g_difficulty; }
+int ai_racer_object(int i) { return i >= 0 && i < 3 ? g_racers[i].object : -1; }
+int ai_active_cop(int slot) { return slot >= 0 && slot < 20 ? g_active_cops[slot] : -1; }
 
 static void ai_fsm_handle_all(void)                                   /* 0x408ed0 */
 {

@@ -89,9 +89,10 @@ numbers below are 0-based (`out/RC/NNNN.bin`, `out/png/RC/NNNN.png`). Sprites: `
 
 Anim lists: 8-bit HUD `0x496118` = {5,1,13,8,10,2,7,43,15,16,18,22,20}, 16-bit HUD `0x496150` =
 {0,44,3,4,6,9,11,12,14,17,19,23,21}, 8-bit texture anims `0x496188` = {42,40,28,30,32,34,36,38,24,26}. Anims 24-42
-are not HUD: they are texture-copy animations blitted into 3D textures by `txt_main` `0x42ae90` (speed-limit signs
-24/25, 26/27 small light pieces, direction signs 28-39 (4 frames each), 40/41 and 42 [?]); `txt_reml` `0x42b100` =
-brake lights, `txt_vbrd` `0x42b190` = speed-zone signs (needs Game.ini `texturecopy`). So "txt_" means texture, not text.
+are not HUD: they are texture-copy animations blitted into 3D textures by `txt_main` `0x42ae90` (speed-limit matrix
+boards 24/25, brake lights 26/27, direction signs 28-39 (4 frames each), police light bar 40/41, ADAC beacon 42);
+`txt_reml` `0x42b100` = brake lights, `txt_vbrd` `0x42b190` = speed-zone signs (needs Game.ini `texturecopy`). So
+"txt_" means texture, not text. The table and the callers: [RENDER.md](RENDER.md) 11 (port: src/txcopy.c).
 Loading: `0x41bd50` (8-bit `0x431970` / 16-bit `0x431a60`), freeing `0x41bda0`; texture anims `0x42b060`.
 
 ## 4. Overlay elements
@@ -196,7 +197,26 @@ works, tested in `0x423d20` with LORADAR/HIRADAR), `disable_overlay`==0 and `ove
   `0x4a5ce0`, 20 slots) frame 2, player frame 1; then uploads the texture (`0x45bae0`).
 - Screen quad `0x41c5a0`: top-left = rect.xy, size = 0.7 * 64 / 128 -> lo (15,146) 44.8x44.8, hi (30,361) 89.6x89.6,
   white, uv 0..1. `0x41d280` rotates the 4 vertices around the quad centre (`[0x4ac998]`,`[0x4ac9a0]`) by the camera
-  heading every frame (map stays north-up in the texture, the quad turns). Drawn as a TL-vertex triangle strip.
+  heading every frame (map stays north-up in the texture, the quad turns). Drawn as a TL-vertex triangle fan
+  (DrawPrimitive type 6).
+
+Details (port: src/radar.c, called from race_draw before the dashboard; the 640x480 row throughout):
+- Bounding box `0x41cc90` over the chunks' start points (+0x24 x, +0x2c z, ftol): init min 0x7fff, max -0x7fff; a
+  chunk lowers the minimum *or else* raises the maximum; then -0xf00 / +0xf00 (64 pixels of margin). Map size
+  (max - min) / 60 (C division). Pixel of a chunk `0x41c790`: ((x - minx) / 60, (maxz - z) / 60), clamped.
+- Map `0x41c9a0`: surface and radar texture cleared to `pformat_convert(0xfe)` (index 254 = the textures' colour key;
+  LORADAR/HIRADAR on the CD are pure key colour), so only road and dots show. Per chunk, 16-bit branch: road pixel
+  (index 13), a 7x7 block of edge colour (index 0) where there is no road yet, then a 3x3 road block (8-bit branch:
+  a 4x4 edge at -2..1). Port: e02_pl16 colours 13 (218,218,218) and 0 (black), with the gamma of the HUD.
+- Window `0x41cf90`: (mx - 64, my - 64) .. x0 + 127 (exclusive corner); at the left/top edge 0..127, at the
+  right/bottom edge (map-1-128 .. map-1). Blitted stretched (no key) to (2,2)-(126,126) of the texture.
+- Dots `0x41c880` (anim of item 15: 44 in 16-bit = frames 0 racer red, 1 player yellow, 2 cop green, 8x8): at the
+  chunk's map pixel relative to the window (without the 2-pixel offset and the stretch), top-left
+  = p - ceil(size/2) + 1, only when 4 pixels inside the 128 square, colour-keyed. Order: the 3 racers
+  (`[0x485b2c]`.. = g_racer_info +0xc), the active-cop list `0x4a5ce0` (20 slots, cops whose siren went on;
+  `cop_siren` never takes a cop out), the player last.
+- Rotation: v = normalize(-(target.x - pos.x), 0, target.z - pos.z) of the active camera (+0x54 target, +0x08
+  position); corner' = c + R (corner - c) with x' = x v.z - y v.x, y' = x v.x + y v.z: the view direction points up.
 
 ### 4.9 Other overlay-like effects (not in draw_dashboard)
 | What | Where | Notes |

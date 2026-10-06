@@ -4,6 +4,7 @@
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_HUD_H
 #define A2_HUD_H
+#include <stdint.h>
 
 int  hud_init(void);                 /* after models_init (reads tables from spel.dat); 0 = failed */
 void hud_free(void);
@@ -21,4 +22,9 @@ int  hud_font_height(int font);      /* the height of 'A' (the line height of as
 /* one pixel row (0 = top) of hud_print(font, x, y, 0, s), drawn at y + row (the game-over scanline sweep) */
 void hud_print_row(int font, int x, int y, int row, const char *s);
 void hud_item_pos(int item, int *x, int *y);
+
+/* for blitting into textures (txcopy.c, radar.c): the pixels of frame `frame` of RC anim `anim` as RGBA in the e02_pl16
+ * palette, index 255 transparent (alpha 0); malloc'd, NULL = no such frame. hud_pal_rgba: one palette colour. */
+uint8_t *hud_sprite_rgba(int anim, int frame, int *w, int *h);
+void hud_pal_rgba(int index, uint8_t *rgba);
 #endif

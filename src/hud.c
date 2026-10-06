@@ -197,6 +197,26 @@ void hud_sprite(int anim, int frame, int x, int y, int at_hotspot)
     gfx_2d_quad(s->tex, (float)x, (float)y, (float)s->w, (float)s->h, 0, 0, 1, 1, 0xffffffffu, BLEND_ALPHA);
 }
 
+uint8_t *hud_sprite_rgba(int anim, int frame, int *w, int *h)
+{
+    if (!g_rc || anim < 0 || anim >= 45 || frame < 0 || frame >= g_anim[anim].n) return NULL;
+    int id = g_anim[anim].id[frame];
+    size_t n = 0;
+    uint8_t *d = res_read(g_rc, id - 1, &n), *px = NULL;          /* sprite id N = bank entry N-1 */
+    if (d && n >= 8) {
+        int sw = d[0] | d[1] << 8, sh = d[2] | d[3] << 8;
+        if (sw > 0 && sh > 0 && 8 + (size_t)sw * sh <= n && (px = malloc((size_t)sw * sh * 4)) != NULL) {
+            for (int i = 0; i < sw * sh; i++) rgba_of(d[8 + i], px + i * 4);
+            *w = sw;
+            *h = sh;
+        }
+    }
+    free(d);
+    return px;
+}
+
+void hud_pal_rgba(int index, uint8_t *rgba) { rgba_of((uint8_t)index, rgba); }
+
 void hud_item(int item, int frame)
 {
     if (item < 0 || item >= 84) return;

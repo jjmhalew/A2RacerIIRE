@@ -37,6 +37,10 @@ int  ai_plr_autopilot(int o);
 
 int  ai_difficulty(void);                      /* g_difficulty 0x4d9ab0: Game.ini [OPTIONS] Difficulty, 0 easy / 1 hard */
 int  ai_player_position(void);                /* g_player_position 0x4d9e60: racers ahead of the player (0 = leading) */
+/* for the radar (radar.c): the object of CPU racer i (0..2, g_racer_info 0x485b20 +0xc), and the cop in slot 0..19 of
+ * the active-cop list g_active_cops 0x4a5ce0; -1 = none */
+int  ai_racer_object(int i);
+int  ai_active_cop(int slot);
 /* the race end (sub_422d40): extrapolates unfinished racers (racers_finish_estimate 0x4114a0) and writes
  * Game.ini [RACERS] n=car,position,time and count; player_position = the player's place when crossing the line */
 void ai_save_racers(Ini *game_ini, int player_position);

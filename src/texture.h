@@ -17,6 +17,11 @@ typedef struct {
 const Texture *tex_get(const char *name);
 /* the decoded image (RGBA) of name, as tex_get picks it; 0 = missing. Free with image_free. */
 int tex_image(const char *name, Image *out);
+/* the pixels tex_get uploads for name: tex_image with the colour key made transparent and the gamma applied (the
+ * texture copies of txcopy.c draw into a copy of them); 0 = missing. Free with image_free. */
+int tex_pixels(const char *name, Image *out);
+/* the size of the CD's own image of name (the .tga, else the .pcx), whatever a texture pack puts in its place */
+int tex_orig_size(const char *name, int *w, int *h);
 void tex_free_all(void);
 /* every texture of the game (the .tga where there is one, else the .pcx) as DIR/NAME.png, the starting point of a
  * texture pack (mods/textures, res.h); the colour key (255,0,127) stays in. Returns the number written. */

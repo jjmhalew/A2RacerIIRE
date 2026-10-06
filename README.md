@@ -140,4 +140,5 @@ Environment: `A2_HIDDEN=1` opens no visible window (screenshots still work; with
 it N seconds after the start with game over reason R (0 total loss, 1 time up, 2 arrested; continues 8 s later),
 `A2_TEST_CAM=N` holds camera view N (0..10, the original's player views, e.g. 6 front-left, 8 low rear-left),
 `A2_NO_FILMS=1` skips the films, `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
-`A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state.
+`A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state,
+`A2_TEST_BRAKE=1` keeps the player car's brake lights lit (the texture copies of docs/RENDER.md 11).
