@@ -42,14 +42,14 @@ static struct {
     int money, position, poles, radar_off_until_chunk;
     int speed_limit;            /* 0x48c480, -1 = none */
     int difficulty, copland, invincible;
-    int caught, cop_obj;
     int gameover_reason;
     int flash;                  /* speed-camera flash, frames */
     int message, message_at;    /* 0x4882c0 / 0x4882c4 */
     int results_done, finish_sound;
     int pause;                  /* 1 pause, 2 quit question */
+    int cont;                   /* a continue key was pressed since the last tick (keys are read per frame) */
     int done;
-    char font3d[64];            /* the charset of FONT3D_ANIM (0x486b66) */
+    char font3d[64];            /* the charset of FONT3D_ANIM (0x486b68) */
     int anim_font3d;
     float prize, total;
 } G;
@@ -78,6 +78,7 @@ static void set_state(Race *r, int s)                /* set_game_state 0x424d20 
     G.state = s;
     G.state_since = G.clock;
     r->game_event = s;
+    r->event_running = s == GS_GAMEOVER || s == GS_COPSTOP;      /* g_event_running: no dashboard */
     if (s == GS_RACING) { r->race_started = 1; r->control = 1; }
     if (s == GS_QUIT) G.done = 1;
 }
@@ -149,7 +150,7 @@ void rules_init(Race *r, const RulesHooks *hooks)
     G.anim_font3d = anim_find("FONT3D_ANIM");
     PeFile pe;
     if (pe_open(&pe, "spel.dat")) {
-        const char *cs = pe_str(&pe, 0x486b66);
+        const char *cs = pe_str(&pe, 0x486b68);
         snprintf(G.font3d, sizeof G.font3d, "%s", cs ? cs : "");
         pe_close(&pe);
     }
@@ -209,7 +210,6 @@ static void trigger(Race *r, int id, int prev, int cur)
         timer_start(0, 10000 * 1000, 0);
         timer_start(3, 0x7fffffff, 0);
         if (G.limit_ms) timer_start(11, G.limit_ms, 1);
-        if (G.h.racers_start_clocks) G.h.racers_start_clocks();
         break;
     case 15: G.armed = 1; break;                     /* trigger_arm_finish 0x429a10 */
     case 14:                                         /* trigger_finish 0x429950 */
@@ -222,7 +222,6 @@ static void trigger(Race *r, int id, int prev, int cur)
             timer_freeze(3);
             if (G.tracktime < G.race_record) G.race_record = G.tracktime;
             G.position = G.h.player_position ? G.h.player_position() : 0;
-            if (G.h.racers_finish_estimate) G.h.racers_finish_estimate(G.tracktime);
             set_state(r, GS_FINISHED);
             sfx_play(SFX_JUICH);
         }
@@ -256,31 +255,6 @@ void rules_player_chunk_changed(Race *r, int prev, int cur)
     for (int i = 0; i < 2; i++) if (r->track.chunks[k].trigger[i]) trigger(r, r->track.chunks[k].trigger[i], prev, cur);
 }
 
-void rules_add_damage(Race *r, float v)              /* add_damage 0x428390 */
-{
-    if (G.state != GS_RACING || G.invincible) return;
-    if (v < 18000) return;
-    if (v > 35000) v = 35000;
-    int maxd = G.difficulty == 0 ? 6 : 12;
-    int d = (int)(maxd * 0.01f * (int)(v * 0.0028571f));
-    if (d < 0) d = 0;
-    if (d > maxd) d = maxd;
-    r->damage += d;
-    if (r->damage > 100) r->damage = 100;
-}
-
-void rules_cop_caught(Race *r, int cop_obj)          /* cop_stop_init 0x415300 */
-{
-    if (G.state != GS_RACING) return;
-    G.caught++;
-    G.cop_obj = cop_obj;
-    if (G.caught == 1) rules_message(49);
-    if (G.caught == 2) rules_message(50);
-    int base = G.caught == 1 ? SFX_COP1 : G.caught == 2 ? SFX_COP2 : SFX_COP3, cnt = G.caught == 1 ? 6 : 5;
-    sfx_play_vol(base + rand() % cnt, -100);
-    set_state(r, GS_COPSTOP);
-}
-
 void rules_radar_bonus(Race *r)
 {
     G.poles++;
@@ -299,13 +273,14 @@ static void write_results(Race *r)                   /* exit_game 0x421af0 -> in
     ini_set_int(g, "PLAYER", "damage", r->damage);
     ini_set_int(g, "PLAYER", "tracktime", G.tracktime);
     ini_set_int(g, "PLAYER", "position", G.position);
-    ini_set_int(g, "RACERS", "count", 3);
-    for (int i = 0; i < 3; i++) {
-        int car = 0, pos = i + 1, t = G.tracktime + 1000 * (i + 1);
-        if (G.h.racer_result) G.h.racer_result(i, &car, &pos, &t);
-        snprintf(k, sizeof k, "%d", i);
-        snprintf(v, sizeof v, "%d,%d,%d", car, pos, t);
-        ini_set(g, "RACERS", k, v);
+    if (G.h.save_racers) G.h.save_racers(g, G.position);
+    else {
+        ini_set_int(g, "RACERS", "count", 3);
+        for (int i = 0; i < 3; i++) {                /* no racers: behind the player, a second apart */
+            snprintf(k, sizeof k, "%d", i);
+            snprintf(v, sizeof v, "%d,%d,%d", i, i + (i >= G.position), G.tracktime + 1000 * (i + 1));
+            ini_set(g, "RACERS", k, v);
+        }
     }
     snprintf(k, sizeof k, "LAP_RECORD_E%d", r->etappe);
     ini_set_int(g, "BEST TIMES", k, G.lap_record == NEVER ? 0 : G.lap_record);
@@ -334,14 +309,21 @@ static int prize_money(Race *r)                      /* get_prize_money 0x4280c0
 
 static int continue_key(void)
 {
-    return plat_key_pressed(VK_ESCAPE) || plat_key_pressed(VK_RETURN) || plat_key_pressed(VK_SPACE)
-        || (plat_pad()->pressed & (PAD_A | PAD_B | PAD_START));
+    int c = G.cont;
+    G.cont = 0;
+    return c;
 }
 
 void rules_tick(Race *r)
 {
     G.clock += 1000 / RACE_HZ;
     if (G.flash > 0) G.flash--;
+    if (r->game_event != G.state) {                  /* an action started by ai.c: the arrest, its end, game over */
+        if (r->game_event == GS_GAMEOVER) G.gameover_reason = r->game_over_reason;
+        set_state(r, r->game_event);
+    }
+    if (r->hud_message >= 0) { rules_message(r->hud_message); r->hud_message = -1; }
+    if (G.invincible) r->damage = 0;
     int in_state = G.clock - G.state_since;
     switch (G.state) {
     case GS_START:                                   /* ev_stcam + countdown (ev_start, table 0x4869d8) */
@@ -366,17 +348,16 @@ void rules_tick(Race *r)
             if (left < 6000 && sec != G.last_tick_sec) { G.last_tick_sec = sec; sfx_play(SFX_TICK); }
             if (timer_expired(11)) { G.gameover_reason = 1; set_state(r, GS_GAMEOVER); }
         }
-        if (r->damage >= 99 && G.state == GS_RACING) { G.gameover_reason = 0; set_state(r, GS_GAMEOVER); }
         if (G.h.player_position) G.position = G.h.player_position();
-        break;
-    case GS_COPSTOP:                                 /* cop_stop_update: 4 s, the third time is an arrest */
-        if (in_state >= 4000) {
-            if (G.caught >= 3) { G.gameover_reason = 2; set_state(r, GS_GAMEOVER); }
-            else set_state(r, GS_RACING);
+        if (getenv("A2_TEST_FINISH") && in_state >= atoi(getenv("A2_TEST_FINISH")) * 1000) {  /* tests: finish now */
+            G.lap = G.nrlaps - 1;
+            G.armed = 1;
+            trigger(r, 14, 0, 1);
         }
         break;
+    /* GS_COPSTOP: the 4 s stop and the third arrest's game over are run by ai.c (game_actions_run) */
     case GS_FINISHED:                                /* finish_update 0x4155d0 */
-        if (in_state >= 1500 && continue_key()) {
+        if (in_state >= 1500 && (continue_key() || (getenv("A2_TEST_FINISH") && in_state >= 3000))) {
             int prize = prize_money(r);
             G.money += prize + 2000 * G.poles;       /* finish_done 0x415690 */
             if (G.money < 0) G.money = 0;
@@ -394,6 +375,9 @@ void rules_tick(Race *r)
 
 void rules_keys(Race *r)                             /* check_game_keys 0x424ee0 */
 {
+    if (plat_key_pressed(VK_ESCAPE) || plat_key_pressed(VK_RETURN) || plat_key_pressed(VK_SPACE)
+        || (plat_pad()->pressed & (PAD_A | PAD_B | PAD_START)))
+        G.cont = G.state == GS_FINISHED || G.state == GS_GAMEOVER;
     if (G.pause) {                                   /* handle_pause 0x4248d0 */
         if (G.pause == 1 && plat_any_key_pressed()) { G.pause = 0; sfx_pause(0); }
         else if (G.pause == 2) {
@@ -448,15 +432,6 @@ int rules_camera(Race *r, Vec3 *eye, Vec3 *target)
         *target = v3_add(c->pos, v3(0, 10, 0));
         return 1;
     }
-    case GS_COPSTOP:
-        if (G.cop_obj > 0 && G.cop_obj < MAX_OBJS && r->obj[G.cop_obj].used) {
-            const Obj *k = &r->obj[G.cop_obj];
-            *eye = v3_add(k->pos, v3(0, 30, 0));
-            *eye = v3_add(*eye, v3_scale(v3_norm(v3_sub(k->pos, c->pos)), 50));
-            *target = v3_add(c->pos, v3(0, 10, 0));
-            return 1;
-        }
-        return 0;
     default: return 0;
     }
 }

@@ -6,6 +6,8 @@
 #include "film.h"
 #include "gfx.h"
 #include "image.h"
+#include "game.h"
+#include "menu.h"
 #include "plat.h"
 #include "res.h"
 #include "model.h"
@@ -22,7 +24,9 @@ static const char *path_arg(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
         if (argv[i][0] == '-') {
-            if (strcmp(argv[i], "--verify") && strcmp(argv[i], "--windowed") && strcmp(argv[i], "--fullscreen")) i++;
+            if (!strcmp(argv[i], "--menu-shot")) i++;       /* takes two values */
+            if (strcmp(argv[i], "--verify") && strcmp(argv[i], "--windowed") && strcmp(argv[i], "--fullscreen")
+                && strcmp(argv[i], "--menu") && strcmp(argv[i], "--menu-first")) i++;
             continue;
         }
         return argv[i];
@@ -155,6 +159,10 @@ static int view_track(int etappe, int chunk)
 int main(int argc, char **argv)
 {
     PlatConfig cfg = { 960, 720, 0, 1, "A2RacerRE" };
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--fullscreen")) cfg.fullscreen = 1;
+        if (!strcmp(argv[i], "--windowed")) cfg.fullscreen = 0;
+    }
     if (!plat_init(&cfg)) return 1;
     if (!gfx_init()) { plat_message("OpenGL 2.1 / OpenGL ES 2.0 shaders are not available.", 1); return 1; }
     int rc = 0;
@@ -170,6 +178,21 @@ int main(int argc, char **argv)
     audio_init();
     const char *film = arg_value(argc, argv, "--film");
     if (film) printf("film: %d\n", film_play(film, 1));
+    /* --menu / --menu-first (the launcher's \FIRST): the menu program; --menu-shot SCREEN file.png: one screen */
+    const char *mdir = arg_value(argc, argv, "--menu-userdir"), *mscript = arg_value(argc, argv, "--menu-script");
+    if (mdir) plat_set_user_dir(mdir);       /* a separate folder for the settings files (tests) */
+    for (int i = 1; i < argc; i++)
+        if (!strcmp(argv[i], "--menu") || !strcmp(argv[i], "--menu-first") || !strcmp(argv[i], "--menu-script")) {
+            int first = !strcmp(argv[i], "--menu-first") || (mscript && !strncmp(mscript, "first", 5));
+            rc = mscript ? menu_script(mscript, first) : menu_run(first);
+            printf("menu: 0x%x\n", rc);
+            plat_shutdown();
+            return 0;
+        } else if (!strcmp(argv[i], "--menu-shot") && i + 2 < argc) {
+            rc = menu_shot(argv[i + 1], argv[i + 2]);
+            plat_shutdown();
+            return rc;
+        }
     if (!models_init()) { plat_message("spel.dat (the race program of the CD) is missing or not version 1.01.", 1); return 1; }
     const char *race = arg_value(argc, argv, "--race");
     if (race) {
@@ -199,6 +222,8 @@ int main(int argc, char **argv)
     }
     const char *img = arg_value(argc, argv, "--image");
     if (img) rc = view_image(img, arg_value(argc, argv, "--archive"));
+    if (!race && !trk && !img && !film) rc = game_run();     /* the game: intro, menu, races */
+    models_free();
     plat_shutdown();
     return rc;
 }

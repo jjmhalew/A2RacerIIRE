@@ -99,7 +99,7 @@
 0x4e5dd0 g_static_handlers ; 257 x {obj_handler, coll_handler}
 0x48c2a8 g_track_object_types ; 11 x {type, obj_handler, coll_handler}
 0x429310 init_track_object_types ; registers g_track_object_types
-0x428bc0 object_hit ; (obj, flag) collision response used by many handlers (?)
+0x428bc0 sndfx_play_object_sample ; (obj, on): the object's positional looping sample (+0x14), called every frame by its handler
 0x428ea0 object_flyup_check_collision ; string; state 0x10
 0x429020 object_fall_over ; (obj, ...) velocity damping, rotation steps -64/-32/-48 (?)
 0x429380 objtype_solid ; types 1 and 5

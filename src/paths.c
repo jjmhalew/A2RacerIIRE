@@ -4,6 +4,7 @@
 #include "paths.h"
 #include "model.h"
 #include "res.h"
+#include "sfx.h"
 #include "track.h"
 #include <math.h>
 #include <stdio.h>
@@ -25,7 +26,10 @@ typedef struct {
     Vec3 pos;
     float yaw;                  /* ANGLE_UNITS per turn, the original's object angle */
     float rotor;
+    int sample;                 /* object +0x14, played every frame by the update (sndfx_play_object_sample 0x428bc0) */
 } Active;
+
+#define SND_KEY 1000            /* sfx_object keys of the path objects: SND_KEY + slot (race objects use 0..255) */
 
 static Path g_path[20];         /* g_paths 0x4e0710, max 20 */
 static int g_npaths, g_lap = -1;
@@ -60,6 +64,7 @@ int paths_load(int etappe)
 
 void paths_free(void)
 {
+    for (int i = 0; i < 10; i++) if (g_act[i].active) sfx_object_stop(SND_KEY + i);
     memset(g_path, 0, sizeof g_path);
     memset(g_act, 0, sizeof g_act);
     g_npaths = 0;
@@ -97,11 +102,11 @@ static void start(int pi, float dt)
     a->anim = a->anim2 = a->anim3 = -1;
     switch (t->type) {
     case 3: a->anim = anim_find("E00_ROND_ANIM"); break;                 /* canal tour boat, pth_boat_init 0x434800 */
-    case 4: a->anim = anim_find("C_TREIN_ANIM"); break;                  /* tram 0x434a70 */
-    case 5: a->anim = anim_find("C_HELI_ANIM");                          /* helicopter 0x433170 */
+    case 4: a->anim = anim_find("C_TREIN_ANIM"); a->sample = SFX_TREIN; break;   /* tram 0x434a70 */
+    case 5: a->anim = anim_find("C_HELI_ANIM"); a->sample = SFX_HELI;    /* helicopter 0x433170 */
             a->anim2 = anim_find("C_LBLADE_ANIM"); a->anim3 = anim_find("C_SBLADE_ANIM"); break;
-    case 6: a->anim = anim_find(TRAFFIC[rand() % 5]); break;             /* traffic car 0x434cf0 */
-    case 7: a->anim = anim_find("A_VLIEGT_ANIM"); break;                 /* aeroplane 0x434550 */
+    case 6: a->anim = anim_find(TRAFFIC[rand() % 5]); a->sample = 32; break;      /* traffic car 0x434cf0 */
+    case 7: a->anim = anim_find("A_VLIEGT_ANIM"); a->sample = SFX_VLIEGT; break; /* aeroplane 0x434550 */
     default: return;                                                     /* 0..2: no object in the data */
     }
     a->active = 1;
@@ -138,6 +143,8 @@ void paths_update(int player_chunk, int lap, float dt)
         } else if (!t->end_chunk) a->active = 0;            /* ran to its end */
         a->rotor += dt * ANGLE_UNITS * 3;
         if (t->end_chunk && t->end_chunk == player_chunk) a->active = 0;
+        if (a->active && a->sample) sfx_object(SND_KEY + i, a->sample, a->pos, 1);
+        else sfx_object_stop(SND_KEY + i);
     }
 }
 

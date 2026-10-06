@@ -2,21 +2,29 @@
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "race.h"
+#include "ai.h"
+#include "car_old.h"
+#include "collide.h"
+#include "effects.h"
 #include "exetab.h"
 #include "gfx.h"
 #include "hud.h"
 #include "texture.h"
 #include "ini.h"
 #include "model.h"
+#include "paths.h"
 #include "plat.h"
 #include "res.h"
+#include "rules.h"
+#include "sfx.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define TWO_PI 6.28319f                 /* the original's 2 pi (0x47f... 6.28319f) */
-static float SIN[1024], COS[1024];      /* math3d.cpp 0x450280 */
+static float SIN[ANGLE_UNITS], COS[ANGLE_UNITS];   /* math3d_init_tables 0x450280 (4096 entries, track.h) */
+#define AMASK (ANGLE_UNITS - 1)
 static Race *R;                         /* the race the callbacks work on */
 
 static int ftol(float f) { return (int)f; }   /* MSVC _ftol: truncation toward zero */
@@ -24,7 +32,7 @@ static float frand_sign(void) { return rand() % 10 < 5 ? 1.0f : -1.0f; }
 
 /* ---- road helpers -------------------------------------------------------------------------------------------- */
 /* chunk_height_at 0x442f00: the chunk is one plane n.p = d */
-static float chunk_height_at(const Chunk *c, float x, float z)
+float chunk_height_at(const Chunk *c, float x, float z)
 {
     if (fabsf(c->up.y) < 1e-6f) return c->pos.y;
     return (c->plane_d - c->up.x * x - c->up.z * z) / c->up.y;
@@ -33,7 +41,7 @@ static float chunk_height_at(const Chunk *c, float x, float z)
 static int find_chunk(int start, Vec3 p) { return track_find_chunk(&R->track, start, p); }
 
 /* ---- objects ----------------------------------------------------------------------------------------------------- */
-static int obj_add(int anim, Vec3 pos, float yaw)
+int obj_add(int anim, Vec3 pos, float yaw)
 {
     for (int i = 0; i < MAX_OBJS; i++)
         if (!R->obj[i].used) {
@@ -45,6 +53,7 @@ static int obj_add(int anim, Vec3 pos, float yaw)
             o->yaw = yaw;
             o->restitution = 1.0f;
             o->car_type = -1;
+            o->ai = o->waypoint = -1;
             o->chunk = o->prev_chunk = find_chunk(0, pos);
             o->draw_pos0 = o->draw_pos1 = pos;
             o->draw_yaw0 = o->draw_yaw1 = yaw;
@@ -55,7 +64,7 @@ static int obj_add(int anim, Vec3 pos, float yaw)
 }
 
 /* obj_init_physics 0x4403b0 */
-static void obj_init_physics(Obj *o, float mass, float w, float l, float restitution)
+void obj_init_physics(Obj *o, float mass, float w, float l, float restitution)
 {
     o->physics = 1;
     o->inv_mass = mass > 1e-6f ? 1.0f / mass : 0;
@@ -63,18 +72,22 @@ static void obj_init_physics(Obj *o, float mass, float w, float l, float restitu
     o->restitution = restitution;
 }
 
-/* obj_integrate 0x4404a0 */
-static void obj_integrate(Obj *c, float dt, float t, int coll)
+float race_sin(int a) { return SIN[a & AMASK]; }
+float race_cos(int a) { return COS[a & AMASK]; }
+
+/* obj_integrate 0x4404a0: moves by frac t of the velocity, or by the slide-out vector of a collision (use_resp);
+ * the yaw step is skipped while the turn is blocked by an overlap (rotblk) */
+static void obj_integrate(Obj *c, float dt, float t, int rotblk, int use_resp, Vec3 resp)
 {
     int iy = ftol(floorf(c->yaw));
-    Vec3 d = v3_scale(c->vel, t * 10 * dt);
-    int i = iy & 1023;
+    Vec3 d = use_resp ? v3_scale(v3_scale(resp, 10), dt) : v3_scale(c->vel, t * 10 * dt);
+    int i = iy & AMASK;
     c->pos.z += ftol((SIN[i] * d.x + COS[i] * d.z) * 10000) * 0.0001f;
     c->pos.x += ftol((COS[i] * d.x - SIN[i] * d.z) * 10000) * 0.0001f;
-    float dyaw = dt * c->yawrate * 1024 / TWO_PI;
-    if (coll == 0) c->yaw += dyaw;
+    float dyaw = dt * c->yawrate * ANGLE_UNITS / TWO_PI;
+    if (rotblk == 0) c->yaw += dyaw;
     if (!c->no_vel_rotate) {
-        int j = ftol(-dyaw) & 1023;                 /* truncated to whole 1024ths of a turn: the drift */
+        int j = ftol(-dyaw) & AMASK;                /* truncated to whole angle units: the drift */
         float vx = c->vel.x, vz = c->vel.z;
         c->vel.x = COS[j] * vx - SIN[j] * vz;
         c->vel.z = SIN[j] * vx + COS[j] * vz;
@@ -83,7 +96,8 @@ static void obj_integrate(Obj *c, float dt, float t, int coll)
     c->yawrate += c->torque * c->inv_inertia * dt;
 }
 
-/* obj_move_all 0x440ea0 (collisions: docs/PHYSICS.md 8, to come) */
+/* obj_move_all 0x440ea0: objects of the handling window (ai.c) are taken off their waypoint's obstacle list, moved
+ * with the swept collision test of docs/PHYSICS.md 8.6 (collide.c), and put on the list of their new waypoint */
 static void obj_move_all(float dt0)
 {
     for (int o = 0; o < R->nobj; o++) {
@@ -91,11 +105,24 @@ static void obj_move_all(float dt0)
         if (!c->used || !c->active || c->physics != 1) continue;
         c->vel.x = ftol(c->vel.x * 10000) * 0.0001f;
         c->vel.z = ftol(c->vel.z * 10000) * 0.0001f;
+        if (!ai_obj_in_window(o)) continue;
         int n = o == R->plr_obj ? 8 : 1;
         float h = o == R->plr_obj ? dt0 * 0.125f : dt0;
-        for (int k = 0; k < n; k++) obj_integrate(c, h, 1.0f, 0);
+        ai_wp_remove(o);
+        for (int k = 0; k < n; k++) {
+            int rotblk = 0, hit = 0;
+            float t = 1.0f;
+            Vec3 resp = v3(0, 0, 0);
+            if (!R->collision_off) {
+                t = bbox_sweep_object(o, &rotblk, h);
+                if (obj_slide_out(o, h, &resp, t, &rotblk)) hit = 1;
+            }
+            obj_integrate(c, h, t, rotblk, hit, resp);
+            coll_after_step(o);
+        }
         c->prev_chunk = c->chunk;
         c->chunk = find_chunk(c->chunk, c->pos);
+        ai_wp_add(o);
     }
 }
 
@@ -237,8 +264,8 @@ static void car_steer_new(Obj *c, float steer, float gas)            /* 0x40f3c0
     }
 }
 
-/* body motion: car_body_roll 0x40ebd0, car_body_pitch 0x40ece0, car_body_height 0x40ee80 (the player's CarsBody) */
-static void car_body(int o)
+/* body motion, also of the AI cars, always with the player's CarsBody [quirk]: car_body_roll 0x40ebd0 */
+void car_body_roll(int o)
 {
     Obj *c = &R->obj[o];
     const CarsBody *b = &R->body[R->plr_car];
@@ -247,12 +274,35 @@ static void car_body(int o)
     c->roll_vel += dt * acc;
     c->roll += dt * c->roll_vel;
     c->roll_vel += frand_sign() * 4 * c->vel.z * dt;
-    acc = -(b->pitch_damp * c->pitch_vel) - b->roll_factor * c->pitch;       /* sic: roll_factor */
+}
+
+void car_body_pitch(int o)                                                     /* 0x40ece0 */
+{
+    Obj *c = &R->obj[o];
+    const CarsBody *b = &R->body[R->plr_car];
+    float dt = R->dt;
+    float acc = -(b->pitch_damp * c->pitch_vel) - b->roll_factor * c->pitch;   /* sic: roll_factor */
     c->pitch_vel += dt * acc;
     c->pitch += dt * c->pitch_vel;
     c->pitch_vel += frand_sign() * 4 * c->vel.z * dt;
+}
+
+/* car_road_height_reset 0x40ede0 */
+float car_road_height_reset(int o)
+{
+    Obj *c = &R->obj[o];
+    float h = chunk_height_at(&R->track.chunks[c->chunk], c->pos.x, c->pos.z);
+    if (h - 1 > c->pos.y) { c->pos.y = h - 1; c->vel.y = -c->vel.y; }
+    return h;
+}
+
+void car_body_height(int o)                                                    /* 0x40ee80 */
+{
+    Obj *c = &R->obj[o];
+    const CarsBody *b = &R->body[R->plr_car];
+    float dt = R->dt;
     Vec3 p = c->pos, v = c->vel;
-    int i = ftol(c->yaw) & 1023;
+    int i = ftol(c->yaw) & AMASK;
     float px = p.x + 10 * dt * (COS[i] * v.x - SIN[i] * v.z);
     float pz = p.z + 10 * dt * ((SIN[i] + COS[i]) * v.z);                    /* sic */
     int ch = find_chunk(c->chunk, v3(px, p.y, pz));
@@ -282,7 +332,9 @@ static void car_drive_new(int o, float steer, float gas, float brake)
         c->yawrate -= R->dt * (c->yawrate * 10);
         R->rpm = 4000 + 60 * gas;
     }
-    car_body(o);
+    car_body_roll(o);
+    car_body_pitch(o);
+    car_body_height(o);
 }
 
 /* ---- input: plr_input_keyboard 0x4265b0 (new model), plus a game controller (PORT) ------------------------------- */
@@ -338,6 +390,7 @@ static void plr_input(int o)
 static int handle_player_car(int o)
 {
     Obj *c = &R->obj[o];
+    R->plr_pos = c->pos;
     if (c->chunk != c->prev_chunk) {
         int d = c->chunk - c->prev_chunk, n = R->track.nchunks;
         if (d > n / 2) d -= n;
@@ -347,8 +400,23 @@ static int handle_player_car(int o)
     R->speed_kmh = ftol(c->vel.z * 3.6f);
     c->force = v3(0, 0, 0);
     c->torque = 0;
+    if (ai_plr_autopilot(o)) { R->rpm = 0; R->skid = 0; return 1; }   /* the old cop model drives the player (ai.c) */
     if (!R->race_started) { R->rpm = 0; R->skid = 0; c->vel = v3(0, 0, 0); c->yawrate = 0; return 1; }
     if (!R->control) return 1;
+    if (R->stuur_model == 1) {                       /* the old model: per-frame steps, forces for obj_integrate */
+        const int *k = R->input_keys;
+        const PlatPad *pad = plat_pad();
+        int ev = R->game_event, stop = ev == 8 || ev == 6 || ev == 3;
+        int left = plat_key(k[0]) || pad->lx < -0.3f || (pad->buttons & PAD_LEFT);
+        int right = plat_key(k[1]) || pad->lx > 0.3f || (pad->buttons & PAD_RIGHT);
+        int up = !stop && (plat_key(k[2]) || pad->rt > 0.3f || (pad->buttons & PAD_A));
+        int down = stop || plat_key(k[3]) || pad->lt > 0.3f || (pad->buttons & PAD_X);
+        if (R->test_gas > 0) { up = 1; left = R->test_steer < 0; right = R->test_steer > 0; }
+        R->handbrake = plat_key(k[5]) || (pad->buttons & PAD_B) ? 1 : 0;
+        car_old_input(R, left, right, up, down);
+        car_old_drive(R, o, R->input_device);
+        return 1;
+    }
     plr_input(o);
     car_drive_new(o, R->steer, R->gas, (float)R->brake);
     if (getenv("A2_TRACE") && R->tick % 15 == 0)
@@ -358,9 +426,9 @@ static int handle_player_car(int o)
 }
 
 /* ---- cameras: c_camera::update 0x447ab0 with the player views of set_player_cam_mode 0x414b70 ------------------ */
-static void car_axes(const Obj *c, Vec3 *right, Vec3 *up, Vec3 *fwd)
+void car_axes(const Obj *c, Vec3 *right, Vec3 *up, Vec3 *fwd)
 {
-    int i = ftol(c->yaw) & 1023;
+    int i = ftol(c->yaw) & AMASK;
     Vec3 f = v3(-SIN[i], 0, COS[i]);
     Vec3 n = R->track.chunks[c->chunk].up;           /* the car lies on its chunk's plane */
     if (n.y < 0.5f) n = v3(0, 1, 0);
@@ -377,12 +445,35 @@ static Vec3 car_point(const Obj *c, Vec3 off)
     return v3_add(c->pos, v3_add(v3_scale(r, off.x), v3_add(v3_scale(u, off.y), v3_scale(f, off.z))));
 }
 
+/* the arrest camera: cops_event_camera 0x4151f0 (still, above the chunk after the player's, looking at a point 20
+ * above the car) */
+static void event_camera(const Obj *c)
+{
+    if (!R->ev_cam) {
+        const Chunk *ch = &R->track.chunks[track_wrap(&R->track, c->chunk + 1)];
+        R->ev_cam = 1;
+        R->cam_pos = v3(ch->pos.x, ch->pos.y + 20, ch->pos.z);
+    }
+    R->cam_prev = R->cam_pos;
+    R->cam_target = v3_add(c->pos, v3(0, 20, 0));
+    R->cam_chunk = find_chunk(R->cam_chunk, R->cam_pos);
+}
+
 static void camera_update(void)
 {
     static const Vec3 OFF[11] = { { 0, 25, -100 }, { 0, 25, -60 }, { 0, 38, -55 }, { 0, 15.5f, -1 }, { 25, 15, -50 },
                                   { 0, 23, 40 }, { -30, 15, 60 }, { 25, 15, -50 }, { -20, 9, -30 }, { -25, 55, -30 },
                                   { 0, 45, -55 } };
     const Obj *c = &R->obj[R->plr_obj];
+    if (R->game_event == 8) { event_camera(c); return; }
+    R->ev_cam = 0;
+    Vec3 eye, tgt;
+    if (rules_camera(R, &eye, &tgt)) {                  /* start fly-in, finish and game-over orbits (rules.c) */
+        R->cam_pos = R->cam_prev = eye;
+        R->cam_target = tgt;
+        R->cam_chunk = find_chunk(R->cam_chunk, eye);
+        return;
+    }
     int m = R->cam_mode;
     Vec3 off = OFF[m];
     Vec3 pos = car_point(c, off);
@@ -416,7 +507,7 @@ static void game_keys(void)
     if (back && R->cam_mode != 5) { R->cam_saved_mode = R->cam_mode; R->cam_mode = 5; }
     if (!back && R->cam_mode == 5) R->cam_mode = R->cam_saved_mode;
     if (plat_key_pressed('D')) R->detail = (R->detail + 1) & 3;
-    if (plat_key_pressed(VK_ESCAPE) || (pad->pressed & PAD_START)) R->quit = 1;
+    rules_keys(R);                                      /* pause, quit question, horn, cheats, continue */
 }
 
 /* ---- set-up ------------------------------------------------------------------------------------------------------ */
@@ -465,15 +556,45 @@ static void read_ini(Race *r)
     r->upg_turbo = ini_int(g, "PLAYER", "TURBO", 0);
     r->upg_gearbox = ini_int(g, "PLAYER", "VERSNELLINGSBAK", 0);
     r->detail = ini_int(g, "GFX OPTIONS", "overlay_detail", 3) & 3;
+    r->collision_off = ini_int(g, "OPTIONS", "collisionoff", 0);
+    r->stuur_model = ini_int(g, "OPTIONS", "stuur_model", 0);
+    r->input_device = ini_int(g, "INPUT", "DEVICE", 1);
     tex_set_gamma(ini_int(g, "GFX OPTIONS", "gamma", 1) == 1);
+    fx_init(ini_int(g, "GFX OPTIONS", "skidmarks", 1), ini_int(g, "GFX OPTIONS", "fade_skmarks", 1),
+            ini_int(g, "GFX OPTIONS", "clouds", 1), ini_int(g, "GFX OPTIONS", "alpha_blending", 1));
     ini_free(g);
+}
+
+/* the AI's sounds (ai.h): an object's looping sample follows the object (sndfx_play_object_sample, every tick while
+ * it sounds); objects that stop asking are silenced at the end of the tick */
+static unsigned char g_snd_on[MAX_OBJS], g_snd_was[MAX_OBJS];
+
+static void snd_object(int o, int sample, int on)
+{
+    if (o < 0 || o >= MAX_OBJS) return;
+    if (on && sample > 0 && sfx_object(o, sample, R->obj[o].pos, 1)) g_snd_on[o] = 1;
+    else sfx_object_stop(o);
+}
+
+static void snd_objects_done(void)
+{
+    for (int o = 0; o < MAX_OBJS; o++) {
+        if (g_snd_was[o] && !g_snd_on[o]) sfx_object_stop(o);
+        g_snd_was[o] = g_snd_on[o];
+        g_snd_on[o] = 0;
+    }
 }
 
 int race_init(Race *r, int etappe, int car)
 {
     memset(r, 0, sizeof *r);
     R = r;
-    for (int i = 0; i < 1024; i++) { SIN[i] = sinf(TWO_PI * i / 1024); COS[i] = cosf(TWO_PI * i / 1024); }
+    ai_snd_object = snd_object;
+    ai_snd_play = sfx_play;
+    ai_snd_playing = sfx_playing;
+    memset(g_snd_on, 0, sizeof g_snd_on);
+    memset(g_snd_was, 0, sizeof g_snd_was);
+    for (int i = 0; i < ANGLE_UNITS; i++) { SIN[i] = sinf(TWO_PI * i / ANGLE_UNITS); COS[i] = cosf(TWO_PI * i / ANGLE_UNITS); }
     r->etappe = etappe;
     if (!track_load(&r->track, etappe)) return 0;
     objects_load(&r->objects, &r->track);
@@ -491,30 +612,16 @@ int race_init(Race *r, int etappe, int car)
     }
     r->turbo = r->upg_turbo ? 100 : 0;
     r->plr_obj = -1;
-    /* start: the chunk of the finish trigger (14), the player in the right-hand lanes (side 1) */
-    /* city tracks start at their finish line (trigger 14, trigger_find_start_position 0x429a20); the highways at
-     * their beginning (docs/GAMEFLOW.md) */
-    int start = 3;
-    if (r->track.city)
-        for (int i = 0; i < r->track.nchunks; i++)
-            if (r->track.chunks[i].trigger[0] == 14 || r->track.chunks[i].trigger[1] == 14) { start = track_wrap(&r->track, i - 2); break; }
-    const Chunk *ch = &r->track.chunks[start];
-    Vec3 pos = ch->pos;
-    if (ch->nwp[1] > 0) pos = r->track.wps[ch->wp[1][ch->nwp[1] > 1 ? 1 : 0]].pos;
-    float yaw = atan2f(-ch->fwd.x, ch->fwd.z) * 1024.0f / TWO_PI;
-    if (yaw < 0) yaw += 1024;
-    r->start_chunk = start;
-    char anim[32];
-    snprintf(anim, sizeof anim, "%s", r->car_types[r->plr_car].anim[0] ? r->car_types[r->plr_car].anim : "RACER_1_ANIM");
-    int o = obj_add(anim_find(anim), pos, yaw);
+    r->hud_message = r->hud_msg_shown = -1;
+    ai_init_cops(r);                                   /* road_load_omp's type-9 objects come first in the object list */
+    /* init_player_car 0x4256a0: add_car at g_startchunk - [PLAYER] position, lane 4, the right-hand side (ai.c) */
+    int o = ai_init_player(r->plr_car, handle_player_car, plr_collision_cb);
     r->plr_obj = o;
+    r->start_chunk = ai_start_chunk();
     Obj *c = &r->obj[o];
-    c->car_type = r->plr_car;
-    c->update = handle_player_car;
-    c->pos.y = chunk_height_at(&r->track.chunks[c->chunk], pos.x, pos.z);
+    c->pos.y = chunk_height_at(&r->track.chunks[c->chunk], c->pos.x, c->pos.z);
     c->draw_pos0 = c->draw_pos1 = c->pos;
-    obj_init_physics(c, r->car_types[r->plr_car].mass > 0 ? r->car_types[r->plr_car].mass : 1000, 1.7f, 4.5f, 0.2f);
-    r->steer = 30; r->gas = 20;                        /* init_player_car's old-model neutral values */
+    if (r->stuur_model == 1) car_old_init(r, ai_difficulty() == 0);   /* also the neutral steer 30 / gas 20 */
     r->cam_mode = 1;
     r->cam_prev = r->cam_pos = car_point(c, v3(0, 25, -60));
     r->cam_target = car_point(c, v3(0, 10, 0));
@@ -524,11 +631,24 @@ int race_init(Race *r, int etappe, int car)
     r->race_started = 1;
     r->control = 1;
     r->dt = 1.0f / RACE_HZ;
+    ai_init_cars(r);                                   /* the rest of init_all_cars 0x410b60 and plr_init 0x427fd0 */
+    collide_init(r);
+    paths_load(etappe);
+    fx_reset();
+    sfx_init();
+    static const RulesHooks hooks = { ai_player_position, ai_save_racers };
+    rules_init(r, &hooks);                             /* state 1: the start camera and the countdown */
+    r->race_ms = 0;
     return 1;
 }
 
 void race_free(Race *r)
 {
+    sfx_stop_all();
+    rules_free();
+    paths_free();
+    fx_free();
+    ai_free();
     objects_free(&r->objects);
     track_free(&r->track);
     memset(r, 0, sizeof *r);
@@ -546,8 +666,28 @@ static void race_tick(void)
     R->cam_draw0 = R->cam_pos;
     R->tgt_draw0 = R->cam_target;
     for (int o = 0; o < R->nobj; o++)
-        if (R->obj[o].used && R->obj[o].active && R->obj[o].update) R->obj[o].update(o);
+        if (R->obj[o].used && R->obj[o].active && R->obj[o].update && ai_obj_in_window(o)) R->obj[o].update(o);
     obj_move_all(R->dt);
+    Obj *p = &R->obj[R->plr_obj];
+    if (p->chunk != p->prev_chunk) rules_player_chunk_changed(R, p->prev_chunk, p->chunk);   /* the track triggers */
+    ai_tick();                  /* traffic recycling, game actions (arrest, game over), the racer and cop FSMs */
+    rules_tick(R);
+    R->race_ms = (float)rules_race_ms();
+    paths_update(p->chunk, rules_lap(), R->dt);
+    {   /* the player's sounds and effects */
+        Vec3 rt, up, fw;
+        car_axes(p, &rt, &up, &fw);
+        sfx_listener(p->pos, rt);
+        sfx_engine(R->rpm, R->upg_motor);
+        sfx_squeal(R->skid);
+        sfx_rattle(R->damage);
+        sfx_turbo(R->turbo_active);
+        snd_objects_done();
+        FxCar fc = { p->pos, rt, up, fw, p->vel, p->car_type >= 0 ? R->car_types[p->car_type].cg_rear : 1.3f };
+        fx_skid(&fc, R->skid, R->dt);
+        fx_smoke(&fc, R->skid, R->dt);
+        fx_tick(R->dt);
+    }
     camera_update();
     for (int o = 0; o < R->nobj; o++) {
         Obj *c = &R->obj[o];
@@ -556,7 +696,6 @@ static void race_tick(void)
     }
     R->cam_draw1 = R->cam_pos;
     R->tgt_draw1 = R->cam_target;
-    if (R->race_started) R->race_ms += 1000.0f / RACE_HZ;
 }
 
 /* the sky backdrop (gfx_bkg.cpp, draw_bkg 0x4190d0 / bkg_update_colors 0x418f00): two bands over the screen, the
@@ -564,7 +703,7 @@ static void race_tick(void)
 static void draw_sky(void)
 {
     const Obj *c = &R->obj[R->plr_obj];
-    float u0 = 1.0f - (float)(ftol(c->yaw) & 1023) / 1024.0f, u1 = u0 + 0.15f;
+    float u0 = 1.0f - (float)(ftol(c->yaw) & AMASK) / ANGLE_UNITS, u1 = u0 + 0.15f;
     int n = R->track.nchunks;
     int dc = abs(c->chunk - R->start_chunk) * 2;
     float t = (float)(dc % (2 * n)) / n;
@@ -588,53 +727,69 @@ static void draw_sky(void)
     gfx_draw_tris(v, 12, R->sky_tex, &st);
 }
 
-/* draw_dashboard: the panels of docs/HUD.md 4 in the 640x480x16 layout */
+static void fmt_time(char *b, size_t n, int ms)
+{
+    if (ms >= 0x0fffffff) snprintf(b, n, "--:--:-");                  /* no record */
+    else snprintf(b, n, "%02d:%02d:%d", ms / 60000, ms / 1000 % 60, ms / 100 % 10);
+}
+
+/* draw_dashboard: the panels of docs/HUD.md 4 in the 640x480x16 layout; then the rules' part (messages, checkpoint
+ * box, results, game over, pause) */
 static void draw_hud(void)
 {
-    char b[64];
+    char b[64], pos[8];
     gfx_2d_begin(640, 480);
-    int D = R->detail;
-    int ms = (int)R->race_ms;
-    if (D >= 3) {
-        if (!R->track.city) {                                         /* 4.1 highway info panel */
-            hud_item(57, 0);
-            hud_item_text(38, 10, 0, hud_text(33));
-            snprintf(b, sizeof b, "%02d:%02d:%d", ms / 60000, ms / 1000 % 60, ms / 100 % 10);
-            hud_item_text(39, 11, 0, b);
-            hud_item_text(58, 10, 0, hud_text(52));
-            hud_item_text(59, 11, 0, "--:--:-");
-            hud_item_text(60, 10, 0, hud_text(38));
-            hud_item_text(61, 11, 0, "1/4");
-        } else {                                                      /* 4.2 city info panel */
-            hud_item(51, 0);
-            hud_item_text(38, 10, 0, hud_text(33));
-            snprintf(b, sizeof b, "%02d:%02d:%d", ms / 60000, ms / 1000 % 60, ms / 100 % 10);
-            hud_item_text(39, 11, 0, b);
-            hud_item_text(40, 10, 0, hud_text(34));
-            hud_item_text(41, 13, 0, hud_text(35));
-            hud_item_text(42, 12, 0, b);
-            hud_item_text(43, 13, 0, hud_text(36));
-            hud_item_text(44, 12, 0, "--:--:-");
-            hud_item_text(45, 13, 0, hud_text(37));
-            hud_item_text(46, 12, 0, "--:--:-");
-            hud_item_text(47, 10, 0, hud_text(38));
-            hud_item_text(48, 11, 0, "1/4");
-            hud_item_text(49, 10, 0, hud_text(39));
-            hud_item_text(50, 11, 0, "1/2");
+    if (rules_hud_on() && !R->event_running) {
+        int D = R->detail;
+        char race[16];
+        fmt_time(race, sizeof race, rules_race_ms());
+        snprintf(pos, sizeof pos, "%d/4", ai_player_position() + 1);     /* POSITIE: [0x4d9e60] + 1 */
+        if (D >= 3) {
+            if (!R->track.city) {                                         /* 4.1 highway info panel */
+                hud_item(57, 0);
+                hud_item_text(38, 10, 0, hud_text(33));
+                hud_item_text(39, 11, 0, race);
+                hud_item_text(58, 10, 0, hud_text(52));
+                fmt_time(b, sizeof b, rules_race_record());
+                hud_item_text(59, 11, 0, b);
+                hud_item_text(60, 10, 0, hud_text(38));
+                hud_item_text(61, 11, 0, pos);
+            } else {                                                      /* 4.2 city info panel */
+                hud_item(51, 0);
+                hud_item_text(38, 10, 0, hud_text(33));
+                hud_item_text(39, 11, 0, race);
+                hud_item_text(40, 10, 0, hud_text(34));
+                hud_item_text(41, 13, 0, hud_text(35));
+                fmt_time(b, sizeof b, rules_lap_ms());
+                hud_item_text(42, 12, 0, b);
+                hud_item_text(43, 13, 0, hud_text(36));
+                fmt_time(b, sizeof b, rules_lap_record());
+                hud_item_text(44, 12, 0, b);
+                hud_item_text(45, 13, 0, hud_text(37));
+                fmt_time(b, sizeof b, rules_last_lap());
+                hud_item_text(46, 12, 0, b);
+                hud_item_text(47, 10, 0, hud_text(38));
+                hud_item_text(48, 11, 0, pos);
+                hud_item_text(49, 10, 0, hud_text(39));
+                int n = rules_nrlaps() < 9 ? rules_nrlaps() : 9, l = rules_lap() + 1;
+                snprintf(b, sizeof b, "%d/%d", l < n ? l : n, n);
+                hud_item_text(50, 11, 0, b);
+            }
+        }
+        if (D >= 2) {                                                     /* 4.3 speed panel */
+            hud_item(52, 0);
+            hud_item_text(53, 10, 0, hud_text(53));
+            int n = 11, f = ftol(R->turbo * 0.990099f) * n / 100;
+            hud_item(54, f < 0 ? 0 : f > n - 1 ? n - 1 : f);
+            hud_item_text(55, 10, 0, hud_text(54));
+            snprintf(b, sizeof b, "%03d", abs(R->speed_kmh));
+            hud_item_text(56, 0, 0, b);
+            hud_item_text(7, 10, 0, hud_text(55));
+            int dn = 11, df = (int)(R->damage / (100.0f / (dn - 1)));
+            if (R->damage < 80 || !((int)(R->tick * 1000 / RACE_HZ / 200) & 1)) hud_item(3, df < 0 ? 0 : df > dn - 1 ? dn - 1 : df);
         }
     }
-    if (D >= 2) {                                                     /* 4.3 speed panel */
-        hud_item(52, 0);
-        hud_item_text(53, 10, 0, hud_text(53));
-        int n = 11, f = ftol(R->turbo * 0.990099f) * n / 100;
-        hud_item(54, f < 0 ? 0 : f > n - 1 ? n - 1 : f);
-        hud_item_text(55, 10, 0, hud_text(54));
-        snprintf(b, sizeof b, "%03d", abs(R->speed_kmh));
-        hud_item_text(56, 0, 0, b);
-        hud_item_text(7, 10, 0, hud_text(55));
-        int dn = 11, df = (int)(R->damage / (100.0f / (dn - 1)));
-        if (R->damage < 80 || !((int)(R->race_ms / 200) & 1)) hud_item(3, df < 0 ? 0 : df > dn - 1 ? dn - 1 : df);
-    }
+    rules_draw_hud(R);
     gfx_2d_end();
 }
 
@@ -648,8 +803,8 @@ static Mat4 view_lh(Vec3 eye, Vec3 target)
 static float lerp_angle(float a, float b, float t)
 {
     float d = b - a;
-    while (d > 512) d -= 1024;
-    while (d < -512) d += 1024;
+    while (d > ANGLE_UNITS / 2) d -= ANGLE_UNITS;
+    while (d < -ANGLE_UNITS / 2) d += ANGLE_UNITS;
     return a + d * t;
 }
 
@@ -666,9 +821,10 @@ static void race_draw(float alpha)
     int start = track_visible_start(&R->track, R->cam_chunk, v3_sub(tgt, eye), 2, 30);
     track_draw(&R->track, start, 30, 0);
     objects_draw(&R->objects, &R->track, start, 30);
+    paths_draw();
     for (int o = 0; o < R->nobj; o++) {
         const Obj *c = &R->obj[o];
-        if (!c->used || !c->visible) continue;
+        if (!c->used || !c->visible || !c->active) continue;      /* a car that is off is not drawn */
         if (o == R->plr_obj && R->cam_mode == 3) continue;          /* cockpit view: the car is not drawn */
         Obj tmp = *c;
         tmp.pos = v3_lerp(c->draw_pos0, c->draw_pos1, alpha);
@@ -680,10 +836,16 @@ static void race_draw(float alpha)
         m.m[4] = u.x; m.m[5] = u.y; m.m[6] = u.z;
         m.m[8] = f.x; m.m[9] = f.y; m.m[10] = f.z;
         m.m[12] = tmp.pos.x; m.m[13] = tmp.pos.y; m.m[14] = tmp.pos.z;
-        /* the visual body pitch and roll (1024 units) */
-        Mat4 body = m4_mul(m4_rot_x(-c->pitch * TWO_PI / 1024), m4_rot_z(c->roll * TWO_PI / 1024));
+        /* the visual body pitch and roll (ANGLE_UNITS) */
+        Mat4 body = m4_mul(m4_rot_x(-c->pitch * TWO_PI / ANGLE_UNITS), m4_rot_z(c->roll * TWO_PI / ANGLE_UNITS));
         m = m4_mul(m, body);
         model_draw_matrix(anim_model(c->anim, c->frame), &m);
+    }
+    gfx_set_model(NULL);
+    rules_draw_3d(R);                                   /* the countdown letters */
+    {   /* the effects' billboards copy the camera's orientation */
+        Vec3 f = v3_norm(v3_sub(tgt, eye)), rt = v3_norm(v3_cross(v3(0, 1, 0), f)), up = v3_cross(f, rt);
+        fx_draw(eye, rt, up);
     }
     gfx_set_model(NULL);
     draw_hud();
@@ -696,12 +858,13 @@ int race_frame(Race *r, double now)
     double el = now - r->last_time;
     r->last_time = now;
     if (el > 0.25) el = 0.25;
-    r->accum += el;
     game_keys();
-    while (r->accum >= 1.0 / RACE_HZ) {
+    if (rules_paused()) el = 0;                         /* the pause dialog stops the game */
+    r->accum += el;
+    while (r->accum >= 1.0 / RACE_HZ && !rules_done()) {
         r->accum -= 1.0 / RACE_HZ;
         race_tick();
     }
     race_draw((float)(r->accum * RACE_HZ));
-    return !r->quit;
+    return !rules_done();
 }

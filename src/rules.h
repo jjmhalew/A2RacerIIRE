@@ -6,6 +6,7 @@
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_RULES_H
 #define A2_RULES_H
+#include "ini.h"
 #include "race.h"
 
 enum {                          /* g_game_state 0x4d9a7c */
@@ -15,17 +16,16 @@ enum {                          /* g_game_state 0x4d9a7c */
 /* what the rules need from the rest of the race; filled by race.c (NULL = not available) */
 typedef struct {
     int  (*player_position)(void);                       /* 0-based position among player + 3 racers */
-    int  (*racer_result)(int i, int *car, int *pos, int *time_ms);   /* racer 0..2 after the finish; 0 = none */
-    void (*racers_start_clocks)(void);                   /* trigger 13: timers 8, 9, 10 */
-    void (*racers_finish_estimate)(int player_ms);       /* estimate_racer_finish_times 0x4114a0 */
+    void (*save_racers)(Ini *game_ini, int player_position);   /* Game.ini [RACERS] with the finish estimates (ai.c) */
 } RulesHooks;
+
+/* The arrest (state 8) and its game over, and the game over of a wrecked car, are started by src/ai.c through
+ * Race.game_event; rules_tick follows them. Race.hud_message (set by ai.c) is shown like rules_message. */
 
 void rules_init(Race *r, const RulesHooks *hooks);        /* after the track and the player car are set up */
 void rules_free(void);
 void rules_tick(Race *r);                                 /* once per game tick, after the objects moved */
 void rules_player_chunk_changed(Race *r, int prev, int cur);   /* rceng_check_chunk_triggers 0x442590 for the player */
-void rules_add_damage(Race *r, float impulse);            /* add_damage 0x428390 */
-void rules_cop_caught(Race *r, int cop_obj);              /* a police car reached the player (state 8) */
 void rules_radar_bonus(Race *r);                          /* a speed-camera pole knocked over (0x428d30) */
 void rules_message(int text);                             /* flash a language.ini text for 2 s (0x4882c0) */
 /* the camera while the rules own it (start fly-in, finish, game over, police stop); 0 = the player's camera */
@@ -44,7 +44,7 @@ int  rules_lap_record(void);
 int  rules_race_record(void);
 int  rules_last_lap(void);
 int  rules_position(void);
-void rules_keys(Race *r);
+void rules_keys(Race *r);                                 /* check_game_keys 0x424ee0 (P, Esc, T, cheats); every frame */
 /* the loading screen of etappe (Raser.ini [wait_hi] with .tga) with the bar at load step 0..10 (Raser.ini [progress]) */
-void rules_loading_screen(int etappe, int step);                                 /* check_game_keys 0x424ee0: P, Esc, T, cheats */
+void rules_loading_screen(int etappe, int step);
 #endif

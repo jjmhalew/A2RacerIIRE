@@ -128,6 +128,11 @@ Path types (table `g_path_type_funcs` 0x4966f0, 8 x {init, update, release}):
 | 6 | 0x434cf0 / 0x434df0 / 0x434640 | traffic car, random (`rand() % 5`) from `N_BUS`, `N_VRTAUT`, `N_BESTEL`, `N_GOLF`, `N_ASTRA` (0x4969f8) | etappe 1, 2, 3 |
 | 7 | 0x434550 / 0x434670 / 0x434640 | airplane `A_VLIEGT_ANIM` (y ~ 400 = 40 m) | etappe 1 |
 
+The init functions set the object's looping sample (object +0x14) and the update functions play it every frame with
+`sndfx_play_object_sample` 0x428bc0 (positional, docs/SOUND.md): tram 0x2d `trein`, helicopter 0x2e `heli`, traffic
+car 0x20, airplane 0x2c `vliegt`; the boat has none. Their object and collision handlers are NULL and they get no
+physics, so path objects do not collide.
+
 Contents: etappe 0 and 6 (identical files) 4 boats; 1: 1 plane + 6 cars; 2: 2 helicopters, 3 trams, 2 cars;
 3: 1 car; 4: 2 trams; 5: none (`python tools/objparse.py pth N`).
 
