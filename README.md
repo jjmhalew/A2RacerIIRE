@@ -194,4 +194,5 @@ joystick (`axis0=-1..1 button3=1 hat0=down`); rumble reaching them is printed (n
 (X, Y 0..1 of the window), `up ID`, `tap ID X Y`, `accel X Y Z` (the accelerometer's reading in m/s^2) and `key` (a key
 press, which hides the touch controls), e.g. `"0.5:down 1 0.93 0.85; 7:down 2 0.2 0.85; 7.5:up 2"`;
 `A2_TEST_WINDOW=WxH` sets the window size (e.g. `1600x720`, a phone's 20:9), `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
-`A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state.
+`A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state,
+`A2_TEST_BRAKE=1` keeps the player car's brake lights lit (the texture copies of docs/RENDER.md 11).

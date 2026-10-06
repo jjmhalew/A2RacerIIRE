@@ -728,3 +728,56 @@ Notes:
   `body * T(x, y, z) * Ry(-yaw) * Rx(-pitch)` (the original's Rx(p) / Ry(y) are `m4_rot_x(-p)` / `m4_rot_y(-y)` in
   vmath.h) right after the body in race_draw, the spin interpolated between the ticks. The port's copland player
   drives the RACER_7 body, so it uses the type-6 wheel set.
+
+## 11. Texture copies (txt_main.cpp, txt_reml.cpp, txt_vbrd.cpp, tr_vbord.cpp)
+
+Game.ini `[OPTIONS] texturecopy` ("brake lights, sirenes, traffic signs, radar") -> `g_radar_enabled` 0x4d9aa4
+(0x421d41). `check_texture_copy` 0x424032 then makes a 16x16 surface and test-blits it into the radar texture
+(LORADAR/HIRADAR by resolution, `sub_469a20`); when that fails the flag is cleared. The flag gates the radar
+(HUD.md 4.8) and every texture copy.
+
+`txt_blit_anim(index, frame)` 0x42ae90 blits frame `frame` of an RC anim into a 3D texture's DirectDraw surface and
+re-uploads it (`texture_reload` 0x45bae0). The copy table 0x48c968 has 16 records of 0x58 bytes
+`{s32 anim_8bit, anim_16bit, x, y; char texture[64]; s32 track_type; s32 texture_index}`; `sub_42b060` (init_game)
+fills `texture_index` (+0x54) for the records whose track type is the etappe's (Raser.ini [MAPS] arg 0) or 2, the
+others stay 0. The blit: src (0,0)-(w-1,h-1) -> dst (x,y)-(x+w-1,y+h-1), exclusive rects (`blt_surf_2_surf`
+0x4697c0), so the sprite's last row and column are not copied; no colour key. In the 8-bit software modes x/y get
+the texture's slot offset in the accumulator texture (texture +0x34/+0x38). A frame outside the anim or a rect
+outside the texture is a fatal error.
+
+| index | anim 8/16 | texture, x,y | track | frames | used by |
+|---|---|---|---|---|---|
+| 0..6 | 26 / 27 | RACER02 246,13 / RACER01 109,24 / RACER02 35,163 / RACER01 102,164 / RACER02 95,39 / RACER01 242,42 / RACER01 143,132 | both | 14: 2*car lit, 2*car+1 dark | brake lights of player car 0..6 |
+| 7 | 24 / 25 | a_TRFFC1 190,220 | highway | 5: dark, cross, 50, 70, 100 | speed-limit matrix boards (A_VIDSP1/2) |
+| 8, 9, 10 | 28,30,32 / 29,31,33 | a_TRFFC1 9,122 | highway | 4 (text panels) | direction sign, etappe 1 / 3 / 5 |
+| 11, 12, 13 | 34,36,38 / 35,37,39 | a_TRFFC1 9,7 | highway | 4 | the second direction sign, etappe 1 / 3 / 5 |
+| 14 | 40 / 41 | CARS01 99,62 | both | 2: dark, lit | the blue half of the police light bar |
+| 15 | 42 / 42 | RACER02 197,173 | both | 3 | ADAC beacon (`adac_beacon_update` 0x40c4a0; its flag 0x4a5cd0 is never set) |
+
+The sprites of the 16-bit anims are painted in e02_pl16 like the HUD; the 8-bit ones in the target texture's
+palette. The CD's textures carry the blank state: the direction panels are empty blue, the matrix boards dark.
+
+Callers:
+- Brake lights (`handle_player_car` 0x425f0b): when `g_plr_brake_light` (or the dead `g_plr_gas_hold`) is 1 and
+  the state 0x4d9e10 is off, set it and switch on; when neither is 1 and it is on, switch off. With g_hw_accel and
+  Game.ini object_lights the glow meshes of gfx_lght.cpp are switched (`light_set_on`), otherwise
+  `set_brake_light_texture(on)` 0x42b100: copy `car` (table on the stack, identity) with frame 2*car (on) or
+  2*car + 1.
+- Sirens: `cop_siren` 0x40c640 blits copy 14 frame 0 when the last siren goes off (0x40c768);
+  `cop_siren_light_update` 0x40c860 (from the FSM loop, cop_new and pth_police_update) blits the current frame every
+  200 ms (GetTickCount) and toggles it (0x4a5d3c / 0x4a5d40). One texture, so all police cars blink together.
+- Speed limits (triggers 4/5/6 on highway tracks only, 8 on any): `set_speed_sign_texture(zone)` 0x42b190, zone
+  0..3 for 50/70/100/120, through the jump table 0x42b200 to frames 2, 3, 4, 1 (zone 4 -> frame 0): limit 120
+  shows the cross.
+- Direction signs (tr_vbord.cpp, triggers 22..39 of the handler table 0x48c488, 0x42a640..0x42adb0): trigger 22 + f
+  blits frame f of copy 8/9/10, trigger 31 + f frame f of copy 11/12/13, by etappe 1/3/5 (other etappes: fatal
+  "Trigger is only used for highway tracks!"). The tracks use f = 0..3: etappe 1 chunks 50, 161/162, 277/278,
+  645/646; etappe 3 121, 204/205, 268/269, 487/488; etappe 5 210, 599/600, 669/671, 739/740.
+
+Port (src/txcopy.c, hooks in race.c, rules.c `trigger`, ai.c `cop_siren*`): the table is read from spel.dat; each
+target texture keeps a copy of the pixels tex_get uploaded (texture.c `tex_pixels`), a copy writes the sprite into
+it and replaces the GL texture (`gfx_texture_update` rebuilds the mipmaps). The textures are put back to the CD's
+state at every race start (the original loads them anew per race). The copy rectangles are in the CD image's
+coordinates (`tex_orig_size`) and are scaled when a texture pack's image has another size. Repeating the frame a
+copy already shows is skipped (the copies do not overlap). The object lights are not ported, so the brake lights
+always use the texture copy (the original's object_lights=0 path). `A2_TEST_BRAKE=1` keeps them lit (tests).

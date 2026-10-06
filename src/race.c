@@ -17,11 +17,13 @@
 #include "pad.h"
 #include "paths.h"
 #include "plat.h"
+#include "radar.h"
 #include "res.h"
 #include "rules.h"
 #include "sfx.h"
 #include "shadow.h"
 #include "touch.h"
+#include "txcopy.h"
 #include "wheels.h"
 #include <math.h>
 #include <stdio.h>
@@ -662,6 +664,8 @@ int race_init(Race *r, int etappe, int car)
     r->dt = 1.0f / RACE_HZ;
     ai_init_cars(r);                                   /* the rest of init_all_cars 0x410b60 and plr_init 0x427fd0 */
     collide_init(r);
+    txcopy_init(r);                                    /* sub_42b060, init_radar 0x41cf20 */
+    radar_init(r);
     paths_load(etappe);
     fx_reset();
     shadow_init(); lights_init(r); fog_init();         /* init_game / init_player_car: shadows, brake lights, fog */
@@ -680,6 +684,8 @@ void race_free(Race *r)
     plat_touch_capture(0);
     g_pad_steering = 0;
     sfx_stop_all();
+    radar_free();
+    txcopy_free();
     rules_free();
     paths_free();
     fx_free();
@@ -706,6 +712,7 @@ static void race_tick(void)
         if (R->obj[o].used && R->obj[o].active && R->obj[o].update && ai_obj_in_window(o)) R->obj[o].update(o);
     wheels_tick(R);             /* car_update_wheels(_ai), run by the cars' handlers in the original */
     obj_move_all(R->dt);
+    txcopy_brake_lights(R);     /* handle_player_car 0x425f0b */
     Obj *p = &R->obj[R->plr_obj];
     if (p->chunk != p->prev_chunk) rules_player_chunk_changed(R, p->prev_chunk, p->chunk);   /* the track triggers */
     ai_tick();                  /* traffic recycling, game actions (arrest, game over), the racer and cop FSMs */
@@ -893,6 +900,7 @@ static void race_draw(float alpha)
     }
     rules_draw_3d(R);                                   /* after the effects as in render_game: flag, 3D letters */
     gfx_set_model(NULL);
+    radar_draw(R, v3_sub(tgt, eye));                    /* 0x4251ed (in the 3D scene there, on top) */
     draw_hud();
     touch_draw();                                       /* PORT: the touch controls on top */
 }

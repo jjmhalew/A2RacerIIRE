@@ -17,4 +17,7 @@ void lights_tick(const Race *r);
 void lights_attach(int o, const Mat4 *body);
 /* light_draw 0x41b720: after the opaque objects, before the other effects */
 void lights_draw(void);
+/* the object lights are in use (g_opt_object_lights after light_init); else the brake lights are a texture copy
+ * (txcopy.c) */
+int lights_on(void);
 #endif

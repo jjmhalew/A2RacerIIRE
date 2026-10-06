@@ -74,7 +74,7 @@ typedef ptrdiff_t GLsizeiptr, GLintptr;
     X(void, GenTextures, (GLsizei, GLuint *)) X(void, DeleteTextures, (GLsizei, const GLuint *)) \
     X(void, BindTexture, (GLenum, GLuint)) X(void, TexParameteri, (GLenum, GLenum, GLint)) \
     X(void, TexParameterf, (GLenum, GLenum, GLfloat)) X(const GLubyte *, GetString, (GLenum)) \
-    X(void, GetFloatv, (GLenum, GLfloat *)) \
+    X(void, GetFloatv, (GLenum, GLfloat *)) X(void, GetTexParameteriv, (GLenum, GLenum, GLint *)) \
     X(void, TexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)) \
     X(void, TexSubImage2D, (GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void *)) \
     X(void, PixelStorei, (GLenum, GLint)) X(void, ReadPixels, (GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *)) \
@@ -289,6 +289,9 @@ void gfx_texture_update(unsigned tex, const uint8_t *rgba, int w, int h)
 {
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    GLint min = 0;           /* a mipmapped texture (the texture copies of txcopy.c): rebuild the smaller levels */
+    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &min);
+    if (min == GL_LINEAR_MIPMAP_LINEAR && g_has_mipmap) glGenerateMipmap(GL_TEXTURE_2D);
 }
 
 void gfx_texture_free(unsigned tex) { if (tex) glDeleteTextures(1, &tex); }

@@ -123,6 +123,28 @@ static void key_and_bleed(Image *img)
     }
 }
 
+int tex_pixels(const char *name, Image *out)
+{
+    char b[32];
+    base_name(name, b, sizeof b);
+    if (!tex_image(b, out)) return 0;
+    key_and_bleed(out);
+    if (_strnicmp(b, "back", 4)) tex_apply_gamma(out->rgba, out->w * out->h);   /* not the sky (0x423565) */
+    return 1;
+}
+
+int tex_orig_size(const char *name, int *w, int *h)
+{
+    char b[32];
+    Image img;
+    base_name(name, b, sizeof b);
+    if (!orig_image(b, &img)) return 0;
+    *w = img.w;
+    *h = img.h;
+    image_free(&img);
+    return 1;
+}
+
 const Texture *tex_get(const char *name)
 {
     char b[32];
@@ -137,9 +159,7 @@ const Texture *tex_get(const char *name)
     memset(e, 0, sizeof *e);
     snprintf(e->name, sizeof e->name, "%s", b);
     Image img;
-    if (!tex_image(b, &img)) { fprintf(stderr, "texture %s missing\n", b); return NULL; }
-    key_and_bleed(&img);
-    if (_strnicmp(b, "back", 4)) tex_apply_gamma(img.rgba, img.w * img.h);   /* not the sky (0x423565) */
+    if (!tex_pixels(b, &img)) { fprintf(stderr, "texture %s missing\n", b); return NULL; }
     e->t.id = gfx_texture(img.rgba, img.w, img.h, TEX_MIPMAP);
     e->t.w = img.w;
     e->t.h = img.h;

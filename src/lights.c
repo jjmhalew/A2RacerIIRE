@@ -127,9 +127,11 @@ void lights_init(const Race *r)
                                   v3((float)PITCH[t], 0, 0), ARGB[t]);
 }
 
+int lights_on(void) { return g_on && g_anim >= 0; }
+
 /* handle_player_car 0x425f0b: on while g_plr_brake_light == 1 (or g_plr_gas_hold == 1, which is never set); only the
  * changes are passed on. Without object lights the original copies the brake-light texture instead
- * (set_brake_light_texture 0x42b100, Game.ini texturecopy), which this port does not do. */
+ * (set_brake_light_texture 0x42b100, Game.ini texturecopy; txcopy_brake_lights). */
 void lights_tick(const Race *r)
 {
     if (r->brake_light == 1) {
