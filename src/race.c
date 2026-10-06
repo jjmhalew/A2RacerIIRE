@@ -17,6 +17,7 @@
 #include "res.h"
 #include "rules.h"
 #include "sfx.h"
+#include "wheels.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -600,6 +601,7 @@ int race_init(Race *r, int etappe, int car)
     objects_load(&r->objects, &r->track);
     load_cars_dat(r);
     load_car_types(r);
+    wheels_init();
     read_ini(r);
     r->plr_car = car >= 0 && car < 7 ? car : 0;
     static int hud_ok;
@@ -667,6 +669,7 @@ static void race_tick(void)
     R->tgt_draw0 = R->cam_target;
     for (int o = 0; o < R->nobj; o++)
         if (R->obj[o].used && R->obj[o].active && R->obj[o].update && ai_obj_in_window(o)) R->obj[o].update(o);
+    wheels_tick(R);             /* car_update_wheels(_ai), run by the cars' handlers in the original */
     obj_move_all(R->dt);
     Obj *p = &R->obj[R->plr_obj];
     if (p->chunk != p->prev_chunk) rules_player_chunk_changed(R, p->prev_chunk, p->chunk);   /* the track triggers */
@@ -840,6 +843,7 @@ static void race_draw(float alpha)
         Mat4 body = m4_mul(m4_rot_x(-c->pitch * TWO_PI / ANGLE_UNITS), m4_rot_z(c->roll * TWO_PI / ANGLE_UNITS));
         m = m4_mul(m, body);
         model_draw_matrix(anim_model(c->anim, c->frame), &m);
+        wheels_draw(R, o, &m, alpha);
     }
     gfx_set_model(NULL);
     rules_draw_3d(R);                                   /* the countdown letters */

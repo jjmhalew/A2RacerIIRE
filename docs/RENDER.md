@@ -479,3 +479,82 @@ What it looks like (letters 8.9 x 13.6 x 5 units, s_letter.pcx; no scaling, no f
   letters' callback is only run by font3d_draw, so they do not cycle frames.
 - Port: the effects run once per game tick (RACE_HZ) instead of per drawn frame, with dt = 1/RACE_HZ (frames =
   sec * RACE_HZ, +0.001 against 23.999), and are drawn interpolated between the last two ticks.
+
+## 10. Car wheels (car_whl.cpp)
+
+The racer bodies `RACER_1..7_ANIM` (car types 0..6: r_trabbi, r_astra, r_beetle, r_bmw, r_porche, r_clk, r_diablo)
+have no wheels: their meshes start at y = 1..3. The traffic, police and ADAC meshes (types 7..15) start at y = 0 with
+the wheels modelled in, and get no wheel objects. So only the player and the three CPU racers have wheels, as four
+**sub-objects** of the car object: `WIEL_ANIM` (anim 142, `wiel.d3d` + cars01.pcx: a 10-sided prism, x +-1.39,
+radius 3.66, both caps textured alike, so the left wheels need no mirroring; all four are created with rotation 0).
+
+Sub-objects (obj_main.cpp): an object holds up to 4 instance indices at `+0x4c[4]`, the count at `+0x5c`.
+
+| Addr | Name | |
+|---|---|---|
+| 0x4136c0 | `car_add_wheels(type, obj)` | from `init_player_car` 0x42572b and `init_racer_cars` 0x41139b, after add_car |
+| 0x486198 | `g_wheel_pos` | float[7][4][3]: per car type 0..6 the centres of FL, FR, RL, RR (x, y, z) |
+| 0x441630 | `obj_add_sub_object(obj, anim, frame, pos, rot)` | `object3d_new(pos, rot, anim, frame, object3d_cb_none)`, inst `+0x95 = 2` (no auto matrix), inst `+0x0c = obj`; 'No more sub-objects available' at 4 |
+| 0x43fbe0 / 0x43fbb0 | `obj_set_child_instance` / `obj_get_child_instance(n)` | `obj +0x4c[n]` |
+| 0x441700 | `obj_free_sub_objects(obj)` | (helicopter release) |
+| 0x413900 | `car_update_wheels(obj)` | player: from handle_player_car (end of the normal path, and the autopilot branch) |
+| 0x413be0 | `car_update_wheels_ai(obj)` | racers: from HANDLE_RACER_AI 0x40ac90 (always with ai_model 0; at the end with ai_model 1) |
+| 0x440270 | `obj_draw_with_damage` | draws the body, then each sub-object |
+
+`g_wheel_pos` (front at +z, left at -x; y = 3.7 for all):
+
+| type | front x, z | rear x, z |
+|---|---|---|
+| 0 Trabant | +-7.0, 13.3 | +-7.0, -10.0 |
+| 1 Astra | +-7.4, 13.8 | +-7.5, -14.5 |
+| 2 Beetle | +-7.15, 11.2 | +-7.15, -11.72 |
+| 3 BMW | +-7.0, 12.6 | +-6.6, -12.5 |
+| 4 Porsche | +-7.75, 13.0 | +-7.5, -12.5 |
+| 5 CLK | +-7.83, 13.5 | +-7.83, -13.0 |
+| 6 Diablo | +-8.0, 14.0 | +-8.3, -14.8 |
+
+```c
+void car_add_wheels(int type, int obj)                                   // 0x4136c0
+{
+    if (type < 0 || type > 6) fatal("Illegal car type (%d)");           // car_whl.cpp line 50
+    for (i = 0; i < 4; i++)                                              // FL, FR, RL, RR
+        obj_add_sub_object(obj, get_anim_name_index("WIEL_ANIM"), 0, g_wheel_pos[type][i], (0, 0, 0));
+}
+// init_player_car: car_add_wheels(g_copland ? 0 : g_plr_car, g_plr_obj);
+// [quirk] in cop mode the body is MPOLIZEI_ANIM (0x85 poked into type 6's anim index +0x0e, which has its own
+// wheels) and the Trabant's wheel set is added as well.
+
+void car_update_wheels(int o)          // 0x413900; car_update_wheels_ai 0x413be0 differs only in the front yaw
+{
+    float spin = dt * (c_angle_units * 10 / (3.14159f * 7)) * c->vz;    // vz m/s; wheel diameter 0.7 m
+    float lim  = c_angle_units * 0.497213f;                              // < half a turn per frame
+    if (spin > lim) spin = lim;                                          // forwards only
+    for (n = 0..3) wheel[n]->pitch -= spin;                              // rolls forwards
+    // player: c_angle_units/12 * -0.01 * g_plr_steer: steer +-100 -> -+30 degrees (to the right = negative yaw)
+    // racers: clamp(c->yawrate(+0x7c, rad/s) * 400, -500, 500)  (raw units: up to 44 degrees)
+    wheel[0]->yaw = wheel[1]->yaw = front_yaw;
+    float d = chunk_height_at(chunk, inst->x, inst->z) - inst->y;  clamp d to [-1.05, 1.05];
+    for (n = 0..3) wheel[n]->y = d + 3.5f;                               // on the road while the body bobs
+}
+
+// obj_draw_with_damage 0x440270, after object3d_draw(body):
+for (n = 0; n < obj->nsub; n++) {
+    inst_build_matrix(wheel[n]);                     // Rz(roll) Rx(pitch) Ry(yaw), then the position (row vectors)
+    wheel[n]->M = mat_mul(wheel[n]->M, body->M);     // child * parent: the wheels lean and pitch with the body
+    object3d_draw(wheel[n]);
+}
+```
+
+Notes:
+- The player's wheels are only updated once the race runs (handle_player_car returns earlier during the countdown),
+  so until GO they stand at the table's y = 3.7 with no turn; afterwards y = 3.5 + d.
+- **[quirk]** With the old steering model (stuur_model 1) g_plr_steer is 0..60 with 30 = straight, but the formula is
+  the same, so the front wheels point 30 * 341 * 0.01 = 102 units (9 degrees) to the right when going straight.
+- At 30 fps the spin limit is reached at ~118 km/h (half a turn per frame); above that the wheels stroboscopically
+  stand still or turn backwards.
+- Port (src/wheels.c): `wheels_init` reads `g_wheel_pos` from spel.dat; `wheels_tick` (per game tick, after the
+  update callbacks) keeps the pitch of the last two ticks, the front yaw and y per object (cars with car_type 0..6);
+  the player's wheels turn once `race_started` (also during the autopilot); `wheels_draw` draws
+  `body * T(x, y, z) * Ry(-yaw) * Rx(-pitch)` (the original's Rx(p) / Ry(y) are `m4_rot_x(-p)` / `m4_rot_y(-y)` in
+  vmath.h) right after the body in race_draw, the spin interpolated between the ticks. The port's copland player
+  drives the RACER_7 body, so it uses the type-6 wheel set.

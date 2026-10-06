@@ -658,14 +658,15 @@ The autopilot branch of handle_player_car then stores the returned h into `inst-
 ### 6.5 Wheels `car_update_wheels` 0x413900 (car_whl.cpp, player only)
 
 ```c
-float spin = dt * (1024*10 / (3.14159f*7)) * c->vz;            // wheel diameter 0.7 m: 465.6 units per metre
-float lim = 1024 * 0.497213f;  if (spin > lim) spin = lim;      // < half a turn per frame (no backwards aliasing)
+float spin = dt * (c_angle_units*10 / (3.14159f*7)) * c->vz;   // c_angle_units = 4096: 1862.6 units per metre (0.7 m wheel)
+float lim = c_angle_units * 0.497213f;  if (spin > lim) spin = lim;   // < half a turn per frame (forwards only)
 for w in 0..3: wheel[w]->pitch -= spin;
-wheel[0]->yaw = wheel[1]->yaw = 1024 * (1/12.f) * -0.01f * g_plr_steer;   // +-100 -> -+30 degrees (front wheels)
+wheel[0]->yaw = wheel[1]->yaw = c_angle_units * (1/12.f) * -0.01f * g_plr_steer;   // +-100 -> -+30 degrees (front wheels)
 float d = chunk_height_at(chunk, x, z) - inst->y;  clamp d to [-1.05, 1.05];
 for w in 0..3: wheel[w]->y = d + 3.5f;
 ```
-(AI cars use `sub_413be0`.) Wheel meshes 'WIEL_ANIM'.
+(The racers use `car_update_wheels_ai` 0x413be0: front yaw = clamp(yawrate * 400, -500, 500).) The wheels are
+'WIEL_ANIM' sub-objects added by `car_add_wheels` 0x4136c0; offsets, drawing and the port: [RENDER.md](RENDER.md) 10.
 
 ## 7. Old steering model (stuur_model = 1) - `car_drive_old` 0x40cfd0
 

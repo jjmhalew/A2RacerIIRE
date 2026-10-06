@@ -56,7 +56,12 @@
 0x412c00 tweak_menu_main ; 'Tweak Menu' (raser.ini [helpdesk] tweak_mode, Tab)
 0x412e90 car_tweak_menu ; edits CARS.DAT in memory, 'Opslaan' writes CARS.DAT
 0x413900 car_update_wheels ; player wheels: spin, front steer angle, height to road
-0x413be0 car_update_wheels_ai
+0x413be0 car_update_wheels_ai ; racer wheels: spin, front yaw = clamp(yawrate*400, +-500), height to road
+0x4136c0 car_add_wheels ; (car_type 0..6, obj): 4 WIEL_ANIM sub-objects at g_wheel_pos[type] (car_whl.cpp)
+0x486198 g_wheel_pos ; float[7][4][3] wheel centres per racer car type: FL, FR, RL, RR (y 3.7)
+0x441630 obj_add_sub_object ; (obj, anim, frame, pos, rot): object3d_new + child slot, inst +0x95 = 2, +0x0c = obj
+0x43fbe0 obj_set_child_instance ; (this = obj; n, inst): obj +0x4c[n] = inst (n < 4)
+0x441700 obj_free_sub_objects ; frees the obj +0x5c sub-objects
 0x484b18 g_car_types ; 16 x 0xEE static car-type table (RACER_1..7, MPOLIZEI, ADAC, traffic)
 0x4a5ee0 g_cars_dat ; CARS.DAT 10 x 124: accel[2][6], vmax[2][6], shift up/down, brake, engine brake, roll gain, steer
 0x4a5df0 g_cars_body ; CARS.DAT 10 x 24: roll/pitch/height damping + factor
