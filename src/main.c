@@ -8,6 +8,8 @@
 #include "image.h"
 #include "plat.h"
 #include "res.h"
+#include "model.h"
+#include "objects.h"
 #include "track.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -100,6 +102,9 @@ static int view_track(int etappe, int chunk)
 {
     Track t;
     if (!track_load(&t, etappe)) { fprintf(stderr, "cannot load etappe%d\n", etappe); return 1; }
+    ObjectSet objs;
+    objects_load(&objs, &t);
+    printf("%d objects\n", objs.n);
     printf("etappe%d: %s, %d chunks, %d waypoints, %d rails, %s\n", etappe, t.name, t.nchunks, t.nwaypoints, t.nrails,
            t.city ? "city" : "highway");
     float s = (float)(chunk % t.nchunks), speed = g_shot ? 0 : 0.5f, height = 12, look = 0;
@@ -128,13 +133,17 @@ static int view_track(int etappe, int chunk)
         int w, h;
         plat_size(&w, &h);
         gfx_begin(w, h, 0.55f, 0.7f, 0.9f);
-        Mat4 proj = m4_perspective(60 * PI_F / 180, (float)w / h, 2, 8000), view = view_lh(eye, target);
+        /* the original: near 10, far 12500, 81 degrees across a 4:3 screen (RENDER.md) */
+        float fovy = 2 * atanf(tanf(40.5f * PI_F / 180) * 0.75f);
+        Mat4 proj = m4_perspective(fovy, (float)w / h, 10, 12500), view = view_lh(eye, target);
         gfx_set_matrices(&proj, &view);
         int start = track_visible_start(&t, c, dir, 2, 30);
         track_draw(&t, start, 30, 0);
+        objects_draw(&objs, &t, start, 30);
         if (shot_frame()) break;
         plat_swap();
     }
+    objects_free(&objs);
     track_free(&t);
     return 0;
 }
@@ -157,6 +166,7 @@ int main(int argc, char **argv)
     audio_init();
     const char *film = arg_value(argc, argv, "--film");
     if (film) printf("film: %d\n", film_play(film, 1));
+    if (!models_init()) { plat_message("spel.dat (the race program of the CD) is missing or not version 1.01.", 1); return 1; }
     const char *trk = arg_value(argc, argv, "--track");
     if (trk) {
         const char *ch = arg_value(argc, argv, "--chunk");

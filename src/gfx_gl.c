@@ -33,6 +33,7 @@ typedef ptrdiff_t GLsizeiptr, GLintptr;
 #define GL_BLEND 0x0BE2
 #define GL_BACK 0x0405
 #define GL_CCW 0x0901
+#define GL_CW 0x0900
 #define GL_LEQUAL 0x0203
 #define GL_TEXTURE_2D 0x0DE1
 #define GL_UNSIGNED_BYTE 0x1401
@@ -182,7 +183,7 @@ int gfx_init(void)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glDepthFunc(GL_LEQUAL);
-    glFrontFace(GL_CCW);
+    glFrontFace(GL_CW);      /* the original's faces are visible when clockwise on screen (D3DCULL_CCW) */
     glCullFace(GL_BACK);
     g_proj = g_view = g_model = m4_identity();
     return 1;

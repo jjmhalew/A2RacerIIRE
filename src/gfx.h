@@ -21,7 +21,7 @@ typedef struct {
     int blend;              /* GfxBlend */
     int alpha_test;         /* discard texels with alpha < 0.5 (colour-keyed textures) */
     int depth_test, depth_write;
-    int cull;               /* 0 none, 1 back faces (counter-clockwise front) */
+    int cull;               /* 0 none, 1 cull counter-clockwise faces (the original's D3DCULL_CCW) */
     int fog;
 } GfxState;
 
