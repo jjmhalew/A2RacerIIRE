@@ -33,6 +33,7 @@ int film_play(const char *name, int fullscreen)
     int has_audio = (coding == SMK_AUDIO_PCM || coding == SMK_AUDIO_DPCM) && rate && ch;
     uint8_t *rgb = malloc((size_t)w * dh * 3), *rgba = malloc((size_t)w * dh * 4);
     unsigned tex = 0;
+    if (!rgb || !rgba) frames = 0;                 /* out of memory: show nothing */
     if (has_audio) audio_stream_open((int)rate, (int)ch);
     int result = 1;
     double start = plat_time();

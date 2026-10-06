@@ -51,8 +51,8 @@ Ini *ini_load(const char *path)
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char *d = malloc((size_t)n + 1);
-    size_t got = fread(d, 1, (size_t)n, f);
+    char *d = n >= 0 ? malloc((size_t)n + 1) : NULL;
+    size_t got = d ? fread(d, 1, (size_t)n, f) : 0;
     fclose(f);
     Ini *ini = ini_parse(d, got);
     free(d);

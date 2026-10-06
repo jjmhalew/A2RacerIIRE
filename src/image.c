@@ -29,6 +29,7 @@ int image_decode_pcx(const uint8_t *d, size_t n, Image *out)
     int bpp = d[3], planes = d[65], bpl = rd16(d + 66);
     int w = rd16(d + 8) - rd16(d + 4) + 1, h = rd16(d + 10) - rd16(d + 6) + 1;
     if (w <= 0 || h <= 0 || w > 8192 || h > 8192 || bpp != 8 || (planes != 1 && planes != 3 && planes != 4)) return 0;
+    if (bpl < w) return 0;                      /* each plane's line holds at least the width */
     size_t line = (size_t)bpl * planes;
     uint8_t *raw = malloc(line * (size_t)h);
     if (!raw) return 0;
@@ -46,8 +47,9 @@ int image_decode_pcx(const uint8_t *d, size_t n, Image *out)
     out->h = h;
     out->bpp = bpp * planes;
     out->rgba = malloc((size_t)w * h * 4);
+    if (planes == 1) out->index = malloc((size_t)w * h);
+    if (!out->rgba || (planes == 1 && !out->index)) { free(raw); image_free(out); return 0; }
     if (planes == 1) {
-        out->index = malloc((size_t)w * h);
         if (n >= 769 && d[n - 769] == 0x0c) memcpy(out->pal, d + n - 768, 768);
         else for (int i = 0; i < 256; i++) out->pal[i * 3] = out->pal[i * 3 + 1] = out->pal[i * 3 + 2] = (uint8_t)i;
         for (int y = 0; y < h; y++)
@@ -96,7 +98,7 @@ int image_decode_tga(const uint8_t *d, size_t n, Image *out)
         }
     }
     int bpp = (bits + 7) / 8;
-    if (bpp < 1 || bpp > 4) return 0;
+    if (bpp < 1 || bpp > 4 || (base == 2 && bpp < 2)) return 0;
     size_t npix = (size_t)w * h;
     uint8_t *px = malloc(npix * 4);
     if (!px) return 0;
@@ -134,7 +136,7 @@ int image_decode_tga(const uint8_t *d, size_t n, Image *out)
     if (!(desc & 0x20)) {                       /* bottom-up: flip */
         size_t row = (size_t)w * 4;
         uint8_t *tmp = malloc(row);
-        for (int y = 0; y < h / 2; y++) {
+        for (int y = 0; tmp && y < h / 2; y++) {
             memcpy(tmp, px + (size_t)y * row, row);
             memcpy(px + (size_t)y * row, px + (size_t)(h - 1 - y) * row, row);
             memcpy(px + (size_t)(h - 1 - y) * row, tmp, row);

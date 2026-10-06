@@ -105,6 +105,7 @@ int track_load(Track *t, int etappe)
     /* .cmp guard rails (rails_load_cmp 0x44c2f0, rail_set 0x44c440) */
     if (!open_file(&r, etappe, "cmp")) return 0;
     t->nrails = (int)rd_u32(&r);
+    if (t->nrails < 0 || (size_t)t->nrails > (r.n - r.p) / 24) { free((void *)r.d); return 0; }   /* damaged file */
     t->rails = calloc((size_t)t->nrails + 1, sizeof *t->rails);
     for (int i = 0; i < t->nrails && !r.bad; i++) {
         Rail *l = &t->rails[i];
@@ -117,12 +118,16 @@ int track_load(Track *t, int etappe)
     /* .dmp driver map (drmap_load 0x443c40) */
     if (!open_file(&r, etappe, "dmp")) return 0;
     t->nwaypoints = (int)rd_u32(&r);
+    if (t->nwaypoints < 0 || (size_t)t->nwaypoints > (r.n - r.p) / 36) { free((void *)r.d); return 0; }
     t->wps = calloc((size_t)t->nwaypoints + 1, sizeof *t->wps);
     for (int i = 0; i < t->nwaypoints && !r.bad; i++) {
         Waypoint *w = &t->wps[i];
         w->flags = rd_i32(&r); w->flags2 = rd_i32(&r);
         w->pos = rd_vec(&r);
         w->next = rd_i32(&r); w->next_inner = rd_i32(&r); w->next_outer = rd_i32(&r); w->prev = rd_i32(&r);
+        int *link[4] = { &w->next, &w->next_inner, &w->next_outer, &w->prev };
+        for (int k = 0; k < 4; k++)                     /* -1 = none; anything else outside the map too */
+            if (*link[k] < -1 || *link[k] >= t->nwaypoints) *link[k] = -1;
     }
     free((void *)r.d);
     /* .pmp chunk data (chunk_load_pmp 0x442b00) */

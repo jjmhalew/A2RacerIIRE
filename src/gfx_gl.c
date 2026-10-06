@@ -134,7 +134,9 @@ static const char *FS =
 
 static GLuint compile(GLenum type, const char *src)
 {
-    const char *hdr = plat_is_gles() ? "#version 100\nprecision mediump float;\n" : "#version 120\n";
+    /* vertex shaders default to highp; mediump positions jitter on GPUs that honour it (track coordinates reach 1e4) */
+    const char *hdr = !plat_is_gles() ? "#version 120\n"
+                    : type == GL_FRAGMENT_SHADER ? "#version 100\nprecision mediump float;\n" : "#version 100\n";
     const char *parts[2] = { hdr, src };
     GLuint s = glCreateShader(type);
     glShaderSource(s, 2, parts, NULL);
@@ -217,13 +219,54 @@ void gfx_begin(int width, int height, float r, float g, float b)
 
 void gfx_viewport(int x, int y, int w, int h) { glViewport(x, g_h - y - h, w, h); }
 
+static int next_pot(int n)
+{
+    int p = 1;
+    while (p < n && p < 4096) p <<= 1;
+    return p;
+}
+
+/* bilinear, wrapping at the edges as GL_REPEAT does */
+static uint8_t *resample(const uint8_t *src, int w, int h, int nw, int nh)
+{
+    uint8_t *dst = malloc((size_t)nw * nh * 4);
+    if (!dst) return NULL;
+    for (int y = 0; y < nh; y++) {
+        float fy = (y + 0.5f) * h / nh - 0.5f;
+        int y0 = (int)floorf(fy);
+        float ty = fy - y0;
+        int ya = (y0 % h + h) % h, yb = (ya + 1) % h;
+        for (int x = 0; x < nw; x++) {
+            float fx = (x + 0.5f) * w / nw - 0.5f;
+            int x0 = (int)floorf(fx);
+            float tx = fx - x0;
+            int xa = (x0 % w + w) % w, xb = (xa + 1) % w;
+            const uint8_t *p00 = src + ((size_t)ya * w + xa) * 4, *p01 = src + ((size_t)ya * w + xb) * 4;
+            const uint8_t *p10 = src + ((size_t)yb * w + xa) * 4, *p11 = src + ((size_t)yb * w + xb) * 4;
+            uint8_t *d = dst + ((size_t)y * nw + x) * 4;
+            for (int c = 0; c < 4; c++) {
+                float a = p00[c] + (p01[c] - p00[c]) * tx, b = p10[c] + (p11[c] - p10[c]) * tx;
+                d[c] = (uint8_t)(a + (b - a) * ty + 0.5f);
+            }
+        }
+    }
+    return dst;
+}
+
 unsigned gfx_texture(const uint8_t *rgba, int w, int h, int flags)
 {
     GLuint t = 0;
     glGenTextures(1, &t);
     glBindTexture(GL_TEXTURE_2D, t);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     int pot = !(w & (w - 1)) && !(h & (h - 1));
+    uint8_t *scaled = NULL;
+    if (!pot && plat_is_gles() && !(flags & TEX_CLAMP)) {
+        /* GLES 2.0 neither repeats nor mipmaps other sizes (texture packs may have any size): scale up */
+        int nw = next_pot(w), nh = next_pot(h);
+        if ((scaled = resample(rgba, w, h, nw, nh))) { rgba = scaled; w = nw; h = nh; pot = 1; }
+    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    free(scaled);
     int mip = (flags & TEX_MIPMAP) && g_has_mipmap && (pot || !plat_is_gles());
     if (mip) glGenerateMipmap(GL_TEXTURE_2D);
     GLint mag = (flags & TEX_NEAREST) ? GL_NEAREST : GL_LINEAR;
@@ -439,4 +482,12 @@ void gfx_2d_rect(float x, float y, float w, float h, uint32_t rgba)
 
 void gfx_2d_end(void) {}
 
-void gfx_read_pixels(int w, int h, uint8_t *rgb) { glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, rgb); }
+/* GLES only guarantees RGBA reads */
+void gfx_read_pixels(int w, int h, uint8_t *rgb)
+{
+    uint8_t *rgba = malloc((size_t)w * h * 4);
+    if (!rgba) return;
+    glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    for (size_t i = 0, n = (size_t)w * h; i < n; i++) memcpy(rgb + i * 3, rgba + i * 4, 3);
+    free(rgba);
+}

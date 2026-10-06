@@ -91,6 +91,10 @@ jobs:
         with:
           gradle-version: '8.13'
 
+      # the NDK and CMake of android/app/build.gradle; the runner image carries other versions
+      - name: NDK and CMake
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.2.12479018" "cmake;3.22.1" > /dev/null
+
       - name: Build
         working-directory: android
         env:

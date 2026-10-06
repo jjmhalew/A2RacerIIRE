@@ -110,9 +110,11 @@ ResArchive *res_open(const char *base)
     fseek(f, 0, SEEK_END);
     uint32_t total = (uint32_t)ftell(f);
     ResArchive *a = calloc(1, sizeof *a);
+    if (!a) { fclose(f); free(ind); return NULL; }
     a->f = f;
     a->count = ind[0] | ind[1] << 8;
     a->e = calloc((size_t)a->count + 1, sizeof *a->e);
+    if (!a->e) { free(ind); res_close(a); return NULL; }
     int named = a->named = isz == 2 + (size_t)a->count * 24;
     if (!named && isz != 2 + (size_t)a->count * 4) { free(ind); res_close(a); return NULL; }
     for (int i = 0; i < a->count; i++) {

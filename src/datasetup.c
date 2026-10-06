@@ -87,13 +87,14 @@ int data_verify(const char *dir)
 }
 
 /* ---- progress ---------------------------------------------------------------------------------------------------- */
-static void progress(double done, double total)
+/* 0 = the window was closed (on Android: the app is ending), stop copying */
+static int progress(double done, double total)
 {
     static double last;
     double now = plat_time();
-    if (now - last < 0.05 && done < total) return;
+    if (now - last < 0.05 && done < total) return 1;
     last = now;
-    plat_poll();
+    if (!plat_poll()) return 0;
     int w, h;
     plat_size(&w, &h);
     gfx_begin(w, h, 0.08f, 0.08f, 0.1f);
@@ -101,6 +102,7 @@ static void progress(double done, double total)
     gfx_2d_rect(120, 228, 400, 24, 0x404048ffu);
     gfx_2d_rect(124, 232, (float)(392 * (total > 0 ? done / total : 0)), 16, 0xce1126ffu);
     plat_swap();
+    return 1;
 }
 
 /* ---- copying ----------------------------------------------------------------------------------------------------- */
@@ -127,13 +129,13 @@ static int copy_stream(FILE *in, long long size, const char *dest, const char *n
     if (!out) return 0;
     uint8_t *buf = malloc(1 << 20);
     long long left = size;
-    int ok = 1;
-    while (left > 0) {
+    int ok = buf != NULL;
+    while (ok && left > 0) {
         size_t n = (size_t)(left < (1 << 20) ? left : (1 << 20));
         if (fread(buf, 1, n, in) != n || fwrite(buf, 1, n, out) != n) { ok = 0; break; }
         left -= (long long)n;
         *done += (double)n;
-        progress(*done, total);
+        if (!progress(*done, total)) ok = 0;
     }
     free(buf);
     if (fclose(out) != 0) ok = 0;
@@ -184,6 +186,7 @@ static uint32_t le32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | 
 /* the entries of a directory; returns their number (max cap) */
 static int iso_list(FILE *f, uint32_t lba, uint32_t size, int joliet, IsoEnt *out, int cap)
 {
+    if (size > (1u << 20)) return 0;            /* a damaged image; the CD's directories are a few KB */
     uint8_t *d = malloc(size + 1);
     int n = 0;
     if (!d || !iso_read(f, lba, 0, d, size)) { free(d); return 0; }
@@ -211,6 +214,8 @@ static int iso_list(FILE *f, uint32_t lba, uint32_t size, int joliet, IsoEnt *ou
             if (semi) *semi = 0;
             size_t l = strlen(e->name);
             if (l && e->name[l - 1] == '.') e->name[l - 1] = 0;
+            /* a file name, never a path: the names are joined to the destination folder */
+            if (!e->name[0] || strpbrk(e->name, "/:") || strchr(e->name, 92) || !strcmp(e->name, "..")) n--;
         }
         p += len;
     }
@@ -232,6 +237,7 @@ static int copy_iso_file(FILE *f, const char *dest)
     }
     if (!root_lba) return 0;
     IsoEnt *ent = malloc(sizeof *ent * 512);
+    if (!ent) return 0;
     int n = iso_list(f, root_lba, root_size, joliet, ent, 512), ok = 0;
     for (int i = 0; i < n; i++)
         if (ent[i].dir && !_stricmp(ent[i].name, "data")) {

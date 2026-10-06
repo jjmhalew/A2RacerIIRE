@@ -43,6 +43,7 @@ static int load_mesh(Model *m, const char *name, unsigned tex)
     if (8 + (size_t)nv * 33 + (size_t)nf * 9 != n || nv > 65535) { free(d); fprintf(stderr, "mesh %s: bad size\n", name); return 0; }
     GfxVertex *v = malloc(sizeof *v * (nv ? nv : 1));
     uint16_t *idx = malloc(sizeof *idx * (nf ? nf : 1) * 3);
+    if (!v || !idx) { free(v); free(idx); free(d); return 0; }
     m->min = v3(1e9f, 1e9f, 1e9f);
     m->max = v3(-1e9f, -1e9f, -1e9f);
     for (uint32_t i = 0; i < nv; i++) {
