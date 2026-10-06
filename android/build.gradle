@@ -1,0 +1,4 @@
+// A2RacerRE for Android: the engine of src/ on SDL2 and OpenGL ES 2.0 (see README.md, "Android").
+plugins {
+    id 'com.android.application' version '8.13.0' apply false
+}

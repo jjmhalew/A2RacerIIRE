@@ -63,6 +63,16 @@ void   plat_sleep_ms(int ms);
 FILE  *plat_fopen(const char *path, const char *mode);
 int    plat_exists(const char *path);
 const char *plat_user_dir(void);            /* where a2racerre.cfg / saves / log live, ends in a separator */
+void   plat_set_user_dir(const char *dir);  /* portable mode: next to the program (dir ends in a separator) */
+const char *plat_base_dir(void);            /* the program's folder, ends in a separator */
+
+/* a question with up to three buttons: 1 = b1, 0 = b2, -1 = b3 (or the window closed) */
+int plat_ask(const char *text, const char *b1, const char *b2, const char *b3);
+/* the first start: let the user choose an ISO image or a folder with a copy of the CD.
+ * PICK_PATH: path in out; PICK_FD (Android): an open file descriptor of the ISO in *fd; PICK_COPIED (Android): the
+ * folder was copied into dest already; PICK_NONE: cancelled. */
+enum { PICK_NONE, PICK_PATH, PICK_FD, PICK_COPIED };
+int plat_pick_data(char *out, size_t cap, int *fd, const char *dest);
 
 /* the Windows virtual-key codes (winuser.h) that the engine uses */
 enum {

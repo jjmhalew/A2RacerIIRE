@@ -367,12 +367,142 @@ FILE *plat_fopen(const char *path, const char *mode)
     return f;
 }
 
+static char g_user_override[1024];
 const char *plat_user_dir(void)
 {
     static char *dir;
+    if (g_user_override[0]) return g_user_override;
     if (!dir) {
+#ifdef __ANDROID__
+        /* Android/data/<app>/files: reachable over USB, so the game files can also be copied there by hand */
+        const char *ext = SDL_AndroidGetExternalStoragePath();
+        if (ext) { size_t n = strlen(ext) + 2; dir = SDL_malloc(n); snprintf(dir, n, "%s/", ext); }
+        if (!dir)
+#endif
         dir = SDL_GetPrefPath("", "A2RacerRE");
         if (!dir) dir = SDL_strdup("./");
     }
     return dir;
 }
+
+void plat_set_user_dir(const char *dir) { snprintf(g_user_override, sizeof g_user_override, "%s", dir ? dir : ""); }
+
+const char *plat_base_dir(void)
+{
+    static char *base;
+    if (!base) {
+        base = SDL_GetBasePath();
+        if (!base) base = SDL_strdup("./");
+    }
+    return base;
+}
+
+int plat_ask(const char *text, const char *b1, const char *b2, const char *b3)
+{
+    SDL_MessageBoxButtonData btn[3];
+    int n = 0;
+    /* SDL lists the buttons right to left on Windows: add them in reverse so b1 is on the left */
+    if (b3) { btn[n].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT; btn[n].buttonid = -1; btn[n].text = b3; n++; }
+    if (b2) { btn[n].flags = 0; btn[n].buttonid = 0; btn[n].text = b2; n++; }
+    if (b1) { btn[n].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT; btn[n].buttonid = 1; btn[n].text = b1; n++; }
+    SDL_MessageBoxData box = { SDL_MESSAGEBOX_INFORMATION, g_win, "A2RacerRE", text, n, btn, NULL };
+    int hit = -1;
+    if (SDL_ShowMessageBox(&box, &hit) != 0) return -1;
+    return hit;
+}
+
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+#include <shlobj.h>
+int plat_pick_data(char *out, size_t cap, int *fd, const char *dest)
+{
+    (void)fd; (void)dest;
+    int r = plat_ask("Choose an ISO image of the A2 Racer II CD, or a folder with a copy of the CD's files.",
+                     "ISO image", "Folder", "Cancel");
+    if (r < 0) return PICK_NONE;
+    if (r == 1) {
+        char file[1024] = "";
+        OPENFILENAMEA o;
+        memset(&o, 0, sizeof o);
+        o.lStructSize = sizeof o;
+        o.lpstrFilter = "CD images (*.iso)\0*.iso\0All files\0*.*\0";
+        o.lpstrFile = file;
+        o.nMaxFile = sizeof file;
+        o.lpstrTitle = "A2 Racer II CD image";
+        o.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+        if (!GetOpenFileNameA(&o)) return PICK_NONE;
+        snprintf(out, cap, "%s", file);
+        return PICK_PATH;
+    }
+    BROWSEINFOA bi;
+    char name[MAX_PATH];
+    memset(&bi, 0, sizeof bi);
+    bi.pszDisplayName = name;
+    bi.lpszTitle = "The A2 Racer II CD, or a folder with a copy of it";
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+    PIDLIST_ABSOLUTE id = SHBrowseForFolderA(&bi);
+    if (!id) return PICK_NONE;
+    char path[MAX_PATH];
+    int ok = SHGetPathFromIDListA(id, path);
+    CoTaskMemFree(id);
+    if (!ok) return PICK_NONE;
+    snprintf(out, cap, "%s", path);
+    return PICK_PATH;
+}
+#elif defined(__ANDROID__)
+#include <jni.h>
+/* A2Activity.pickGameData (android/): Android's own file picker; kind 1 = ISO -> fd, 2 = folder -> copied into dest */
+int plat_pick_data(char *out, size_t cap, int *fd, const char *dest)
+{
+    (void)out; (void)cap;
+    int r = plat_ask("Choose an ISO image of the A2 Racer II CD, or a folder with a copy of the CD's files.",
+                     "ISO image", "Folder", "Cancel");
+    if (r < 0) return PICK_NONE;
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+    jobject act = (jobject)SDL_AndroidGetActivity();
+    if (!env || !act) return PICK_NONE;
+    jclass c = (*env)->GetObjectClass(env, act);
+    jmethodID m = (*env)->GetStaticMethodID(env, c, "pickGameData", "(ILjava/lang/String;)I");
+    int res = -1;
+    if (m) {
+        jstring d = (*env)->NewStringUTF(env, dest);
+        res = (*env)->CallStaticIntMethod(env, c, m, r == 1 ? 1 : 2, d);
+        (*env)->DeleteLocalRef(env, d);
+    }
+    (*env)->DeleteLocalRef(env, c);
+    (*env)->DeleteLocalRef(env, act);
+    if (res < 0) return PICK_NONE;
+    if (r == 1) { *fd = res; return PICK_FD; }
+    return PICK_COPIED;
+}
+#else
+/* Linux: zenity (GNOME, SteamOS desktop) or kdialog (KDE) when there; else the path typed in a terminal is not
+ * possible from a game window, so the message tells how to pass it on the command line */
+int plat_pick_data(char *out, size_t cap, int *fd, const char *dest)
+{
+    (void)fd; (void)dest;
+    int r = plat_ask("Choose an ISO image of the A2 Racer II CD, or a folder with a copy of the CD's files.",
+                     "ISO image", "Folder", "Cancel");
+    if (r < 0) return PICK_NONE;
+    const char *cmds[2][2] = {
+        { "zenity --file-selection --title='A2 Racer II CD image' --file-filter='*.iso *.ISO' 2>/dev/null",
+          "kdialog --getopenfilename ~ '*.iso *.ISO' 2>/dev/null" },
+        { "zenity --file-selection --directory --title='A2 Racer II CD (or a copy)' 2>/dev/null",
+          "kdialog --getexistingdirectory ~ 2>/dev/null" } };
+    for (int i = 0; i < 2; i++) {
+        FILE *p = popen(cmds[r == 1 ? 0 : 1][i], "r");
+        if (!p) continue;
+        char line[1024] = "";
+        char *got = fgets(line, sizeof line, p);
+        int st = pclose(p);
+        if (got && st == 0) {
+            line[strcspn(line, "\r\n")] = 0;
+            if (line[0]) { snprintf(out, cap, "%s", line); return PICK_PATH; }
+        }
+    }
+    plat_message("No file dialog (zenity or kdialog) found. Start the game with the path of the ISO image or of the "
+                 "CD's folder as its argument instead:  ./a2racerre /path/to/A2Racer-II.iso", 1);
+    return PICK_NONE;
+}
+#endif

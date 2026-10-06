@@ -1,0 +1,228 @@
+; ---- player car and vehicle physics, see docs/PHYSICS.md; input, see docs/INPUT.md
+; timer (tmg_main.cpp)
+0x441ab0 timer_init ; QueryPerformanceFrequency, 4-entry dt history = 0.1
+0x441bd0 timer_update ; per frame: raw dt, weighted average of last 4 (1/2,1/4,1/8,1/8)
+0x441cd0 timer_frame_dt ; dt seconds; 0 or > 0.1 -> 0.1
+0x441d10 timer_reset ; after pause: history 0.1, dt 0
+0x4e4970 g_game_timer ; {has_qpc, freq, last, dt}
+0x4e4928 g_dt_hist ; float[4] (T_ARRAY g_elapsed_buffer)
+0x4e4980 g_dt_hist_idx
+; object library (obj_main.cpp)
+0x43f8a0 obj_init_physics_idx ; 'Init physics for main-object' -> obj_init_physics
+0x4403b0 obj_init_physics ; (vel, yawrate, mass, restitution, dims): +0x60 1/m, +0x64 1/I, +0x68 e
+0x43f900 obj_integrate_idx ; (obj, dt, t, coll, use_resp, &resp) dt<0 -> 0
+0x4404a0 obj_integrate ; pos += rot(yaw, vel*t*10*dt) (quantised 1e-4), yaw += w*dt*1024/2pi, rotate vel, add forces
+0x43f990 obj_ctor ; 0xA0-byte object defaults
+0x43fb90 obj_clear_forces ; +0x84..+0x90 = 0
+0x43fbb0 obj_get_child_instance ; (n) wheel sub-objects
+0x4407e0 obj_add_force_at ; (F vec3, P vec3): force += F, torque += P.x*F.z - P.z*F.x
+0x440850 rceng_handle_objects ; per frame: update callbacks (+0x44) of objects in the chunk window, then obj_move_all
+0x440ea0 obj_move_all ; physics list: quantise vel, 8 substeps for g_substep_obj, collide, integrate, chunk update
+0x441e70 obj_set_substep_object ; g_substep_obj = obj (player)
+0x441e80 obj_set_collision_enabled ; g_collision_enabled
+0x4e65d8 g_substep_obj ; object integrated in 8 substeps (player)
+0x4e65d0 g_collision_enabled
+0x4e48e0 g_objects ; Obj[ ] stride 0xA0
+0x4e48e4 g_objects_count
+0x4e48f0 g_objects_used ; byte[ ]
+0x4ea9e0 g_instances ; 3D instances stride 0x88 (+0x50 pos, +0x74 pitch, +0x78 yaw, +0x7c roll; 1024 units)
+0x4ea418 g_sin_table ; float[1024]
+0x4ea4b4 g_cos_table ; float[1024]
+0x49b018 c_angle_mask ; 1023
+0x450280 math3d_init_tables ; sin/cos tables, power-of-two size
+0x459360 inst_build_matrix ; roll, pitch, yaw (1024 units) + translation into +0x10
+0x442f00 chunk_height_at ; thiscall (x, z): (d - nx*x - nz*z)/ny, chunk plane +0x3c..+0x44, d +0xdc
+; car physics (no source name; new + old steering model, AI drive)
+0x40ce10 car_calc_vmax ; old model: theoretical top speed (drag + rolling = drive force), -> g_plr_vmax
+0x40cfd0 car_drive_old ; (car, angle rad, accel -1..1) old Autobahn Raser model
+0x40e9f0 car_gear_accel ; (car, gear, &ratio) new model: (1 - v/vmax)*accel[gear], rpm, turbo +0.05
+0x40eae0 ai_gear_accel ; AI racer version of car_gear_accel
+0x40ebd0 car_body_roll ; spring/damper on instance roll (player CarsBody record for all cars)
+0x40ece0 car_body_pitch ; spring/damper on instance pitch (uses roll_factor)
+0x40ede0 car_road_height_reset ; y = road height - 1 if below, returns road height
+0x40ee80 car_body_height ; height spring to the road plane, gravity 10 above +2
+0x40f0d0 car_engine_new ; engine braking, automatic gearbox, gas/brake/ABS/handbrake, reverse limit
+0x40f3c0 car_steer_new ; yaw rate, grip, drift, handbrake slide, burn-out launch
+0x40fba0 car_damp_all ; vx, vz, yawrate -= 10*x*dt (coasting AI / finished player)
+0x40fc30 car_drive_new ; (car, steer -100..100, gas 0..100, brake 0..100) new steering model
+0x4108d0 ai_apply_difficulty ; dif_mod factor 0.6..1.5 on racer vmax, upgrade catch-up
+0x407660 chunk_moved_forward ; (cur, prev) 1 if cur is ahead of prev (wrap aware)
+0x4076b0 handle_basic_ai ; also drives the player car when g_plr_autopilot
+0x411710 tweak_menu_roll
+0x411bd0 tweak_menu_pitch
+0x411fb0 tweak_menu_height
+0x412390 tweak_menu_topspeed
+0x412820 tweak_menu_accel
+0x412c00 tweak_menu_main ; 'Tweak Menu' (raser.ini [helpdesk] tweak_mode, Tab)
+0x412e90 car_tweak_menu ; edits CARS.DAT in memory, 'Opslaan' writes CARS.DAT
+0x413900 car_update_wheels ; player wheels: spin, front steer angle, height to road
+0x413be0 car_update_wheels_ai
+0x484b18 g_car_types ; 16 x 0xEE static car-type table (RACER_1..7, MPOLIZEI, ADAC, traffic)
+0x4a5ee0 g_cars_dat ; CARS.DAT 10 x 124: accel[2][6], vmax[2][6], shift up/down, brake, engine brake, roll gain, steer
+0x4a5df0 g_cars_body ; CARS.DAT 10 x 24: roll/pitch/height damping + factor
+0x4a55d0 g_ai_racers ; 3 x 0x60 (+0 car type, +0x2c vmax bonus)
+; player (plr_car.cpp / plr_main.cpp)
+0x4256a0 init_player_car ; add_car(handle_player_car, plr_collision_cb), CARS.DAT, steer curve
+0x4258f0 plr_set_autopilot ; AI takes over the player car
+0x425980 plr_clear_autopilot
+0x4259a0 plr_tyre_squeal ; sample 0x27 from g_plr_skid
+0x425cf0 plr_handle_turbo ; (car, on) 100 ms ticks, g_player_turbo--, car_types[t].turbo_mul = 6
+0x425e20 handle_player_car ; object update callback of the player
+0x4265b0 plr_input_keyboard ; DEVICE 1 -> g_plr_steer/gas/brake/handbrake
+0x4269c0 plr_input_joypad ; DEVICE 2
+0x426e00 plr_input_analog ; DEVICE 3
+0x426f50 plr_input_ffjoy ; DEVICE 4
+0x427070 plr_engine_sound ; rpm -> 2 engine samples
+0x427fd0 plr_init ; turbo charges, fuel 100 (unused), clock 3, progress
+0x428050 plr_get_turbo
+0x428060 plr_set_turbo ; clamp 0..100
+0x428090 plr_turbo_tick ; empty 10 s timer
+0x4280c0 plr_prize_money ; 55000/35000/15000/0 by position, x4 on map 6
+0x428140 plr_get_money
+0x428150 plr_set_money ; clamp 0..999999
+0x428180 plr_add_money
+0x4281b0 plr_get_damage
+0x4281c0 plr_set_damage ; clamp 0..100
+0x428390 plr_add_damage ; only when no game event and not g_no_damage
+0x428400 plr_apply_upgrades ; MOTOR/BANDEN/ABS/6-speed/TURBO on g_car_types
+0x4d9e28 g_plr_obj
+0x4d9e2c g_plr_car ; 0..6
+0x4d9cd8 g_plr_steer ; new -100..100 / old 0..60 (30 centre)
+0x4d9cdc g_plr_gas ; new 0..100 / old 0..40 (20 neutral)
+0x4d9e08 g_plr_brake ; int 0..100
+0x4d9df8 g_plr_handbrake
+0x4d9dfc g_plr_turbo_active
+0x4d9e40 g_plr_fuel ; set 100, never read
+0x4d9e1c g_turbo_last_tick
+0x4d9e18 g_turbo_snd_on
+0x48b464 g_turbo_snd
+0x4d9cf0 g_turbo_saved ; saved car_types[t].turbo_mul
+0x4a63e0 g_plr_gear ; 0..4 (5 with 6-speed box)
+0x4a63d8 g_plr_rpm ; float, sound only
+0x4a63dc g_plr_skid ; int 0..10 squeal/skid marks/smoke
+0x4a63cc g_plr_brake_light
+0x4a63c8 g_plr_abs_old ; ABS flag for the old model
+0x4a63d0 g_plr_easy_old ; difficulty == 0 (old model)
+0x4a63e4 g_plr_stop_latch ; byte
+0x4a6480 g_hb_time ; handbrake slide 0..1
+0x4a6484 g_hb_rev_time ; handbrake + gas at standstill
+0x4a6488 g_hb_speed
+0x4a648c g_hb_unused
+0x4a6490 g_hb_heading
+0x4a6494 g_hb_sliding
+0x4a6498 g_plr_forced_brake ; events 3/6/8
+0x4d9e68 g_plr_vmax ; car_calc_vmax
+0x4d9e38 g_plr_money
+0x4d9e48 g_plr_pos ; vec3 copy
+0x4d9e64 g_plr_autopilot
+0x4d9e70 g_plr_progress ; chunks driven
+0x4d9e58 g_race_started
+0x4d9ce4 g_engine_snd1
+0x4d9ce8 g_engine_snd2
+0x48b440 g_damage_sounds ; {handle, threshold 65/75, sample 37/38}
+0x48b460 g_squeal_snd
+0x4d9ec0 g_upg_motor
+0x4d9ec4 g_upg_banden
+0x4d9ec8 g_upg_turbo
+0x4d9ecc g_upg_abs
+0x4d9ed0 g_upg_gearbox ; VERSNELLINGSBAK
+0x4d9ed4 g_upg_injectie
+0x4d9ab0 g_difficulty
+0x4d9b1c g_dif_mod
+0x4d9b10 g_opt_ai_model
+0x4d9b20 g_opt_demo
+0x4d9aa8 g_collision_off
+0x4d9e0c g_copland ; player drives the police car
+0x4d9af0 g_opt_stuur_model ; 0 new / 1 old
+0x4d9df0 g_steer_k ; 3.0 old-model speed falloff
+0x4a5dc8 g_steer_min_deg ; 5 kbd/pad, 3 analog/FF
+0x4a5d48 g_steer_max_deg ; 25 / 20
+0x4d9cf8 g_steer_curve ; int[31] SENSITIVITY response
+; input (di_*.cpp, winlib joystick/keys, gm_init.cpp), see docs/INPUT.md
+0x423910 set_game_input ; reads GAME.INI [INPUT], init/set input devices, DI+FF setup if DEVICE=4
+0x424490 init_input_module ; (l,r,u,d,ex1,ex2,ex3,ex4,sens) -> g_input_key[], joystick-1 slot keys
+0x424590 set_input_devices ; DEVICE 1..4 -> g_input_device/g_input_key_mode, joypad slot remap
+0x4246c0 handle_input_module ; digital bitmask L1 R2 U4 D8 E1 0x10 E2 0x20 (DEVICE 1,2)
+0x4247f0 handle_input_module_stear ; analog (w,h,&x,&y) via winmm joystick 1, returns bitmask (DEVICE 3)
+0x427de0 plr_collision_feedback ; FF bump effects on collision (+damage)
+0x466910 key_down ; GetAsyncKeyState(vk)<0 ? -1 : 0, Shift rule (vk|0x100 = with Shift)
+0x466960 key_is_pressed ; (vk, devmask 1 kbd / 2 joystick)
+0x46e690 joy_init ; winmm joystick 1+2 detect, centre (Xbase/Ybase), joyGetDevCaps min/max
+0x46ea70 joy_clear_keys
+0x46eac0 joy_update_keys ; stick dirs (10% deadzone) + buttons -> slot active flags
+0x46ebc0 joy_poll_keys ; joyGetPosEx for joysticks 1,2
+0x46ec80 joy_set_key ; (n, slot 0..7, vk)
+0x46ed90 joy_get_position ; (n,w,h,&x,&y,&flags) scaled 0..w/0..h, Y inverted
+0x46efc0 joy_key_active ; any joystick slot with key==vk active
+0x4363c0 di_init_global ; di_init on g_di
+0x436570 di_init ; DirectInputCreateA(hinst,0x500), enum devices
+0x4366a0 di_exit
+0x439f00 di_add_device ; 1 kbd, 2 mouse, 3..6 joystick 1..4
+0x4368a0 di_add_keyboard
+0x436d50 di_add_mouse
+0x437650 di_add_joystick1
+0x437af0 di_add_joystick2
+0x437f90 di_add_joystick3
+0x438430 di_add_joystick4
+0x438c70 di_joy_get_xyz ; poll + lX,lY,lZ
+0x439990 di_joy_button ; rgbButtons[b]
+0x439a70 di_set_axis_range ; DIPROP_RANGE X,Y
+0x439b30 di_set_deadzone ; DIPROP_DEADZONE X,Y
+0x439bf0 di_set_autocenter ; DIPROP_AUTOCENTER
+0x439cb0 di_create_effect ; by EnumEffects name, returns g_di_effects index
+0x439e00 di_has_ff ; caps & DIDC_FORCEFEEDBACK
+0x439f80 di_reacquire_all
+0x43b1c0 di_info_enum ; EnumDevices all / attached / forcefeedback
+0x43acc0 di_info_print
+0x43ba10 di_dev_create ; CreateDevice + QI IDirectInputDevice2, EnumObjects
+0x43bac0 di_dev_set_data_format
+0x43bb10 di_dev_set_coop_level ; hwnd 0x4eabd0
+0x43bb70 di_dev_get_caps
+0x43bbe0 di_dev_is_ff
+0x43bc60 di_dev_acquire
+0x43bc90 di_dev_set_dword_prop
+0x43bd20 di_dev_set_range_prop
+0x43bdb0 di_dev_unacquire
+0x43bdd0 di_dev_release
+0x43c220 di_mouse_init
+0x43c2d0 di_joy_init
+0x43c530 di_ffjoy_init ; + EnumEffects
+0x43c270 di_joy_ctor
+0x43c4a0 di_ffjoy_ctor
+0x43c410 di_joy_poll ; Poll + GetDeviceState, reacquire on INPUTLOST
+0x43c570 di_dev_create_effect
+0x43d920 di_enum_effects ; di_eneff.cpp
+0x435290 di_effects_init ; T_ARRAY di_effects[n]
+0x4353f0 di_new_constant_effect
+0x4358a0 di_effect_base_ctor ; gain 7500, CARTESIAN|OBJECTOFFSETS
+0x435f70 di_constant_effect_ctor ; magnitude, duration 1s, axes X|Y
+0x435950 di_effect_create ; CreateEffect
+0x4359b0 di_effect_create_guid
+0x4359f0 di_effect_start_n ; Start(n, flags)
+0x435a60 di_effect_start ; Start(1,0)
+0x435b20 di_effect_apply ; SetParameters(flags)
+0x435b80 di_effect_set_duration ; us
+0x435c00 di_effect_set_axes
+0x435d80 di_effect_set_direction ; (x,y,z) int
+0x436070 di_effect_set_magnitude ; DICONSTANTFORCE
+0x4d8e48 g_ff_pedal ; FF effect idx, Y spring
+0x4d8e4c g_ff_steer ; FF effect idx, X spring
+0x4d8e50 g_ff_bump_y ; FF effect idx, collision Y
+0x4d8e54 g_ff_bump_x ; FF effect idx, collision X
+0x4d8e58 g_ff_jolt ; FF effect idx, turbo/handbrake Y
+0x4d8e60 g_input_key ; int[8] VK: L,R,U,D,EXTRA1,EXTRA2,0,0
+0x4d8e80 g_input_device ; DEVICE 1..4
+0x4d8e84 g_input_key_mode ; 1 keyboard, 2 joystick
+0x4d8e88 g_input_sensitivity ; SENSITIVITY 0..100
+0x4d8e8c g_ff_available
+0x4d8e90 g_input_inited
+0x4d9a9c g_player_control_enabled
+0x4d9b2c g_dbg_cam_car ; M key 0..3
+0x4d9cec g_plr_speed_at_input ; copy of car[+0x74]
+0x4d9df4 g_plr_gas_hold ; dead (only written 0)
+0x4d9eb8 g_no_damage ; Ctrl+Space+I cheat
+0x4e4810 g_di ; di_input object
+0x4e4866 g_di_joy1 ; DI joystick-1 device index (g_di+0x56)
+0x4e47c8 g_di_effects ; effect pointer array
+0x4f0088 g_joyinfo ; JOYINFOEX
+0x4f00c0 g_joy ; winmm joystick records, stride 0x5c, index 1..2

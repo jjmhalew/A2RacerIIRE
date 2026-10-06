@@ -356,7 +356,7 @@ void plr_input_analog(int car)
         else         { gas = 0;         brake = (50 - y)*2; } // back half = brake
         steer = 2*x - 100;                                    // linear, no curve, no SENSITIVITY
     }
-    if (bits & 0x10) { g_plr_handbrake = 1; g_4a63cc = 0; }   // button 1 = handbrake
+    if (bits & 0x10) { g_plr_handbrake = 1; g_plr_brake_light = 0; } // button 1 = handbrake (0x4a63cc)
     else               g_plr_handbrake = 0;
     plr_handle_turbo(car, (bits & 0x20) != 0);                // button 2 = turbo
 }
@@ -423,11 +423,11 @@ void plr_handle_turbo(int car, int on)                        // 0x425cf0
         DWORD t = GetTickCount();
         if (t - g_turbo_last_tick /*0x4d9e1c*/ < 100) return; // one turbo unit per 100 ms
         g_turbo_last_tick = t;
-        if (g_turbo_charges /*0x4d9e3c*/ > 0) {
+        if (g_player_turbo /*0x4d9e3c*/ > 0) {
             if ((g_turbo_snd /*0x48b464*/ == -1 || !snd_is_playing(g_turbo_snd)) && !g_turbo_snd_on /*0x4d9e18*/) {
                 g_turbo_snd = snd_play(0x54); g_turbo_snd_on = 1;
             }
-            g_turbo_charges--;
+            g_player_turbo--;
             if (*grip != 6.0f) g_turbo_saved /*0x4d9cf0*/ = *grip;
             *grip = 6.0f;
             g_plr_turbo_active = 1;
@@ -700,7 +700,7 @@ g_pause_request = 0;
 | 0x4d9e08 | g_plr_brake | int 0..100 |
 | 0x4d9e18 / 0x48b464 | g_turbo_snd_on / g_turbo_snd | turbo sound 0x54 |
 | 0x4d9e1c | g_turbo_last_tick | |
-| 0x4d9e3c | g_turbo_charges | decremented per 100 ms of turbo |
+| 0x4d9e3c | g_player_turbo | decremented per 100 ms of turbo |
 | 0x4d9e68 | g_plr_vmax | |
 | 0x4d9eb8 | g_no_damage | Ctrl+Space+I |
 | 0x4e4810 | g_di | di_input object |
@@ -718,5 +718,5 @@ g_pause_request = 0;
   (the default). Probably an untested combination in the original; a port should replicate it or decide.
 - `sub_40da90` (physics) has a switch on `g_input_device` whose cases 1-3 are identical and case 4 skips a lateral
   velocity correction; not decoded here (physics).
-- `g_4a63cc` (cleared by DEVICE 3 button 1, read in the player update / physics) was not identified.
+- `0x4a63cc` is `g_plr_brake_light` (set by the engine code while braking, see PHYSICS.md 5.2); DEVICE 3 clears it on handbrake.
 - The meaning of the car-table float at 0x484bf2 + 238*type that turbo sets to 6.0 belongs to the physics doc.

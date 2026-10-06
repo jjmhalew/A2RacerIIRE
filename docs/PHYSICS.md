@@ -17,7 +17,7 @@ apparent bugs) is transcribed as is and marked **[quirk]**.
 |---|---|
 | world position (3D instance +0x50/+0x54/+0x58) | 1/10 m ("decimetre"): the integrator multiplies velocities by 10 |
 | object velocity (+0x6c/+0x70/+0x74) | m/s, in the car's local frame: x = lateral, y = vertical, z = forward |
-| displayed speed `g_plr_speed_kmh` 0x4d9e34 | `ftol(v_forward * 3.6f)` |
+| displayed speed `g_player_speed_kmh` 0x4d9e34 | `ftol(v_forward * 3.6f)` |
 | angles of 3D instances (+0x74 pitch, +0x78 yaw, +0x7c roll) | 1024 units per turn (`c_angle_units` 0x49b014 = 1024.0f, mask 0x49b018 = 1023) |
 | sin/cos tables | `SIN` = *(float**)0x4ea418, `COS` = *(float**)0x4ea4b4, 1024 entries, `SIN[i] = sin(2*pi*i/1024)` (math3d.cpp 0x450280) |
 | yaw rate (object +0x7c) | rad/s (integrator converts with 1024/2pi) |
@@ -25,7 +25,9 @@ apparent bugs) is transcribed as is and marked **[quirk]**.
 | gas / brake input (new model) | 0..100 (brake is an int) |
 
 World yaw `a = 2*pi*yaw/1024`. A local displacement (dx, dz) moves the car by
-`x += COS[a]*dx - SIN[a]*dz; z += SIN[a]*dx + COS[a]*dz` (see 6.2).
+`x += COS[a]*dx - SIN[a]*dz; z += SIN[a]*dx + COS[a]*dz` (see 6.2). In Direct3D's left-handed frame (+x right,
++y up, +z forward at yaw 0) an increasing yaw turns the nose from +z toward -x, i.e. **left**. LEFT key -> negative
+steer -> positive yaw rate -> left turn.
 
 ## 2. Frame loop and timestep
 
@@ -62,7 +64,7 @@ float timer_frame_dt(Timer *t)       // 0x441cd0
      around the player, or `obj.always_update(+0x40)`) call `obj.update_cb(+0x44)(i)`. The player's update callback is
      `handle_player_car` 0x425e20 (registered by `init_player_car`, see 4.1); AI and traffic have their own.
    * then `obj_move_all` 0x440ea0: integrates and collides every object of the physics list (6.1).
-3. `ai_check_cars_outside_handling_range` 0x40b2d0, `handle_game_cameras` 0x4144b0, `plr_tyre_effects`
+3. `ai_check_cars_outside_handling_range` 0x40b2d0, `handle_game_cameras` 0x4144b0, `tyre_smoke_emitter`
    0x425a90 (squeal sound + smoke, 9.2), skid marks `0x41dd00(player, g_plr_skid)`, `render_game` 0x425090,
    `check_game_keys` 0x424ee0, paths/helicopter, `handle_game_actions` 0x4168c0 (events), time-out check
    (clock 0xb), damage check: `if (plr_get_damage() >= 99 && g_game_event == 0) set_game_event(6)` (wrecked =
@@ -125,7 +127,7 @@ torque += P.x*F.z - P.z*F.x), `obj_get_child_instance` 0x43fbb0 (wheel sub-objec
 | 0x4d9e08 | g_plr_brake | brake, **int** 0..100 (new model) |
 | 0x4d9df8 | g_plr_handbrake | 0/1 |
 | 0x4d9dfc | g_plr_turbo_active | 0/1 |
-| 0x4d9e3c | g_turbo_charges | turbo "fuel" 0..100 (100 if TURBO bought, else 0) |
+| 0x4d9e3c | g_player_turbo | turbo "fuel" 0..100 (100 if TURBO bought, else 0) |
 | 0x4d9e40 | g_plr_fuel | set to 100 in plr_init 0x427fd0, never read: **there is no fuel consumption** |
 | 0x4a63e0 | g_plr_gear | current gear index 0..4 (0..5 with the 6-speed box) |
 | 0x4a63d8 | g_plr_rpm | engine rpm (float, only for the engine sound) |
@@ -139,8 +141,8 @@ torque += P.x*F.z - P.z*F.x), `obj_get_child_instance` 0x43fbb0 (wheel sub-objec
 | 0x4a6494 | g_hb_sliding | byte, written only |
 | 0x4a6498 | g_plr_forced_brake | forced handbrake latch for game events 3/6/8 |
 | 0x4d9e68 | g_plr_vmax | theoretical top speed from the car-type table (sub_40ce10), used by the old model |
-| 0x4d9e30 | g_plr_damage | 0..100 |
-| 0x4d9e34 | g_plr_speed_kmh | int |
+| 0x4d9e30 | g_player_damage | 0..100 |
+| 0x4d9e34 | g_player_speed_kmh | int |
 | 0x4d9e70 | g_plr_progress | chunks driven (signed) |
 | 0x4d9ec0/c4/c8/cc/d0/d4 | g_upg_motor / banden / turbo / abs / versnellingsbak / injectie | Game.ini [PLAYER] upgrades |
 | 0x4d9ab0 | g_difficulty | [OPTIONS] Difficulty 0 easy / 1 hard |
@@ -240,7 +242,7 @@ if (g_upg_motor)  { t->max_torque *= 1.3; t->torque_rpm *= 1.1; t->max_rpm *= 1.
 if (g_upg_banden) { t->tyreF_B *= 1.2; t->tyreF_D *= 1.2; t->tyreR_B *= 1.2; t->tyreR_D *= 1.2; } // +0x4a +0x52 +0x56 +0x5e
 if (g_upg_abs)    g_plr_abs_old = 1;
 if (g_upg_gearbox) copy gearbox B (+0xaa..+0xce) over gearbox A (+0x7a..+0x9e)   // ratios, final drive, +0x9a, +0x9e
-if (g_upg_turbo)  g_turbo_charges = 100;
+if (g_upg_turbo)  g_player_turbo = 100;
 g_turbo_saved = t->turbo_mul;         // 0x4d9cf0
 ```
 
@@ -283,8 +285,8 @@ int handle_player_car(int o)
     if (c->chunk != c->prev_chunk)                              // progress in chunks (for the race order)
         g_plr_progress += (chunk_moved_forward(c->chunk, c->prev_chunk) /*0x407660*/ == 1 ? 1 : -1)
                           * rceng_chunk_distance(c->chunk, c->prev_chunk);
-    g_plr_speed_kmh = ftol(player->vz * 3.6f);
-    g_plr_chunk(0x4d9e44) = c->chunk;  g_plr_pos(0x4d9e48..50) = inst->pos;
+    g_player_speed_kmh = ftol(player->vz * 3.6f);
+    g_player_chunk(0x4d9e44) = c->chunk;  g_plr_pos(0x4d9e48..50) = inst->pos;
     obj_clear_forces(c);                                        // 0x43fb90
     plr_engine_sound();                                         // 0x427070, 9.1
     brake lights on/off from g_plr_brake_light (0x41b560 / 0x42b100)
@@ -520,10 +522,10 @@ void plr_handle_turbo(int o, int pressed)
         DWORD now = GetTickCount();
         if (now - g_turbo_last_tick < 100) return;           // keeps the current state
         g_turbo_last_tick = now;
-        if (g_turbo_charges > 0) {
+        if (g_player_turbo > 0) {
             if ((g_turbo_snd == -1 || !sound_playing(g_turbo_snd)) && !g_turbo_snd_on)
                 { g_turbo_snd = sfx_play(0x54); g_turbo_snd_on = 1; }
-            g_turbo_charges--;                                // 100 charges x 0.1 s = 10 s per race
+            g_player_turbo--;                                // 100 charges x 0.1 s = 10 s per race
             CarType *t = &g_car_types[g_plr_car];
             if (t->turbo_mul != 6.0f) g_turbo_saved = t->turbo_mul;
             t->turbo_mul = 6.0f;
@@ -650,8 +652,8 @@ truncation makes 1 (or 0 at lower rates): the velocity vector lags the body and 
 
 ### 6.4 Height reset `car_road_height_reset` 0x40ede0
 
-`h = chunk_height_at(chunk, x, z); if (h - 1 > inst->y) { inst->y = h - 1 (sic, stored via the returned st0); c->vy = -c->vy; }`
-and returns h (used to place the car on the road when the autopilot drives).
+`h = chunk_height_at(chunk, x, z); if (h - 1 > inst->y) { inst->y = h - 1; c->vy = -c->vy; } return h;`
+The autopilot branch of handle_player_car then stores the returned h into `inst->y`.
 
 ### 6.5 Wheels `car_update_wheels` 0x413900 (car_whl.cpp, player only)
 
@@ -682,10 +684,11 @@ int r = ftol(g_plr_rpm);
 sample1: freq = clamp(24000 - r, 11000, 24000); vol = clamp(-(r/8), -2000, -100) - master - 200;
 sample2: freq = min(10000 + ftol(3*rpm), 40000); vol = clamp(r/2 - 2000, -2000, -100) - master - 200;
 ```
-### 9.2 Tyre squeal / smoke `plr_tyre_effects` 0x425a90 -> 0x4259a0
+### 9.2 Tyre squeal / smoke `tyre_smoke_emitter` 0x425a90 -> 0x4259a0
 If `g_plr_skid >= 4`: loop sample 0x27 with `vol = clamp((skid-11)*100, -1100, -100) - master - 100`,
-`freq = clamp(skid*700 + 15000, 15000, 28000)`; else stop it. Every 100 ms while skid >= 4 two smoke puffs
-(`0x41fff0`) are emitted at the rear wheels (local (+-9 wide, -3 high, -9 back) rotated by the yaw, size
-`-10*car_types[t].f(+0x26 / 2)`...). Skid marks: `0x41dd00(player, g_plr_skid)`.
+`freq = clamp(skid*700 + 15000, 15000, 28000)`; if skid < 4 the sample is stopped. Every 100 ms (GetTickCount)
+while skid >= 4, `0x425a90` emits two smoke puffs (`0x41fff0`, gfx_wolk.cpp) at the rear wheels: local offsets
+x = +-9 (x0.6 velocity-dependent drift added), y = +3, z = -10 * car_types[t].cg_rear(+0x26), rotated by the yaw
+(table index `ftol(yaw) & 1023`). Skid marks: `gfx_skid 0x41dd00(player, g_plr_skid)` every frame.
 
 ## 10. Open questions

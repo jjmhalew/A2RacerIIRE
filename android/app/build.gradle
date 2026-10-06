@@ -1,0 +1,50 @@
+plugins {
+    id 'com.android.application'
+}
+
+// the version of the Windows build (res/a2racerre.rc), so every build of a release says the same
+def rc = file('../../res/a2racerre.rc').text
+def a2Version = (rc =~ /"ProductVersion",\s*"([0-9.]+)"/)[0][1]
+def a2Parts = a2Version.tokenize('.').collect { it as int }
+
+android {
+    namespace 'io.github.jjmhalew.a2racerre'
+    compileSdk 35
+    ndkVersion '27.2.12479018'
+
+    defaultConfig {
+        applicationId 'io.github.jjmhalew.a2racerre'
+        minSdk 24
+        targetSdk 35
+        versionCode a2Parts[0] * 10000 + a2Parts[1] * 100 + a2Parts[2]
+        versionName a2Version
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'        // phones and tablets; x86_64 for the emulator and Chromebooks
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'   // 16 KB pages (Android 15 devices)
+            }
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path 'CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            // a release signed with your own key: -Pa2Keystore=... -Pa2KeyAlias=... -Pa2KeyPassword=...;
+            // without one the release APK carries the debug key, which is fine for installing it yourself
+            signingConfig project.hasProperty('a2Keystore') ? signingConfigs.create('a2') {
+                storeFile file(project.a2Keystore); storePassword project.a2KeyPassword
+                keyAlias project.a2KeyAlias; keyPassword project.a2KeyPassword
+            } : signingConfigs.debug
+        }
+    }
+    lint {
+        abortOnError false
+    }
+}

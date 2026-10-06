@@ -2,6 +2,7 @@
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "audio.h"
+#include "datasetup.h"
 #include "film.h"
 #include "gfx.h"
 #include "image.h"
@@ -12,17 +13,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char *find_data(int argc, char **argv)
+/* the first argument that is not an option or an option's value: a data folder, the CD or an ISO image */
+static const char *path_arg(int argc, char **argv)
 {
-    for (int i = 1; i < argc; i++)
-        if (argv[i][0] != '-' && (i == 1 || argv[i - 1][0] != '-')) return argv[i];
-    static const char *cand[] = { "data", "extract/data", "../extract/data" };
-    for (size_t i = 0; i < sizeof cand / sizeof cand[0]; i++) {
-        char p[600];
-        snprintf(p, sizeof p, "%s/RCS.IMG", cand[i]);
-        if (plat_exists(p)) return cand[i];
+    for (int i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+            if (strcmp(argv[i], "--verify") && strcmp(argv[i], "--windowed") && strcmp(argv[i], "--fullscreen")) i++;
+            continue;
+        }
+        return argv[i];
     }
-    return "data";
+    return NULL;
 }
 
 static const char *arg_value(int argc, char **argv, const char *name)
@@ -140,11 +141,18 @@ static int view_track(int etappe, int chunk)
 
 int main(int argc, char **argv)
 {
-    res_set_dir(find_data(argc, argv));
     PlatConfig cfg = { 960, 720, 0, 1, "A2RacerRE" };
     if (!plat_init(&cfg)) return 1;
     if (!gfx_init()) { plat_message("OpenGL 2.1 / OpenGL ES 2.0 shaders are not available.", 1); return 1; }
     int rc = 0;
+    const char *iso = arg_value(argc, argv, "--copy-iso");   /* test: --copy-iso file.iso dest */
+    if (iso) return data_copy_iso(iso, "out/isocopy") ? 0 : 1;
+    const char *data = data_find(path_arg(argc, argv));
+    if (!data) { plat_shutdown(); return 1; }
+    res_set_dir(data);
+    printf("data: %s\n", data);
+    for (int i = 1; i < argc; i++)
+        if (!strcmp(argv[i], "--verify")) { rc = data_verify(data) ? 1 : 0; plat_shutdown(); return rc; }
     g_shot = arg_value(argc, argv, "--shot");
     audio_init();
     const char *film = arg_value(argc, argv, "--film");

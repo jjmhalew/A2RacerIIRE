@@ -57,7 +57,7 @@ The palette is loaded and then set with `peFlags` 0x40 (PC_NOCOLLAPSE) through `
 | `e02_pl16.pcx` | 640x480 | 16-bit palette (image is solid magenta) |
 | `SCRL_LO.pcx` 480x200, `SCRL_HI.pcx` 960x320, `Scroll.pcx` 800x200 | | software-mode scrolling sky (`Scroll.pcx` unused); see RENDER.md |
 | `back1..7.pcx` | 128² | accelerated-mode sky backdrop, one picked at random per race (`0x423574`, table `0x48a790`) |
-| `e0N_w_lo.pcx` 320x200, `e0N_w_hi.pcx` 640x480 | | "wait" (loading) screens with the route map, Raser.ini `[wait_lo]`/`[wait_hi]` |
+| `e0N_w_lo.pcx` 320x200, `e0N_w_hi.pcx` 640x480 | | "wait" (loading) screens with the route map, Raser.ini `[wait_lo]`/`[wait_hi]`; 8-bit modes only (the 16-bit mode uses the `.tga` of the `[wait_hi]` name), so `e0N_w_hi.pcx` only shows in 640x480x8 |
 | `loradar.pcx` 64², `hiradar.pcx` 128² | | all index 254 (empty): radar texture that is drawn into at run time (texture copy) |
 | `init.pcx` | 2048² | 8-bit/RAMP path: the "main accumulator texture", texture 0. `texture_set_partition(8.0)` `0x459d50` splits it into 8x8 slots of 256². It holds a stray screenshot; its content is irrelevant (`texture_init_accumulator` `0x459db0`) |
 | `palet.pcx`, `normcar1.pcx`, `_BACKUP_.PCX`, `E04_recl.pcx` | | not referenced by name in spel.dat or the track files (`_BACKUP_` is an old wait screen) |
@@ -70,7 +70,7 @@ Used instead of the PCX files in the accelerated 640x480x16 mode: `texture_set_s
 - Rows are bottom-up unless descriptor bit 5 is set (none set). Pixels are B,G,R(,A). The alpha byte is read and **discarded**; transparency comes only from the colour key RGB (255,0,127).
 - Many files end with a 26-byte TGA 2.0 footer or an extension area (up to 7 KB); this is ignored.
 - `c_texture_load` `0x45af20`: when `resizetexture=1` (`[0x4eaba4]`) a non-square texture is stretched to a square of side `2^((log2 w + log2 h)/2)`.
-- The `e0N_w_hi` wait screens and `e02_h_hi.TGA` exist as TGA too, but the wait screens are always drawn from the PCX (`rcpcx_draw_to_surface`), so these TGA files are unused.
+- Wait screens: `gfx_draw_wait_screen` `0x41bde0` draws the `[wait_lo]` PCX in 8-bit modes (`rcpcx_draw_to_surface`) and, in 16-bit mode, loads the `[wait_hi]` name with the extension replaced by `.tga` (`e0N_w_hi.TGA`, 640x480) through `tga_load_surface` and blits it. `e02_h_hi.TGA` is unused.
 
 ## .fnt fonts (race; `ascii.cpp` `ascii_load_font` `0x46a2d0`)
 ```

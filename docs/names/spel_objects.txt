@@ -1,0 +1,146 @@
+0x455b50 mesh_load_d3d ; thiscall(mesh, filename): u32 nverts, nfaces; 33-byte vertices, 9-byte faces (FORMAT_D3D.md)
+0x452660 mesh_new_load ; (type 1=VERTEX|2=LVERTEX, filename) -> mesh handle; all game meshes use type 2
+0x4522a0 mesh_array_init ; (n=1186) T_ARRAY c_mesh [0x4ea898], 0xbc bytes per mesh, +0xa8 name
+0x454370 mesh_alloc ; thiscall(nverts, nindices)
+0x455ea0 mesh_post_load ; per mesh type 0x455f20 / 0x456110
+0x4537b0 mesh_free ; (mesh handle), called by the anim-config free functions at refcount <= 1
+0x455080 mesh_uv_to_texture_cell ; thiscall(texture): u' = u0 + |u|*cell_w, v' = v0 + |v|*cell_h (8-bit packed textures)
+0x4553b0 mesh_uv_from_texture_cell ; inverse of 0x455080
+0x4ea898 g_meshes ; c_mesh array data (T_ARRAY, count 0x4ea89c)
+0x45a020 textures_init ; (n) T_ARRAY c_texture; cell size = 1 / g_tex_partition, page cursor = 0
+0x45a460 texture_load ; (name) own surface, texture source pcx/tga; +0x34..+0x40 = 0,0,1,1, +0x44 = 0
+0x45a810 texture_load_packed ; (name) 8-bit software texture stretched into a cell of texture 0 (+0x44 = 1)
+0x45a950 texture_free ; (texture handle)
+0x45b370 texture_create_packed ; thiscall(name, ?) blits into the main accumulator texture cell
+0x45be80 texture_set_colorkey_index ; (0..255)
+0x4eaba8 g_tex_source ; 0 = .pcx, 1 = .tga
+0x4eaba4 g_tex_square ; device needs square textures
+0x49b020 g_tex_partition ; float, default 16.0
+0x49b024 g_tex_colorkey_index ; 0xfe: palette entry 254 = RGB(255,0,127)
+0x4eab94 g_tex_page_u ; packed-texture cursor
+0x4eab98 g_tex_page_v
+0x48d0e0 g_mesh_table ; 357 x {char *name; int handle; int refcount} + NULL (names 0x4943bc..0x495860)
+0x48e1a0 g_texture_table ; 91 x {char *name; int handle; int refcount} + NULL (names 0x493e70..0x4943b0)
+0x48e5e8 g_frame_table ; 386 x {int mesh_handle; int tex_handle; int mesh; int texture}
+0x48fe08 g_frame_lists ; int frame-index lists of the anims (to 0x492050)
+0x492050 g_anim_table ; 312 x packed {int nframes; int *frames; u8 flag}
+0x490430 g_anim_names ; 312 x char* "<NAME>_ANIM"
+0x490910 g_anim_cfg_common16 ; -1-terminated anim index list (load lists 0x490910..0x491da8, see d3dparse.py Spel.CONFIGS)
+0x4dcaac g_light_anim_frames ; .bss int (0) = frame list of OBJ_LIGHT01_ANIM
+0x4dcab0 g_anim_tables_registered ; flag: frame/anim static T_ARRAYs registered
+0x4ea420 g_frames ; T_ARRAY "frame3d_ptr" data (-> 0x48e5e8)
+0x4ea4f8 g_anims3d ; T_ARRAY "anims3d_ptr" of anim3d_t (-> 0x492050)
+0x45d650 frames_static_init ; (table, n)
+0x44d320 anims3d_static_init ; (table, n)
+0x42b310 get_anim_name_index ; (name) _stricmp over g_anim_names, 0 if not found
+0x4236d0 load_anim_config ; by g_hw3d and track: calls the anim-config loaders below
+0x4219a0 release_anim_config ; calls the matching free functions
+0x42b360 anim_cfg_load_common16
+0x42b550 anim_cfg_free_common16
+0x42b700 anim_cfg_load_common8_packed
+0x42b8f0 anim_cfg_free_common8_packed
+0x42baa0 anim_cfg_load_common8
+0x42bc90 anim_cfg_free_common8
+0x42be40 anim_cfg_load_highway16
+0x42c030 anim_cfg_free_highway16
+0x42c1e0 anim_cfg_load_highway8_packed
+0x42c3d0 anim_cfg_free_highway8_packed
+0x42c580 anim_cfg_load_highway8
+0x42c770 anim_cfg_free_highway8
+0x42c920 anim_cfg_load_city16
+0x42cb10 anim_cfg_free_city16
+0x42ccc0 anim_cfg_load_city8_packed
+0x42ceb0 anim_cfg_free_city8_packed
+0x42d060 anim_cfg_load_city8
+0x42d250 anim_cfg_free_city8
+0x42d400 anim_cfg_load_e0_16
+0x42d5f0 anim_cfg_free_e0_16
+0x42d7a0 anim_cfg_load_e0_8_packed
+0x42d990 anim_cfg_free_e0_8_packed
+0x42db40 anim_cfg_load_e0_8
+0x42dd30 anim_cfg_free_e0_8
+0x42dee0 anim_cfg_load_e1_16
+0x42e0d0 anim_cfg_free_e1_16
+0x42e280 anim_cfg_load_e1_8_packed
+0x42e470 anim_cfg_free_e1_8_packed
+0x42e620 anim_cfg_load_e1_8
+0x42e810 anim_cfg_free_e1_8
+0x42e9c0 anim_cfg_load_e2_16
+0x42ebb0 anim_cfg_free_e2_16
+0x42ed60 anim_cfg_load_e2_8_packed
+0x42ef50 anim_cfg_free_e2_8_packed
+0x42f100 anim_cfg_load_e2_8
+0x42f2f0 anim_cfg_free_e2_8
+0x42f4a0 anim_cfg_load_e3_16
+0x42f690 anim_cfg_free_e3_16
+0x42f840 anim_cfg_load_e3_8_packed
+0x42fa30 anim_cfg_free_e3_8_packed
+0x42fbe0 anim_cfg_load_e3_8
+0x42fdd0 anim_cfg_free_e3_8
+0x42ff80 anim_cfg_load_e4_16
+0x430170 anim_cfg_free_e4_16
+0x430320 anim_cfg_load_e4_8_packed
+0x430510 anim_cfg_free_e4_8_packed
+0x4306c0 anim_cfg_load_e4_8
+0x4308b0 anim_cfg_free_e4_8
+0x430a60 anim_cfg_load_e5_16
+0x430c50 anim_cfg_free_e5_16
+0x430e00 anim_cfg_load_e5_8_packed
+0x430ff0 anim_cfg_free_e5_8_packed
+0x4311a0 anim_cfg_load_e5_8
+0x431390 anim_cfg_free_e5_8
+0x4451d0 road_load_omp ; etappeN.omp: u32 n, n x 68 bytes {chunk, type, pos, rot deg, anim[32], variant}
+0x43f770 main_object_add ; (pos, rot, anim, frame, obj_handler, coll_handler, 0, state) -> main object index
+0x43fa40 main_object_init ; thiscall, creates the object3d, stores handlers (+0x44/+0x48), +0x10, +0x14
+0x458340 object3d_new ; (pos, rot, anim, frame) -> object3d index (OBJECT3D.CPP)
+0x441f20 rceng_set_static_handler ; (type 0..256, obj_handler, coll_handler)
+0x441f60 rceng_get_static_object_handler ; (type)
+0x441f90 rceng_get_static_collision_handler ; (type)
+0x4e5dd0 g_static_handlers ; 257 x {obj_handler, coll_handler}
+0x48c2a8 g_track_object_types ; 11 x {type, obj_handler, coll_handler}
+0x429310 init_track_object_types ; registers g_track_object_types
+0x428bc0 object_hit ; (obj, flag) collision response used by many handlers (?)
+0x428ea0 object_flyup_check_collision ; string; state 0x10
+0x429020 object_fall_over ; (obj, ...) velocity damping, rotation steps -64/-32/-48 (?)
+0x429380 objtype_solid ; types 1 and 5
+0x4293f0 objtype_pylon ; type 2
+0x4297d0 objtype_barrier ; type 3
+0x429480 objtype_traffic_light ; type 4, frame from g_traffic_light_state
+0x4295d0 objtype_6 ; type 6 (unused in the data)
+0x428d30 objtype_speed_camera ; type 7 (flitspaal)
+0x4296b0 objtype_arrow ; type 8
+0x4293a0 objtype_police_car ; type 10
+0x40c920 car_cops_add_static ; .omp type 9: police car with cop AI
+0x48c484 g_traffic_light_state ; 0/2/3 cycle
+0x433710 pth_load ; etappe%d.pth: version -1, n, n x {start, end, type, lap, time_ms, npoints, points[16 bytes]}
+0x433a00 init_3d_paths
+0x433b10 pth_get_position ; (path, out, ..., t, k, loop) Hermite spline over the points
+0x434030 hermite_1d
+0x434150 pth_update_one ; calls g_path_type_funcs[type].update
+0x434220 pth_activate ; takes an active-path slot, frames = time_ms*0.001/frame time
+0x434380 pth_update_all
+0x434460 pth_check_triggers ; start_chunk == g_player_chunk, lap match, once per lap
+0x4e0710 g_paths ; 20 x 0x33c
+0x4e47c0 g_npaths
+0x4e0580 g_active_paths ; 10 x 0x28
+0x4966f0 g_path_type_funcs ; 8 x {init, update, release}
+0x4969f8 g_traffic_car_anims ; 5 x char* N_BUS/N_VRTAUT/N_BESTEL/N_GOLF/N_ASTRA _ANIM
+0x432a10 pth_type1_init
+0x432a80 pth_type1_update
+0x432a70 pth_type1_release
+0x432bd0 pth_police_init ; MPOLIZEI_ANIM
+0x432db0 pth_police_update
+0x432d80 pth_police_release
+0x434800 pth_boat_init ; E00_ROND_ANIM
+0x4348f0 pth_boat_update
+0x4348d0 pth_boat_release
+0x434a70 pth_tram_init ; C_TREIN_ANIM
+0x434b60 pth_tram_update
+0x433170 pth_heli_init ; C_HELI_ANIM + blades, city tracks only
+0x4333b0 pth_heli_update
+0x433380 pth_heli_release
+0x434cf0 pth_car_init ; random traffic car
+0x434df0 pth_car_update
+0x434550 pth_plane_init ; A_VLIEGT_ANIM
+0x434670 pth_plane_update
+0x434640 pth_release_object
