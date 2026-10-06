@@ -5,6 +5,7 @@
 #include "rules.h"
 #include "effects.h"
 #include "flag.h"
+#include "fog.h"
 #include "font3d.h"
 #include "gfx.h"
 #include "hud.h"
@@ -240,6 +241,8 @@ static void trigger(Race *r, int id, int prev, int cur)
         if (G.limit_ms) timer_start(11, G.limit_ms, 1);
         break;
     case 15: G.armed = 1; break;                     /* trigger_arm_finish 0x429a10 */
+    case 16: fog_trigger_fade_start(); break;        /* 0x429ad0 / 0x429b20 (fog.c; on no track of the CD) */
+    case 17: fog_trigger_fade_end(); break;
     case 14:                                         /* trigger_finish 0x429950 */
         if (!(G.state == GS_RACING || G.state == 7 || G.state == GS_COPSTOP) || !G.armed) break;
         if (!fwd) { G.armed = 0; break; }            /* "trying to finish illegal" */

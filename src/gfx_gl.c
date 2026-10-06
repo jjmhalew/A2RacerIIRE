@@ -105,13 +105,15 @@ struct GfxMesh {
 };
 
 static GLuint g_prog, g_white, g_stream_vbo;
-static GLint u_mvp, u_tex, u_alpha_test, u_fog, u_fogcol, u_fogrange, u_tint, u_mv;
+static GLint u_mvp, u_tex, u_alpha_test, u_fog, u_fogcol, u_fogrange, u_tint, u_mv, u_decal;
 static Mat4 g_proj, g_view, g_model;
 static int g_w, g_h, g_has_mipmap;
 static float g_aniso;           /* anisotropic filtering of mipmapped textures (GL_EXT_texture_filter_anisotropic), 0 = none */
 static float g_fog[5];
 static float g_tint[4] = { 1, 1, 1, 1 };
 static int g_depth_off;         /* gfx_set_depth_off */
+static int g_fog_on, g_decal;   /* gfx_set_fog_on / gfx_set_decal, until the next gfx_begin */
+static int g_2d;                /* from gfx_2d_begin to the next gfx_set_matrices: no fog, no decal */
 /* 2D */
 static int g_vw = 640, g_vh = 480;
 static float g_ox, g_oy, g_scale;
@@ -124,9 +126,9 @@ static const char *VS =
     "  gl_Position = u_mvp * vec4(a_pos, 1.0); }\n";
 static const char *FS =
     "uniform sampler2D u_tex; uniform float u_alpha_test; uniform float u_fog; uniform vec4 u_fogcol; uniform vec4 u_fogrange;\n"
-    "uniform vec4 u_tint;\n"
+    "uniform vec4 u_tint; uniform float u_decal;\n"
     "varying vec2 v_uv; varying vec4 v_col; varying float v_dist;\n"
-    "void main() { vec4 c = texture2D(u_tex, v_uv) * v_col * u_tint;\n"
+    "void main() { vec4 t = texture2D(u_tex, v_uv); vec4 c = (u_decal > 0.5 ? t : t * v_col) * u_tint;\n"
     "  if (c.a < u_alpha_test) discard;\n"
     "  if (u_fog > 0.5) { float f = clamp((v_dist - u_fogrange.x) / (u_fogrange.y - u_fogrange.x), 0.0, 1.0);\n"
     "    c.rgb = mix(c.rgb, u_fogcol.rgb, f); }\n"
@@ -186,8 +188,10 @@ int gfx_init(void)
     u_fogcol = glGetUniformLocation(g_prog, "u_fogcol");
     u_fogrange = glGetUniformLocation(g_prog, "u_fogrange");
     u_tint = glGetUniformLocation(g_prog, "u_tint");
+    u_decal = glGetUniformLocation(g_prog, "u_decal");
     glUniform1i(u_tex, 0);
     glUniform4f(u_tint, 1, 1, 1, 1);
+    glUniform1f(u_decal, 0);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
@@ -209,6 +213,7 @@ void gfx_begin(int width, int height, float r, float g, float b)
 {
     g_w = width;
     g_h = height;
+    g_fog_on = g_decal = 0;
     glViewport(0, 0, width, height);
     glDepthMask(1);
     glClearColor(r, g, b, 1);
@@ -257,6 +262,7 @@ void gfx_set_matrices(const Mat4 *proj, const Mat4 *view)
     g_proj = *proj;
     g_view = *view;
     g_model = m4_identity();
+    g_2d = 0;
     upload_mvp();
 }
 
@@ -280,6 +286,8 @@ void gfx_set_tint(float r, float g, float b, float a)
 }
 
 void gfx_set_depth_off(int off) { g_depth_off = off; }
+void gfx_set_fog_on(int on) { g_fog_on = on; }
+void gfx_set_decal(int on) { g_decal = on; }
 
 GfxState gfx_state_opaque(void)
 {
@@ -300,8 +308,9 @@ static void apply_state(const GfxState *s)
     if (s->depth_test && !g_depth_off) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
     glDepthMask(s->depth_write && !g_depth_off ? 1 : 0);
     if (s->cull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
-    glUniform1f(u_alpha_test, s->alpha_test ? 0.5f : -1.0f);
-    glUniform1f(u_fog, s->fog ? 1.0f : 0.0f);
+    glUniform1f(u_alpha_test, s->alpha_test == 2 ? 0.02f : s->alpha_test ? 0.5f : -1.0f);
+    glUniform1f(u_fog, (s->fog || g_fog_on) && !g_2d ? 1.0f : 0.0f);
+    glUniform1f(u_decal, g_decal && !g_2d ? 1.0f : 0.0f);
 }
 
 static void set_pointers(void)
@@ -394,6 +403,7 @@ void gfx_2d_begin(int vw, int vh)
 {
     g_vw = vw;
     g_vh = vh;
+    g_2d = 1;
     float sx = (float)g_w / vw, sy = (float)g_h / vh;
     g_scale = sx < sy ? sx : sy;
     g_ox = (g_w - vw * g_scale) * 0.5f;

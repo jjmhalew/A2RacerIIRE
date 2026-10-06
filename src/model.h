@@ -24,6 +24,10 @@ int  anim_frames(int anim);
 /* the model of frame `frame` of anim (loaded on first use); NULL when it cannot be loaded */
 const Model *anim_model(int anim, int frame);
 const Model *model_get(int mesh, int texture);
+/* the vertices (white, opaque) and triangle indices of frame `frame` of anim as the .d3d file has them, with the frame's
+ * texture and its width, for the effects that rewrite a mesh's vertices (car shadow, object lights); 0 = missing.
+ * Free *v and *idx with free(). */
+int anim_mesh_raw(int anim, int frame, GfxVertex **v, int *nv, uint16_t **idx, int *ni, unsigned *tex, int *tex_w);
 /* draws the model at pos, turned by yaw (radians, the original's convention: front +z turns towards +x) */
 void model_draw(const Model *m, Vec3 pos, float yaw);
 void model_draw_matrix(const Model *m, const Mat4 *world);

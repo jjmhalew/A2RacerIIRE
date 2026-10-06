@@ -1917,6 +1917,23 @@ static void ai_rank_racers(void)                                      /* 0x408cb
 
 int ai_player_position(void) { return g_player_position; }
 int ai_difficulty(void) { return g_difficulty; }
+int ai_visible_chunks(void) { return g_visible_chunks; }
+
+static float g_dt_hist[4];              /* g_dt_hist 0x4e4928 / g_dt_hist_idx 0x4e4980 */
+static int g_dt_idx;
+
+void ai_frame_rate_governor(double frame_seconds, int racing)
+{
+    /* timer_update 0x441bd0: the game timer's dt is a weighted average of the last 4 frames (1/2, 1/4, 1/8, 1/8) */
+    g_dt_hist[g_dt_idx] = (float)frame_seconds;
+    float avg = g_dt_hist[g_dt_idx] * 0.5f + g_dt_hist[(g_dt_idx + 3) & 3] * 0.25f + g_dt_hist[(g_dt_idx + 2) & 3] * 0.125f
+              + g_dt_hist[(g_dt_idx + 1) & 3] * 0.125f;
+    g_dt_idx = (g_dt_idx + 1) & 3;
+    /* timer_frame_dt 0x441cd0: 0 or more than 0.1 s -> 0.1f; handle_game 0x424c98: if g_game_event == 0 and
+     * 1 / dt < 10 (true for 0.1f) and visiblechunks > (g_hw_accel ? 25 : 15): visiblechunks-- */
+    float dt = avg == 0 || avg > 0.1 ? 0.1f : avg;
+    if (racing && 1.0 / dt < 10.0 && g_visible_chunks > 25) g_visible_chunks--;
+}
 
 static void ai_fsm_handle_all(void)                                   /* 0x408ed0 */
 {
@@ -2495,6 +2512,8 @@ static void read_options(void)
     g_visible_chunks = ini_int(g, "OPTIONS", "visiblechunks", 30);
     if (g_visible_chunks < 10) g_visible_chunks = 10;
     if (g_visible_chunks > 50) g_visible_chunks = 50;
+    memset(g_dt_hist, 0, sizeof g_dt_hist);
+    g_dt_idx = 0;
     g_nr_laps = ini_int(g, "OPTIONS", "Nrlaps", 2);
     if (!R->track.city) g_nr_laps = 1;
     g_startchunk = ini_int(g, "OPTIONS", "STARTCHUNK", 0);

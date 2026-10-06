@@ -136,7 +136,7 @@
 0x410280 ai_steer_physics ; (fsm) steering -> yaw rate, lateral velocity, body roll; skid mode
 0x410b60 init_all_cars ; loads car types, player, traffic, racers, FSM, cops, adac
 0x410bc0 add_car ; (car_type, chunk, lane, side, dir, handler, collision_cb, list_type) -> object
-0x4110e0 object_set_f24 ; objects[obj].f24 = g_4d9a90
+0x4110e0 object_set_shadow ; objects[obj].+0x24 = g_shadow_instance 0x4d9a90 (the car shadow, gfx_shdw.cpp)
 0x411100 car_list_clear
 0x411120 car_list_add ; 'get_free_car_list_entry'
 0x411170 init_racer_cars ; 3 CPU racers: grid slot, car model, behaviour 7..13, HANDLE_RACER_AI 0x40ac90

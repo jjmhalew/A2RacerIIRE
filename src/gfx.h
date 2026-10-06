@@ -20,7 +20,8 @@ enum GfxTexFlags { TEX_CLAMP = 1, TEX_NEAREST = 2, TEX_MIPMAP = 4 };
 
 typedef struct {
     int blend;              /* GfxBlend */
-    int alpha_test;         /* discard texels with alpha < 0.5 (colour-keyed textures) */
+    int alpha_test;         /* 1: discard texels with alpha < 0.5 (colour-keyed textures); 2: only the colour key
+                               (alpha ~0), for blended draws whose vertex alpha must not cut (shadows, lights) */
     int depth_test, depth_write;
     int cull;               /* 0 none, 1 cull counter-clockwise faces (the original's D3DCULL_CCW) */
     int fog;
@@ -46,6 +47,11 @@ unsigned gfx_white(void);                            /* 1x1 white */
 void gfx_set_matrices(const Mat4 *proj, const Mat4 *view);
 void gfx_set_model(const Mat4 *model);               /* NULL = identity */
 void gfx_set_fog(float r, float g, float b, float start, float end);
+/* The device-wide states of the original, for all 3D drawing until the next gfx_begin (never in gfx_2d_begin mode):
+ * FOGENABLE (linear fog on the eye depth with gfx_set_fog's values, as if every GfxState had fog set), and
+ * TEXTUREMAPBLEND COPY (= DECAL on a HAL device: the texture's colour and alpha replace the vertex colour). */
+void gfx_set_fog_on(int on);
+void gfx_set_decal(int on);
 void gfx_set_tint(float r, float g, float b, float a);
 /* 1: no depth test and no depth writes for what is drawn until it is set back to 0 (D3DRENDERSTATE_ZENABLE off) */
 void gfx_set_depth_off(int off);

@@ -34,9 +34,14 @@
 0x418830 bkg_set_fog_params ; fog colour/start/end from progress, also background material colour
 0x4190d0 draw_bkg ; TEXTUREHANDLE + 2x DrawPrimitive(TRIANGLEFAN, TLVERTEX)
 0x429e30 fog_enable ; FOGENABLE 1, LINEAR, colour 0xb4b4c8, start 3.5, end 1000
-0x429ad0 trigger_fog_fade_start ; trigger vtable 0x48c4c0 (?)
-0x429b20 trigger_fog_fade_end ; fog off, colour 0xc8c8ff
-0x4157e0 ev_fog_fade_update ; fog colour fade step (+5,+2,-5)
+0x429ad0 trigger_fog_fade_start ; track trigger 16 (handler table 0x48c488): only stores the fade state 0x4dc9a8..0x4dc9c0 (no track of the CD has it)
+0x429b20 trigger_fog_fade_end ; track trigger 17: FOGENABLE 0 for the rest of the race, colour 0xc8c8ff, start 3.5, end 1000, 0x4dc9a0 = 0
+0x4157e0 ev_fog_fade_update ; game action 5: fog colour fade step (+5,+2,-5); dead: runs only while 0x4dc9a0 is set, which nothing does
+0x429ab0 fog_fade_register ; game_action_register(5, nullsub, ev_fog_fade_update, nullsub)
+0x4dc9a0 g_fog_fade_active ; only read and cleared
+0x48815c g_fog_base_color ; int[3] (220, 125, 55), (220, 125, 100) once fog is on; 0x488168 = -50 (green per |sin(clock)|)
+0x488150 g_bkg_horizon_base ; int[3] (200, 55, 55)
+0x4a7d74 g_bkg_initted
 0x44c750 d3dlib_force_rgb_device ; RESOLUTION 5
 0x44c760 d3dlib_get_d3d2 ; QueryInterface IID_IDirect3D2 -> 0x4ea9cc
 0x44c7b0 d3dlib_init ; z-buffer, device, palette, texture format, lights, materials, viewport, clear
@@ -192,7 +197,7 @@
 0x41cf90 radar_calc_window ; 64x64 / 128x128 map window around the player
 0x41d040 radar_update_texture ; copy map window + dots into the radar texture
 0x41d280 radar_rotate_quad ; rotate radar quad by camera heading
-0x41d360 radar_draw ; DrawPrimitive of the radar quad (listing continues with gfx_shdw code)
+0x41d360 radar_draw ; DrawPrimitive of the radar quad
 0x410a10 car_heading_matches_track ; 0 = driving against track direction (HUD U-turn sign)
 0x415c50 ev_sweep_text_init ; (rec, text, font, y, seconds, active): text to a colour-keyed surface, frames = ftol(seconds/dt)
 0x415e80 ev_sweep_text_draw ; scanlines slide in (odd from the left, even from the right), s = sin(1024/frames*frame); 1 = in place / gone
@@ -240,7 +245,18 @@
 0x41e850 sky_blit ; per frame before BeginScene, top 2/3 of screen, wraps horizontally
 0x41e9d0 sky_build_rects
 0x4cc018 g_sky_surface ; 0x4cc028 image w, 0x4cc01c x offset
-0x41d810 skid_register
+0x41d460 shadow_draw_cb ; gfx_shdw.cpp: (obj) the car-shadow callback: quad = car mesh floor rectangle, car matrix +2 x/z, y = road + 0.5; SRCALPHA/INVSRCALPHA if alpha_blending
+0x41d810 shadow_register ; obj_set_shadow_callback(0x41d460) (from init_game; not skid code)
+0x410df0 init_car_shadow_object ; Car_main.cpp: the S_SHADOW_ANIM instance -> 0x4d9a90; vertex colour 0x80000000, uv 2 texels inside
+0x4d9a90 g_shadow_instance ; object +0x24 of every car (add_car, car_cops_add_static), -1 for other objects
+0x410bb0 free_car_shadow_object ; exit_game
+0x441ef0 obj_set_shadow_callback ; [0x4e5dc8] = fn
+0x441f00 obj_call_shadow_callback ; (obj) if set: fn(obj)
+0x4e5dc8 g_shadow_callback
+0x440990 obj_draw_all ; (start, nchunks, shadow instance, 1) from render_game: 0x4409e0 (hw uv) or 0x440b30
+0x4409e0 obj_draw_window ; objects in the drawn chunk window: shadow callback (+0x24 != -1), then obj_draw_with_damage
+0x440b30 obj_draw_window_split ; same, transparent-texture objects (g_textures +0x44) first, then the rest with their shadows
+0x456110 mesh_calc_bounds_lvertex ; mesh +0xc = 1, +0x10..+0x6b: the 8 bounding-box corners (+0x10 = min x/y/z, +0x1c max x min y min z, +0x40 min x min y max z, +0x4c max x min y max z, ...)
 0x41d850 skid_check_index ; 0..19
 0x41d880 skid_wheel_point ; car-local (+-7, 1.0, -10*h) +-2 across velocity
 0x41d9b0 skid_make_points
@@ -282,8 +298,12 @@
 0x41b560 light_set_on
 0x41b5a0 light_create
 0x41b720 light_draw ; SRCALPHA/INVSRCALPHA
-0x4aa860 g_light ; [20] stride 0x10
-0x425500 create_brake_lights ; OBJ_LIGHT01_ANIM
+0x4aa860 g_light ; [20] stride 0x10: +0 used, +4 on, +8 object, +0xc instance
+0x4aa9a0 g_lights_initted
+0x425500 create_brake_lights ; OBJ_LIGHT01_ANIM, player car only (from init_player_car)
+0x485c28 g_brake_light_pos ; float[7][2][3]: per car type the left and right brake light (car space)
+0x48b458 g_brake_light ; [2] light indices
+0x4d9e10 g_brake_lights_lit ; handle_player_car switches the lights only on a change
 0x431f20 prt_init
 0x431f60 prt_frame
 0x431fb0 prt_alloc_pool ; 4000

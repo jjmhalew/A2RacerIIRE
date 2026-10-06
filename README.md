@@ -15,7 +15,8 @@ Playable from start to end, still being polished. What runs today:
   options, standings, help), the seven *etappes* (city races and highway qualifications), prize money and results
 - all tracks with their scenery, traffic lights, trams, boats, the helicopter and the aircraft
 - the player's car with the original's handling (both steering models, ported 1:1), the four cameras, the in-race
-  overlay in the original's fonts, skid marks, tyre smoke and sparks
+  overlay in the original's fonts, car shadows, brake lights, skid marks, tyre smoke and sparks, and the optional fog
+  (Game.ini `fog`)
 - traffic, the three opponents and the police (speed checks, pursuit, arrest), collisions and damage
 - the race rules: start sequence, laps and records, checkpoints and the highway time limit, speed cameras, quick
   service, game over, pause and quit
@@ -139,5 +140,6 @@ Environment: `A2_HIDDEN=1` opens no visible window (screenshots still work; with
 `A2_TEST_FINISH=N` finishes a race N seconds after the start (and continues 3 s later), `A2_TEST_GAMEOVER=N[,R]` ends
 it N seconds after the start with game over reason R (0 total loss, 1 time up, 2 arrested; continues 8 s later),
 `A2_TEST_CAM=N` holds camera view N (0..10, the original's player views, e.g. 6 front-left, 8 low rear-left),
+`A2_TEST_FOG=1` makes Game.ini `fog=1`/`2` apply in every race instead of a random half (with `--menu-userdir`),
 `A2_NO_FILMS=1` skips the films, `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
 `A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state.

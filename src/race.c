@@ -7,8 +7,10 @@
 #include "collide.h"
 #include "effects.h"
 #include "exetab.h"
+#include "fog.h"
 #include "gfx.h"
 #include "hud.h"
+#include "lights.h"
 #include "texture.h"
 #include "ini.h"
 #include "model.h"
@@ -17,6 +19,7 @@
 #include "res.h"
 #include "rules.h"
 #include "sfx.h"
+#include "shadow.h"
 #include "wheels.h"
 #include <math.h>
 #include <stdio.h>
@@ -637,6 +640,7 @@ int race_init(Race *r, int etappe, int car)
     collide_init(r);
     paths_load(etappe);
     fx_reset();
+    shadow_init(); lights_init(r); fog_init();         /* init_game / init_player_car: shadows, brake lights, fog */
     sfx_init();
     static const RulesHooks hooks = { ai_player_position, ai_save_racers };
     rules_init(r, &hooks);                             /* state 1: the start camera and the countdown */
@@ -667,6 +671,7 @@ static void race_tick(void)
     }
     R->cam_draw0 = R->cam_pos;
     R->tgt_draw0 = R->cam_target;
+    lights_tick(R);             /* the brake lights, at the start of handle_player_car (last tick's brake_light) */
     for (int o = 0; o < R->nobj; o++)
         if (R->obj[o].used && R->obj[o].active && R->obj[o].update && ai_obj_in_window(o)) R->obj[o].update(o);
     wheels_tick(R);             /* car_update_wheels(_ai), run by the cars' handlers in the original */
@@ -712,7 +717,7 @@ static void draw_sky(void)
     int dc = abs(c->chunk - R->start_chunk) * 2;
     float t = (float)(dc % (2 * n)) / n;
     float a = fabsf(sinf(t * PI_F / 2)), b = fabsf(sinf(t * PI_F)), cc = fabsf(sinf(t * PI_F / 4));
-    (void)a;
+    fog_frame(a);                                       /* bkg_set_fog_params 0x418830 (fog.c) */
     float br = 200 + 25 * cc, bg = 55 + 175 * cc, bb = 55;
     uint8_t hr = (uint8_t)(br + (255 - br) * b), hg = (uint8_t)(bg + (255 - bg) * b), hb = (uint8_t)(bb + (255 - bb) * b);
     float H = 480, y1 = H / 3;
@@ -729,6 +734,7 @@ static void draw_sky(void)
     gfx_set_matrices(&p, &id);
     GfxState st = { BLEND_NONE, 0, 0, 0, 0, 0 };
     gfx_draw_tris(v, 12, R->sky_tex, &st);
+    fog_sky(v, 12, a);
 }
 
 static void fmt_time(char *b, size_t n, int ms)
@@ -822,9 +828,10 @@ static void race_draw(float alpha)
     float fovy = 2 * atanf(tanf(40.5f * PI_F / 180) * 0.75f);
     Mat4 proj = m4_perspective(fovy, (float)w / h, 10, 12500), view = view_lh(eye, tgt);
     gfx_set_matrices(&proj, &view);
-    int start = track_visible_start(&R->track, R->cam_chunk, v3_sub(tgt, eye), 2, 30);
-    track_draw(&R->track, start, 30, 0);
-    objects_draw(&R->objects, &R->track, start, 30);
+    int vis = ai_visible_chunks();                      /* g_visible_chunks 0x4d9a8c (render_game 0x42518b) */
+    int start = track_visible_start(&R->track, R->cam_chunk, v3_sub(tgt, eye), 2, vis);
+    track_draw(&R->track, start, vis, 0);
+    objects_draw(&R->objects, &R->track, start, vis);
     paths_draw();
     for (int o = 0; o < R->nobj; o++) {
         const Obj *c = &R->obj[o];
@@ -843,9 +850,12 @@ static void race_draw(float alpha)
         /* the visual body pitch and roll (ANGLE_UNITS) */
         Mat4 body = m4_mul(m4_rot_x(-c->pitch * TWO_PI / ANGLE_UNITS), m4_rot_z(c->roll * TWO_PI / ANGLE_UNITS));
         m = m4_mul(m, body);
+        shadow_draw(R, o, &m);                          /* the shadow callback, just before the body (shadow.c) */
+        lights_attach(o, &m);
         model_draw_matrix(anim_model(c->anim, c->frame), &m);
         wheels_draw(R, o, &m, alpha);
     }
+    lights_draw();                                      /* render_game: object lights after the objects (lights.c) */
     gfx_set_model(NULL);
     {   /* the effects' billboards copy the camera's orientation */
         Vec3 f = v3_norm(v3_sub(tgt, eye)), rt = v3_norm(v3_cross(v3(0, 1, 0), f)), up = v3_cross(f, rt);
@@ -863,6 +873,7 @@ int race_frame(Race *r, double now)
     double el = now - r->last_time;
     r->last_time = now;
     if (el > 0.25) el = 0.25;
+    ai_frame_rate_governor(el, r->game_event == 0);    /* handle_game: below 10 fps visiblechunks-- */
     game_keys();
     if (rules_paused()) el = 0;                         /* the pause dialog stops the game */
     r->accum += el;

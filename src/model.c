@@ -33,8 +33,9 @@ static float rdf(const uint8_t *p) { float f; memcpy(&f, p, 4); return f; }
 static uint32_t rd32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 
 /* .d3d: u32 nverts, nfaces; nverts x 33 bytes (x,y,z, nx,ny,nz, u,v floats + 1 unused byte);
- * nfaces x 9 bytes (u16 a,b,c + 3 unused bytes). E04_koor.D3D has 24 zero bytes in front (it is never loaded). */
-static int load_mesh(Model *m, const char *name, unsigned tex)
+ * nfaces x 9 bytes (u16 a,b,c + 3 unused bytes). E04_koor.D3D has 24 zero bytes in front (it is never loaded).
+ * Vertices white (the original's type-2 load: colour 0x00ffffff, here opaque), faces with valid indices only. */
+static int parse_d3d(const char *name, GfxVertex **pv, int *pnv, uint16_t **pidx, int *pni)
 {
     size_t n = 0;
     uint8_t *d = res_load(name, &n);
@@ -43,13 +44,46 @@ static int load_mesh(Model *m, const char *name, unsigned tex)
     if (8 + (size_t)nv * 33 + (size_t)nf * 9 != n || nv > 65535) { free(d); fprintf(stderr, "mesh %s: bad size\n", name); return 0; }
     GfxVertex *v = malloc(sizeof *v * (nv ? nv : 1));
     uint16_t *idx = malloc(sizeof *idx * (nf ? nf : 1) * 3);
-    m->min = v3(1e9f, 1e9f, 1e9f);
-    m->max = v3(-1e9f, -1e9f, -1e9f);
     for (uint32_t i = 0; i < nv; i++) {
         const uint8_t *p = d + 8 + i * 33;
         v[i].x = rdf(p); v[i].y = rdf(p + 4); v[i].z = rdf(p + 8);
         v[i].u = rdf(p + 24); v[i].v = rdf(p + 28);
         v[i].r = v[i].g = v[i].b = v[i].a = 255;
+    }
+    int ni = 0;
+    for (uint32_t i = 0; i < nf; i++) {
+        const uint8_t *p = d + 8 + nv * 33 + i * 9;
+        int a = p[0] | p[1] << 8, b = p[2] | p[3] << 8, c = p[4] | p[5] << 8;
+        if ((uint32_t)a >= nv || (uint32_t)b >= nv || (uint32_t)c >= nv) continue;
+        idx[ni++] = (uint16_t)a; idx[ni++] = (uint16_t)b; idx[ni++] = (uint16_t)c;
+    }
+    free(d);
+    *pv = v; *pnv = (int)nv; *pidx = idx; *pni = ni;
+    return 1;
+}
+
+int anim_mesh_raw(int anim, int frame, GfxVertex **v, int *nv, uint16_t **idx, int *ni, unsigned *tex, int *tex_w)
+{
+    if (anim < 0 || anim >= g_tab.nanims || g_tab.anim[anim].nframes <= 0) return 0;
+    const Anim *a = &g_tab.anim[anim];
+    if (frame < 0 || frame >= a->nframes) frame = 0;
+    const AnimFrame *f = &g_tab.frames[a->first + frame];
+    if (f->mesh < 0 || f->mesh >= g_tab.nmeshes) return 0;
+    const Texture *t = f->texture >= 0 && f->texture < g_tab.ntextures ? tex_get(g_tab.texture[f->texture]) : NULL;
+    if (tex) *tex = t ? t->id : 0;
+    if (tex_w) *tex_w = t ? t->w : 0;
+    return parse_d3d(g_tab.mesh[f->mesh], v, nv, idx, ni);
+}
+
+static int load_mesh(Model *m, const char *name, unsigned tex)
+{
+    GfxVertex *v;
+    uint16_t *idx;
+    int nv, ni;
+    if (!parse_d3d(name, &v, &nv, &idx, &ni)) return 0;
+    m->min = v3(1e9f, 1e9f, 1e9f);
+    m->max = v3(-1e9f, -1e9f, -1e9f);
+    for (int i = 0; i < nv; i++) {
         if (v[i].x < m->min.x) m->min.x = v[i].x;
         if (v[i].y < m->min.y) m->min.y = v[i].y;
         if (v[i].z < m->min.z) m->min.z = v[i].z;
@@ -59,22 +93,14 @@ static int load_mesh(Model *m, const char *name, unsigned tex)
         float r = sqrtf(v[i].x * v[i].x + v[i].y * v[i].y + v[i].z * v[i].z);
         if (r > m->radius) m->radius = r;
     }
-    int ni = 0;
-    for (uint32_t i = 0; i < nf; i++) {
-        const uint8_t *p = d + 8 + nv * 33 + i * 9;
-        int a = p[0] | p[1] << 8, b = p[2] | p[3] << 8, c = p[4] | p[5] << 8;
-        if ((uint32_t)a >= nv || (uint32_t)b >= nv || (uint32_t)c >= nv) continue;
-        idx[ni++] = (uint16_t)a; idx[ni++] = (uint16_t)b; idx[ni++] = (uint16_t)c;
-    }
     /* colour key = alpha test; faces are visible when clockwise on screen (D3DCULL_CCW), see gfx cull */
     GfxRange r = { tex, 0, ni, gfx_state_opaque() };
     r.state.cull = 1;
-    m->mesh = gfx_mesh_create(v, (int)nv, idx, ni, &r, 1);
-    m->nverts = (int)nv;
-    m->nfaces = (int)nf;
+    m->mesh = gfx_mesh_create(v, nv, idx, ni, &r, 1);
+    m->nverts = nv;
+    m->nfaces = ni / 3;
     free(v);
     free(idx);
-    free(d);
     return 1;
 }
 
