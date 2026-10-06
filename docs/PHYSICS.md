@@ -18,7 +18,7 @@ apparent bugs) is transcribed as is and marked **[quirk]**.
 | world position (3D instance +0x50/+0x54/+0x58) | 1/10 m ("decimetre"): the integrator multiplies velocities by 10 |
 | object velocity (+0x6c/+0x70/+0x74) | m/s, in the car's local frame: x = lateral, y = vertical, z = forward |
 | displayed speed `g_player_speed_kmh` 0x4d9e34 | `ftol(v_forward * 3.6f)` |
-| angles of 3D instances (+0x74 pitch, +0x78 yaw, +0x7c roll) | 1024 units per turn (`c_angle_units` 0x49b014 = 1024.0f, mask 0x49b018 = 1023) |
+| angles of 3D instances (+0x74 pitch, +0x78 yaw, +0x7c roll) | **4096 units per turn** at run time: `init_main` passes 0x1000 to `d3dlib_init` 0x44c7b0 -> `math3d_init_tables` 0x450280, which overwrites `c_angle_units` 0x49b014 (1024.0f in the file) with 4096.0 and the mask 0x49b018 with 4095, and builds 4096-entry SIN/COS tables. Wherever this document says 1024 for an angle, read the run-time value 4096 (`ANGLE_UNITS` in the engine) |
 | sin/cos tables | `SIN` = *(float**)0x4ea418, `COS` = *(float**)0x4ea4b4, 1024 entries, `SIN[i] = sin(2*pi*i/1024)` (math3d.cpp 0x450280) |
 | yaw rate (object +0x7c) | rad/s (integrator converts with 1024/2pi) |
 | steering input (new model) | -100..100 (negative = LEFT key) |
@@ -1353,9 +1353,8 @@ x = +-9 (x0.6 velocity-dependent drift added), y = +3, z = -10 * car_types[t].cg
 
 1. **The keyboard brake does not work above 40 fps.** It is an int that grows by `ftol(40*dt)` (INPUT.md 5.2). A port
    probably wants a fixed-step option or a float brake behind a "fix" flag.
-2. **Yaw is wrapped at +-4096 in `car_drive_new`, but angles are 1024 per turn.** `car_steer_new` also derives
-   `heading` with `&0xfff / 4096`. The heading is only stored (`g_hb_heading`), so the effect is unknown or
-   cosmetic.
+2. ~~Yaw is wrapped at +-4096 in `car_drive_new`, but angles are 1024 per turn.~~ Resolved: angles are 4096 per turn at
+   run time (section 1), so the wrap and `car_steer_new`'s `&0xfff / 4096` heading are correct.
 3. **Roll scale in the old model.** It uses `11.377778 = 1024/90`, which gives up to ~52 degrees of body roll.
    `1024/360` was possibly intended.
 4. **The old model has no road-height spring.** It never calls `car_body_height`, so the player's y does not follow
