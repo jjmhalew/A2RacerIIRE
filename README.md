@@ -10,14 +10,20 @@ and Android, at any resolution and frame rate.
 > A2 Racer and related names are trademarks of their owners. You need your own copy of the original game to play.
 
 ## Status
-Work in progress. What runs today:
-- all seven tracks (*etappes*) with their scenery, objects, sky and the original's chunk-by-chunk drawing
-- the player's car with the original's handling (the "new" A2 Racer II steering model, ported 1:1: automatic gearbox,
-  grip, drift, handbrake, turbo, upgrades), the four cameras, the in-race overlay (HUD) in the original's fonts
-- the Smacker films, the sound mixer, the first-start copy from the CD or an ISO image
+Playable from start to end, still being polished. What runs today:
+- the whole career: intro, the menu program (nine save slots, garage with upgrades and repairs, showroom, controls,
+  options, standings, help), the seven *etappes* (city races and highway qualifications), prize money and results
+- all tracks with their scenery, traffic lights, trams, boats, the helicopter and the aircraft
+- the player's car with the original's handling (both steering models, ported 1:1), the four cameras, the in-race
+  overlay in the original's fonts, skid marks, tyre smoke and sparks
+- traffic, the three opponents and the police (speed checks, pursuit, arrest), collisions and damage
+- the race rules: start sequence, laps and records, checkpoints and the highway time limit, speed cameras, quick
+  service, game over, pause and quit
+- the Smacker films, sound effects and engine sounds, the first-start copy from the CD or an ISO image
 
-In progress: traffic, opponents and police, collisions and damage, the race rules (laps, checkpoints, finishing,
-prize money), the menu program (garage, showroom, save slots, standings), sound effects. See [docs/](docs).
+Not yet: the countdown's 3D letters are not animated, wheels of the cars are not drawn separately, a few events
+(game over) use simplified cameras. Linux and Android builds come from CI and have not been tried on a device yet.
+See [docs/](docs) for everything known about the original.
 
 ## Playing
 1. Get `A2RacerRE.exe` from the [Releases](../../releases) page, or build it yourself (below). The exe is not
@@ -114,4 +120,9 @@ Developer switches of `out\a2racer.exe`:
 ./out/a2racer.exe --track 0 --chunk 300             # fly along the track
 ./out/a2racer.exe --film intro.smk                  # play a film
 ./out/a2racer.exe --image hoofd.PCX --archive Mrcs  # show an image
+./out/a2racer.exe --menu                            # the menu program alone (--menu-first: as after the intro)
+./out/a2racer.exe --menu-shot garage out/g.png      # one menu screen as a PNG
+./out/a2racer.exe --menu-userdir out/t --menu-script "w20 enter"   # scripted menu input, own settings folder
 ```
+Environment: `A2_HIDDEN=1` opens no visible window (screenshots still work; with `SDL_AUDIODRIVER=dummy` also no sound),
+`A2_TEST_FINISH=N` finishes a race N seconds after the start, `A2_TRACE=1` prints the car and AI state.
