@@ -127,4 +127,5 @@ Developer switches of `out\a2racer.exe`:
 Environment: `A2_HIDDEN=1` opens no visible window (screenshots still work; with `SDL_AUDIODRIVER=dummy` also no sound),
 `A2_TEST_FINISH=N` finishes a race N seconds after the start (and continues 3 s later), `A2_TEST_GAMEOVER=N[,R]` ends
 it N seconds after the start with game over reason R (0 total loss, 1 time up, 2 arrested; continues 8 s later),
+`A2_TEST_CAM=N` holds camera view N (0..10, the original's player views, e.g. 6 front-left, 8 low rear-left),
 `A2_TRACE=1` prints the car and AI state.

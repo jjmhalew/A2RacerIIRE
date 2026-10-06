@@ -675,6 +675,7 @@ static void race_tick(void)
     if (p->chunk != p->prev_chunk) rules_player_chunk_changed(R, p->prev_chunk, p->chunk);   /* the track triggers */
     ai_tick();                  /* traffic recycling, game actions (arrest, game over), the racer and cop FSMs */
     rules_tick(R);
+    if (R->race_started && getenv("A2_TEST_CAM")) R->cam_mode = atoi(getenv("A2_TEST_CAM")) % 11;   /* tests: a view */
     R->race_ms = (float)rules_race_ms();
     paths_update(p->chunk, rules_lap(), R->dt);
     {   /* the player's sounds and effects */
