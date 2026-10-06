@@ -36,6 +36,12 @@ void ai_game_action_start(int action);
 int  ai_plr_autopilot(int o);
 
 int  ai_difficulty(void);                      /* g_difficulty 0x4d9ab0: Game.ini [OPTIONS] Difficulty, 0 easy / 1 hard */
+/* g_visible_chunks 0x4d9a8c: Game.ini [OPTIONS] visiblechunks (10..50, CD 30): the chunks drawn (road, objects) and
+ * the AI's handling and traffic windows */
+int  ai_visible_chunks(void);
+/* the frame-rate governor of handle_game 0x424c98, once per drawn frame with its real duration: below 10 fps while
+ * racing (g_game_event 0) visiblechunks drops by one, not below 25 (never rises again) */
+void ai_frame_rate_governor(double frame_seconds, int racing);
 int  ai_player_position(void);                /* g_player_position 0x4d9e60: racers ahead of the player (0 = leading) */
 /* the race end (sub_422d40): extrapolates unfinished racers (racers_finish_estimate 0x4114a0) and writes
  * Game.ini [RACERS] n=car,position,time and count; player_position = the player's place when crossing the line */

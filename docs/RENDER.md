@@ -77,8 +77,17 @@ Device object layout (offsets from `0x4ea5a0`):
   forward . road direction > 0.5736 (cos 55 deg) start = cam_chunk - 2; if < -0.5736 (looking back)
   start = cam_chunk + 2 - visiblechunks; otherwise start = cam_chunk - visiblechunks/2 (wrapping). Road
   (`0x4454f0`) and objects (`0x440990`) are drawn for `visiblechunks` chunks from there.
-- Frame-rate governor in `0x424a70` handle_game: if fps < 10 and visiblechunks > (g_hw3d ? 25 : 15), visiblechunks
-  is decreased by 1 (never increased again). Tweak mode prints `frameRate: %f` / `vchunks: %d`.
+- Frame-rate governor in `0x424a70` handle_game (0x424c98, after the frame is shown): if g_game_event == 0 (racing),
+  1 / timer_frame_dt < 10 and visiblechunks > (g_hw3d ? 25 : 15), visiblechunks is decreased by 1 (never increased
+  again). The timer's dt is a weighted average of the last 4 frame times (1/2, 1/4, 1/8, 1/8; timer_update 0x441bd0),
+  and timer_frame_dt 0x441cd0 returns 0.1f for 0 or more than 0.1 s, whose reciprocal (9.99999985) is below 10: so
+  every racing frame with an averaged frame time of 0.1 s or more costs one chunk. The same global is the AI's window
+  (traffic recycling, handling range), so a slow machine also shrinks those. Tweak mode prints `frameRate: %f` /
+  `vchunks: %d`.
+- Port: `ai_visible_chunks()` (src/ai.c, which reads the ini value) is the drawn chunk count of race_draw (road,
+  objects) and `ai_frame_rate_governor` runs once per drawn frame with its real duration. Not reproduced: the
+  original's pause dialog is a modal loop, so the first frame after a pause counts the whole pause and drops a chunk;
+  the port keeps drawing frames while paused.
 
 ## 3. Render states
 
@@ -107,6 +116,7 @@ TEXTUREHANDLE. D3DBLEND: 2 ONE, 5 SRCALPHA, 6 INVSRCALPHA.
 
 | Function | Effect | ALPHABLEND | SRC / DEST | Other |
 |---|---|---|---|---|
+| `0x41d460` | car shadows | 1 -> 0 (alpha_blending only) | SRCALPHA / INVSRCALPHA | in the object pass, before each car |
 | `0x41b720` | object lights (brake lights) | 1 -> 0 | SRCALPHA / INVSRCALPHA | |
 | `0x41d360` | radar (HUD, 3D quad) | 1 -> 0 | SRCALPHA / INVSRCALPHA | TL fan |
 | `0x41f420` | sparks | - | - | no blend (opaque), LVERTEX TRIANGLELIST |
@@ -148,8 +158,9 @@ sky backdrop image is loaded (`0x4234e0`), so the sky is not darkened.
    3. `0x44cb70` viewport Clear with **D3DCLEAR_ZBUFFER only** - the colour buffer is never cleared in the
       accelerated path; the sky backdrop (step 7) covers every pixel the world does not.
    4. BeginScene.
-   5. `0x4454f0` road chunks, then `0x440990` all objects (track objects, cars incl. player, shadows), for
-      `visiblechunks` chunks from `0x4252b0` (see 2.). Opaque, Z-buffered, colour-keyed.
+   5. `0x4454f0` road chunks, then `0x440990` all objects (track objects, cars incl. player, each car right after
+      its shadow, see 9. "Car shadows"), for `visiblechunks` chunks from `0x4252b0` (see 2.). Opaque, Z-buffered,
+      colour-keyed.
    6. `0x41d360` 3D radar (HUD; only if texturecopy, overlay on, overlay_detail > 0).
    7. Alpha/transparent passes, in this order: `0x41b720` object lights, `0x41f420` sparks, **`0x4190d0` sky
       backdrop** (accelerated path), `0x41e3a0` skid marks, `0x4203d0` clouds, `0x431f60` particles,
@@ -285,18 +296,35 @@ Only when `g_hw3d = 0` and `Game.ini [OPTIONS] BACKGROUND` (`0x4d9a80`) is 0.
   linear in yaw (probably an original quirk).
 
 ## 8. Fog
-- `Game.ini [OPTIONS] fog` (`0x4d9abc`, default 0, "conflicts with alpha blending"). Only in the accelerated path,
-  and only in half of the races: `0x418da0` init_bkg enables it if `fog != 0 && (rand() & 1)`.
-  If fog == 1 (not 2) it also switches TEXTUREMAPBLEND to 7 (COPY) and re-applies the FILTER setting.
+- `Game.ini [OPTIONS] fog` (`0x4d9abc`, CD 0, "conflicts with alpha blending"). Only in the accelerated path,
+  and only in half of the races: `0x418da0` init_bkg (from init_game) enables it if `fog != 0 && (rand() & 1)`.
+  Unless fog == 2 it first switches TEXTUREMAPBLEND to 7 (COPY) and re-applies the FILTER setting (no change).
+  COPY is, per the DX5 documentation, "equivalent to DECAL" on a HAL device: the texture's colour and alpha replace
+  the vertex colour and alpha. The 16-bit textures have no alpha, so everything that relies on vertex colour or alpha
+  changes: the sky loses its horizon gradient, the car shadow becomes an opaque black rectangle, the brake glows
+  opaque grey discs, the smoke puffs fully additive, the finish flag an opaque chequer over the whole screen, and the
+  skid marks (alpha 255 = invisible with their INVSRCALPHA / SRCALPHA blend) disappear - the conflict. fog = 2 keeps
+  MODULATE. The COPY state stays for the whole race, also when trigger 17 switches the fog off.
 - `0x429e30` fog_enable: FOGENABLE = 1, fog mode LINEAR (D3DLIGHTSTATE fog = vertex fog done by the D3D lighting
-  module, not table fog), colour 0xb4b4c8 (R=180,G=180,B=200), start 3.5, end 1000; the base colour of `0x418830`
-  becomes (220, 125, 100). After that `0x418830` recomputes colour/start/end every frame from the track progress
-  (see 7.): start 495..1095, end 1575..7575 world units.
-- Fog colour fade trigger (track trigger class with vtable `0x48c4c0`, `0x429ad0` start / `0x429b20` end, update
-  event `0x4157e0`): fades the fog colour from (0,0,255) by (+5, +2, -5) per step, start 3.5 end 2000; the end
-  function turns fog off and sets colour 0xc8c8ff, start 3.5, end 1000. (? where these triggers are placed)
-- OpenGL: linear fog on eye-space depth with the values above; D3D vertex fog on TL vertices uses the specular
-  alpha as fog factor (sky quad).
+  module, not table fog), colour 0xb4b4c8 (R=180,G=180,B=200), start 3.5, end 1000; init_bkg then sets the base colour
+  of `0x418830` (`0x48815c`) to (220, 125, 100). From then on `0x418830` recomputes colour/start/end every frame (called
+  by draw_bkg, so for the next frame's world) from the track progress a and the race clock (see 7.):
+  colour = ftol((255 - X0) a) + ftol(X0) per channel, X0 = (220, 125 - 50 |sin(s pi/960)|, 100), s = lap timer 0 in
+  whole seconds; start = 435 + 750 p, end = 975 + 7500 p, p = 0.08 + 0.8 a: start 495..1095, end 1575..7575 world
+  units (heavy at the start of a track, a = 0; light and white half way, a = 1).
+- The sky backdrop (TL vertices) carries its own fog factor in the specular alpha (written by bkg_update_colors every
+  frame, used only while FOGENABLE): top edge 128 + 127a, horizon and bottom 255a (255 = no fog); so at the start of
+  the track the horizon is pure fog colour.
+- Track triggers 16 and 17 (handler table `0x48c488`, `0x429ad0` / `0x429b20`, player only) - no track of the CD has
+  them (FORMAT_ROAD.md): 16 stores a fade (colour (0, 0, 255), +5/+2/-5 per step, start 3.5, end 2000) that would be
+  run by the game action 5 update `0x4157e0`, but that only runs while `0x4dc9a0` is set and nothing sets it; 17 turns
+  the fog off for the rest of the race (FOGENABLE 0, colour 0xc8c8ff, start 3.5, end 1000).
+- Port (src/fog.c): fog_init (from race_init) reads the setting and tosses the coin (`A2_TEST_FOG=1`: always on, for
+  tests); fog_frame (from the sky drawing, every frame) computes the values and sets the device-wide states of gfx.h:
+  `gfx_set_fog_on` (linear fog on the eye depth for every 3D draw until the next frame - D3D's lighting-module vertex
+  fog for the pre-lit meshes (?)) and `gfx_set_decal` (COPY: the shader takes the texture alone); the 2D overlay is
+  never fogged (it is DirectDraw in the original). fog_sky blends the fog colour over the sky with alpha 255 - factor
+  per vertex. Triggers 16 / 17 are cases of rules.c's trigger switch.
 
 ## 9. Effects
 Ini switches: `Game.ini [GFX OPTIONS]` clouds, skidmarks, fade_skmarks, particles, part_rain, object_lights,
@@ -342,12 +370,68 @@ are frame based. Billboards copy the camera orientation matrix.
 - One white triangle (+-0.225) front and back (6 LVERTEX), S_SFX uv (0.807,0.185), (0.807,0), (0.992,0).
 - Draw `0x41f420`: **no blending** (opaque, colour key); per spark SetTransform(WORLD) + TRIANGLELIST.
 
+### Car shadows (gfx_shdw.cpp)
+Port: src/shadow.c. Every car has one: the player, the CPU racers, traffic, ADAC (all through `add_car` 0x410bc0,
+which writes object +0x24) and the parked police cars of the .omp files (`car_cops_add_static` -> `object_set_shadow`
+0x4110e0); the draw loops skip objects with +0x24 = -1 (main_object_init 0x43fa40 does not write it, so other
+objects keep the array's initial -1 (?)). The path vehicles (helicopter, plane, boat, tram: main_object_add without
+add_car) have none, in the port neither.
+```c
+void init_car_shadow_object(void)              // 0x410df0, Car_main.cpp, from init_game
+{
+    g_shadow_instance = object3d_new((0,0,0), (0,0,0), S_SHADOW_ANIM, 0, 0);   // 0x4d9a90; inst +0x95 = 2
+    mesh = its frame's mesh (s_shadow.d3d: 4 vertices at y = 0, faces (2,0,3) (1,0,2)), else "shadow mesh (%d) is not square";
+    for (v = 0..3) v.color = 0x80000000, v.specular = 0;  // black, alpha 128
+    e = 2 / g_textures[tex].width;             // s_shadow: 64 x 64 (.tga), a black rounded rectangle in the colour key
+    v0.uv = (1-e, e); v1.uv = (e, e); v2.uv = (e, 1-e); v3.uv = (1-e, 1-e);
+}
+void shadow_draw_cb(int obj)                   // 0x41d460, registered by shadow_register 0x41d810
+{
+    car = objects[obj] instance; sh = objects[obj].+0x24;   // ("Object (%d) has a shadow mesh (%d) that's not square")
+    B = the car mesh's bounding box (mesh +0x10.., built by 0x456110);
+    v0.xz = (B.max.x, B.max.z); v1.xz = (B.min.x, B.max.z); v2.xz = (B.min.x, B.min.z); v3.xz = (B.max.x, B.min.z);
+    h = chunk_height_at(g_road_chunk_order[obj +0x18], car.pos.x, car.pos.z);
+    sh.pos = (car.x + 2, h + 0.5, car.z + 2); sh.rot = (0, car.yaw, 0);   // (unused: +0x95 = 2)
+    sh.M = car.M;                              // the car's matrix with its pitch and roll ...
+    sh.M.row3 = (car.M.row3.x + 2, h + 0.5, car.M.row3.z + 2);           // ... moved 2 along world x and z
+    if (g_opt_alpha_blending) { ALPHABLENDENABLE 1; SRCBLEND SRCALPHA; DESTBLEND INVSRCALPHA; object3d_draw(sh); ALPHABLENDENABLE 0; }
+    else object3d_draw(sh);                    // opaque black
+}
+```
+The object draw loops (`0x4409e0`, `0x440b30`) call the callback for every visible object of the drawn chunk window
+with +0x24 != -1, right before `obj_draw_with_damage` draws it, so the shadows are part of the opaque pass (Z test
+and write on). What it looks like: the car's footprint as a half-transparent black rounded rectangle 0.5 above the
+road, shifted 2 units along world +x and +z (a fixed "sun" direction, not turning with the car), so mostly hidden
+under the body and visible as a dark edge on two sides and in the gap under the body; it tilts with the body's pitch
+and roll. Port: drawn from race_draw just before each car's body with the drawn (interpolated) body matrix; the colour
+key is the shader's key-only alpha test (GfxState alpha_test 2), so the vertex alpha does not cut the quad. Not
+drawn in the cockpit view (the player car is not drawn), as in the original.
+
 ### Object lights / brake lights (gfx_lght.cpp)
-- `0x41b330` init (needs object_lights, g_hw3d, SRCALPHA/INVSRCALPHA caps, alpha_blending), 20 slots (`0x4aa860`).
-- `0x425500` creates 2 lights for the player car from mesh "OBJ_LIGHT01_ANIM" (positions per car type at
-  `0x485c28`/`0x485c34`; ARGB 0xFF960000 types 0-1, 0xFFFF0000 types 2-4, 0xA4FF0000 types 5-6).
-- `0x41b400` rewrites the mesh vertex colours as a radial glow: alpha = A - A*|v|/max|v|, RGB = light colour.
-- Switched on while braking (`0x41b560`). Draw `0x41b720`: SRCALPHA / INVSRCALPHA, world = local * car matrix.
+Port: src/lights.c.
+- `0x41b330` light_init (from init_game; needs object_lights, g_hw3d, SRCALPHA/INVSRCALPHA caps and alpha_blending,
+  else "Object lights disabled" and object_lights = 0): 20 records (`0x4aa860`: used, on, object, instance), each with
+  its own instance (+0x95 = 2).
+- `0x41b5a0` light_create(obj, anim, frame, pos, rot, argb): the first free record (-1 when none or object lights
+  off); the instance gets anim/frame, pos (+0x50) and rot (+0x74, pitch/yaw/roll) relative to the object, zero
+  velocities, inst_build_matrix; `0x41b400` light_set_vertex_alpha recolours the **mesh** (shared by every light, so the
+  last colour wins): alpha = A - ftol(A |v| / max |v|) (A at the origin, 0 at the farthest vertex), RGB = the light's,
+  specular 0; at most 1000 vertices.
+- `0x425500` create_brake_lights, called by init_player_car only - **the AI, traffic and police cars get no lights**:
+  two lights for the player car from "OBJ_LIGHT01_ANIM" (s_licht.d3d: a 6-vertex pentagon fan of radius ~3 in the xy
+  plane facing -z, uv in the white disc of s_sfx), positions per car type at `0x485c28` (left) / `0x485c34` (right),
+  float[7][2][3]; rotation (pitch, 0, 0) with pitch per type { 0, 0, -500, 0, 0, 0, -180 } (4096 units: the Beetle's
+  lights tilt 44 degrees, the Diablo's 16) and ARGB per type 0xFF960000 (0-1), 0xFFFF0000 (2-4), 0xA4FF0000 (5-6), both
+  stack constants of the function. Indices in `0x48b458` / `0x48b45c`.
+- handle_player_car 0x425f0b, before the driving code (so with the previous frame's value): on when
+  g_plr_brake_light == 1 (or g_plr_gas_hold, never set); only a change (`0x4d9e10`) is passed on: with object lights
+  light_set_on `0x41b560` for both, otherwise set_brake_light_texture `0x42b100` (the texture copy, not ported).
+- `0x41b720` light_draw (render_game, after the objects and the radar, before the sparks): ALPHABLENDENABLE 1,
+  SRCALPHA / INVSRCALPHA; per used and lit light: inst_build_matrix(light), M = light.M * object.M (mat_mul), draw;
+  ALPHABLENDENABLE 0. Z test and write stay on. It does not check whether the object is drawn.
+- Port: lights_init / lights_tick (start of the tick, before the cars' handlers) / lights_attach (the body matrix as
+  drawn) / lights_draw (after the cars). Only drawn with this frame's body matrix: in the cockpit view the player car
+  is not drawn and its lights (behind the camera) are skipped.
 
 ### Particles / rain (prt_main.cpp)
 - The whole module is gated by `particles` (0 in the shipped Game.ini, so off); the emitter by `part_rain`.
