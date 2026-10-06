@@ -10,6 +10,7 @@
 #include "res.h"
 #include "model.h"
 #include "objects.h"
+#include "race.h"
 #include "track.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -167,6 +168,27 @@ int main(int argc, char **argv)
     const char *film = arg_value(argc, argv, "--film");
     if (film) printf("film: %d\n", film_play(film, 1));
     if (!models_init()) { plat_message("spel.dat (the race program of the CD) is missing or not version 1.01.", 1); return 1; }
+    const char *race = arg_value(argc, argv, "--race");
+    if (race) {
+        static Race r;
+        const char *car = arg_value(argc, argv, "--car"), *drive = arg_value(argc, argv, "--drive");
+        if (!race_init(&r, atoi(race), car ? atoi(car) : 0)) return 1;
+        if (drive) { r.test_gas = 100; r.test_steer = (float)atof(drive); }
+        const char *secs = arg_value(argc, argv, "--seconds");
+        double t0 = plat_time(), until = secs ? atof(secs) : 0;
+        while (plat_poll()) {
+            int alive = race_frame(&r, plat_time());
+            if (until > 0 && plat_time() - t0 >= until) {       /* --seconds T [--shot file]: stop after T s */
+                g_shot_frames = 1;
+                if (g_shot) shot_frame();
+                break;
+            }
+            plat_swap();
+            if (!alive) break;
+        }
+        printf("speed %d km/h, gear %d, chunk %d\n", r.speed_kmh, r.gear + 1, r.obj[r.plr_obj].chunk);
+        race_free(&r);
+    }
     const char *trk = arg_value(argc, argv, "--track");
     if (trk) {
         const char *ch = arg_value(argc, argv, "--chunk");

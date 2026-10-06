@@ -1,0 +1,219 @@
+# A2 Racer II spel.dat - AI and computer-controlled vehicles (see docs/AI.md)
+# ai_cfun/ai_cops/ai_fsm/ai_lane/ai_main/ai_path/ai_racer/ai_wmap.cpp, car_cops.cpp, ev_cops.cpp, traffic + racer car creation
+# ---- functions
+0x401000 handle_adac_ai ; 'Handling Adac AI.' object handler of the ADAC car (not detected as function start by disasm.py)
+0x401200 ai_ctl_clear ; thiscall(fsm+0x30) zero fsm+0x34..+0x58
+0x401230 ai_set_steering ; (fsm, pos) steer = clamp(heading_diff*0.5, +-100) ('CalculateStearing' assert)
+0x4012c0 ai_speed_control ; (fsm, pos) v=70-|ang|/15: throttle+75/s, racers brake+400/s, cops speed:=v
+0x4013c0 CalculateStearing ; (fsm, pos) yaw wrap, ai_drive, steering, steer physics, body springs
+0x4014e0 ai_rubberband_factor ; (fsm) top-speed factor 0.2..2 from racer progress vs player
+0x401690 ai_get_angle_to_point ; (obj, pos) -> 0..4096, 0 ahead, 2048 behind
+0x401780 cfun_player_behind_leader ; racer 0->1 (1), 2->0 (0)
+0x4018b0 cfun_random_block ; racer 1->2
+0x401960 cfun_target_behind_cop ; cop 3->4 (1), 4->3 (0)
+0x4019f0 cfun_can_arrest ; cop 3/4->5; 'Racer not found!'
+0x401b00 cfun_wait_4s ; racer 7->0, cop 6->17; siren off
+0x401b60 cfun_racer_too_far ; racer 0->11 (expected 2); 'Invalid racer index'
+0x401cf0 cfun_racer_near_player ; racer 11->0
+0x401d70 cfun_target_not_forward ; cop 4/16->14
+0x401d90 cfun_target_forward_near ; cop 14->3
+0x401e20 cfun_give_up ; cop 3->15 (30/60 s or >50 chunks)
+0x401ef0 cfun_stopped ; cop 17/15->8 (speed<=5)
+0x401f60 cfun_target_other_side ; cop 3/4->16
+0x401fb0 cfun_target_reversing ; cop 3/4/16->14
+0x401ff0 cfun_cop_stuck ; cop 16->10
+0x402050 cfun_stuck_3s ; racer 0->10, cop 3->10
+0x402080 cfun_target_back_on_side ; cop 16->3
+0x4020d0 cop_states_construct ; static ctor T_ARRAY<t_cop> "Cop States"/"t_cop", atexit 0x4021a0
+0x4021a0 cop_states_destroy ; atexit dtor of g_cop_states
+0x402200 reset_cop ; (obj, cop) set COP.max_speed/max_lanes from backtracked chunk speed/lane triggers
+0x402520 ai_find_waypoint_side_lane ; (chunk, wp, int*side, int*lane) (ai_cops.cpp)
+0x4025c0 cop_states_alloc ; T_ARRAY<t_cop>::alloc(n)
+0x4026c0 cop_new ; T_ARRAY get_new: state=0, target=player, cop_obj=arg; returns cop index
+0x402790 handle_cop_ai ; HANDLE_COP_AI object callback; ai_model==1 old state machine, else FSM lookout
+0x402a10 cop_lookout ; state 0 "On the lookout": |dchunk|<2 && violation -> pursuit, siren on
+0x402b40 cop_pursuit ; state 1 "In pursuit of suspect": 40 s limit, positioning, arrest -> game action 8
+0x403130 cop_check_target ; (obj, cop, target) 1 if other side ("Ghost!") or speed > 1.1*max ("Speeding!")
+0x4032b0 ai_fsm_clear_racer_transitions ; static init (CRT table 0x482008): from=to=-1, expected=0 x25
+0x4032d0 vector_ctor_iterator ; stdcall(p, size, count, thiscall ctor)
+0x403300 ai_fsm_clear_cop_transitions ; static init (CRT table 0x48200c)
+0x403320 ai_fsm_ctor ; thiscall(fsm, state): target=-1, laps=timer=time_in_chunk=0
+0x403340 ai_fsm_check_all_transitions ; per frame (ai_model==0); also sub_40c860 once if a cop is active
+0x403380 ai_fsm_check_transitions ; evaluate racer/cop transition table for fsm i
+0x403420 ai_fsm_set_racer_transition ; (idx, from, to, expected, cond) -> 0x4a5410
+0x403460 ai_fsm_set_cop_transition ; (idx, from, to, expected, cond) -> 0x4a5280
+0x4034a0 ai_cop_start_chase ; (cop_obj, target_obj) allocate cop fsm 3..14, state 3, siren on
+0x4035b0 ai_fsm_release_cop ; 'Illegal cop, this is a racer'
+0x403630 fsm_find_object ; 1 if obj is in one of the 15 FSM entries
+0x403660 change_lane ; CHANGE_LANE(p_object, p_driver_type, p_lanes_allowed): fill t_lane_info per lane, choose lane per driver type, step ai_chosen_lane, adjust ai_chosen_speed
+0x403f60 scan_lane ; (li, wp, range, object, is_my_lane): find_dead_end + find_obstacle_here + front (range wps) / rear (2 wps) search
+0x4040b0 find_dead_end ; (li, wp, range): follow links +0x14/+0x1c/+0x18, sets m_dead_end/m_dead_range
+0x404150 find_obstacle_here ; (li, wp, object, is_my_lane): front/rear obstacle from current waypoint obstacle list
+0x404510 ai_is_in_front ; (other, me): 1 if (other-me).xz dot my forward axis >= 0
+0x404600 find_obstacle_in_wp ; (int*obst, float*range, wp, object): nearest object in waypoint list, returns found
+0x404720 analyse_lane ; (li, object, int*ghost): sets m_front_status (0 free..5 ghost) and m_rear_status
+0x404960 pick_lane ; traffic lane chooser (keep right, overtake left), uses bh+0x1c/+0x24
+0x404ee0 race_lane ; racer lane chooser (undetected function start)
+0x4051f0 cop_lane ; cop lane chooser, starts at chased object's lane
+0x4053f0 adac_lane ; adac lane chooser, starts at player's lane
+0x4055c0 adjust_speed ; (object, li, speed) -> desired speed from lane status
+0x405890 t_array_init ; T_ARRAY thiscall init/reset (no alloc)
+0x405910 t_array_free ; T_ARRAY thiscall free data+flags
+0x405960 ai_behaviors_ctor ; static ctor of T_ARRAY "AI Behaviors"/t_ai_behavior @0x4a5b88 (+atexit dtor 0x405a30)
+0x405a90 ai_states_ctor ; static ctor of T_ARRAY "AI_States"/t_ai_state @0x4a5b40 (+atexit dtor 0x405b60)
+0x405bc0 init_ai ; (n) alloc AI states, alloc and fill 16 behaviours (difficulty factors for racers 8..13)
+0x406800 add_ai ; (object, behavior, waypoint, lane)
+0x406bf0 ai_set_lane ; (object, lane) reset chosen lane / max speed, re-read triggers
+0x406d10 ai_switch_lane_right ; retarget ai_wp via prev(+0x20)->right diag(+0x18); returns 1 on success
+0x406d90 ai_switch_lane_left ; retarget ai_wp via prev(+0x20)->left diag(+0x1c); returns 1 on success
+0x406e10 check_for_new_target_waypoint ; (p_range, p_next_wp, p_pos*, p_interval) -> 1 = switch
+0x406fd0 calc_steering ; (object, wp, ai) cross(forward, dir) * bh_steer_gain
+0x407140 calc_speed ; (p_target_wp, p_ai_index, p_object) -> speed delta
+0x407590 vec_set ; thiscall (x,y,z), ret 0xc
+0x4075b0 vec_len2 ; (v*) squared length in ST0
+0x4075f0 next_waypoint ; (wp, unused*) follow link +0x14, else fork +0x1c/+0x18 by (int)frame_time%2
+0x407ba0 ai_apply_trigger ; (ai, side, trigger) speed 4/5/6/8, light 10, lanes 18..21 / 40..43
+0x407de0 ai_limit_lanes ; (ai, side, trigger) lane triggers, only lowers ai_max_lanes
+0x407fc0 ai_check_triggers ; (object) chunk trigger_a/b + waypoint trigger -> ai_apply_trigger
+0x408080 ai_backtrack_triggers ; BACKTRACK_SPEED_TRIGGER (obj, *speed_trig, *lane_trig)
+0x4083d0 ai_damp_velocity ; (object) 'Handling collision' velocity *= 0.95
+0x4084b0 ai_check_collision ; (object) collision recovery timers (0.5 s / 5 frames / 5 s reverse)
+0x408780 ai_is_point_behind ; (obj, pos) along track direction at obj's waypoint
+0x4088f0 ai_fsm_handle_trigger ; (i, trigger) 4/5/6/8 speed limit, 14 finish, 15 halfway
+0x408a50 ai_fsm_handle_object ; 'HandleAIObject' state dispatch + ai_fsm_update_chunk
+0x408c00 ai_get_player_position ; number of racers ahead of player -> 0x4d9e60
+0x408cb0 ai_rank_racers ; racer_info.position
+0x408ed0 ai_fsm_handle_all ; per frame FSM driver
+0x409060 ai_cop_check_speeding ; (cop_obj) from HANDLE_COP_AI
+0x409200 ai_fsm_init_cop_transitions
+0x4093b0 ai_fsm_init ; racers+cops, transitions, difficulty, world mappers
+0x409500 ai_fsm_reset_chunk ; thiscall(fsm+0x1c, i)
+0x409540 ai_fsm_update_chunk ; time in chunk, racer chunk progress (t_ai+0x60)
+0x409670 ScanPath ; (fsm, wm, depth<=25, wp, near[3], far[3]) DFS over links avoiding occupied waypoints, returns path[1]
+0x409c10 ai_slower_car_ahead ; (wp, obj)
+0x409d10 ai_state_race ; states 0,1 (and 3 via 0x409df0)
+0x409df0 ai_state_cop_chase ; state 3
+0x409e00 ai_state_block_player ; state 2
+0x409ed0 ai_state_finished ; state 9
+0x409f60 ai_state_cop_target_behind ; state 4
+0x40a100 ai_get_drive_direction ; (obj, wp) 1 along links, -1 against
+0x40a190 ai_state_stuck_reverse ; state 10
+0x40a290 ai_state_racer_wait ; state 11
+0x40a390 ai_state_cop_arrest ; state 5
+0x40a480 ai_state_cop_arrested_wait ; state 6
+0x40a4f0 ai_state_cop_parked ; state 8
+0x40a610 ai_state_racer_arrested ; state 7
+0x40a6a0 ai_state_cop_target_other_side ; state 16
+0x40a8a0 ai_state_cop_depart ; state 17
+0x40a9d0 ai_state_cop_give_up ; state 15
+0x40aab0 ai_state_cop_target_wrong_way ; state 14
+0x40ac90 handle_racer_ai ; HANDLE_RACER_AI object callback (ai_model==1 only)
+0x40af90 check_racer_trigger ; (obj, chunk|-1) chunk triggers[2] + waypoint trigger
+0x40b030 racer_trigger ; (trigger, ai, obj) 2 BENZINE_STATION, 9 ZERO_CHUNK_MARKER, 14 FINISH_POSITION, 15 FINISH_VALID, 46 FUEL_APPROACH, 47 FINAL_APPROACH
+0x40b2d0 ai_check_cars_outside_handling_range ; per frame: recycle traffic outside player_chunk +-(visiblechunks-1)
+0x40b480 respawn_car ; (obj, chunk, force) move a traffic car to lane 0 of chunk
+0x40b650 can_respawn_at ; (wp, obj, force) 1/30 chance, fps>=14.5, waypoint+links empty, no overlap
+0x40b770 handle_traffic_ai ; 'HANDLE_TRAFFIC_AI' object handler of traffic cars
+0x40b970 ai_wmap_closest_waypoint ; (wp, side, chunk, range) nearest lane waypoint (bug: same chunk scanned)
+0x40be40 ai_world_mapper_init
+0x40be70 ai_wmap_add ; (obj, ...ignored) -> slot, -2 already present, -1 full
+0x40bf20 ai_wmap_remove ; (slot)
+0x40bf70 ai_world_mapper_get_waypoint
+0x40bf90 ai_wmap_sideswitch ; (slot, wp, dir 0..3) follow link (SIDESWITCH)
+0x40c350 waypoint_get_pos ; (wp, float out[3])
+0x40c3a0 waypoint_get_obstacles ; (wp, int *out) -1 terminated, returns count
+0x40c400 chunk_get_lane_counts ; (chunk, *left, *right)
+0x40c440 chunk_find_lane_of_waypoint ; (chunk, wp) lane index (left then right, both from 0) or -1
+0x40c4a0 adac_beacon_update ; toggles texture-copy 15 every 150 ms if g_adac_beacon_on (never set)
+0x40c4f0 init_adac_car ; 'Initing adac-car.' car type 8, behaviour 15, chunk 0
+0x40c5f0 turn_off_adac ; 'turn_off_adac() has been called.'
+0x40c640 cop_siren ; (obj, on) SNDFX_POLITIE_SIRENE(40) swap with ai_old_sample, siren count, g_active_cops
+0x40c860 cop_siren_light_update
+0x40c8b0 init_cop_targets ; cop_state[k].target = player; 0x4a5ce0[20] = -1
+0x40ca70 init_traffic ; same-side and oncoming traffic, 3 chunks apart, 5 chunks outside the visible window
+0x40fe90 ai_heading_diff ; (obj, pos) -> int -2048..2048 (4096 units/turn)
+0x40ff90 ai_drive ; (fsm) throttle/brake/gears -> obj speed
+0x410280 ai_steer_physics ; (fsm) steering -> yaw rate, lateral velocity, body roll; skid mode
+0x410b60 init_all_cars ; loads car types, player, traffic, racers, FSM, cops, adac
+0x410bc0 add_car ; (car_type, chunk, lane, side, dir, handler, collision_cb, list_type) -> object
+0x4110e0 object_set_f24 ; objects[obj].f24 = g_4d9a90
+0x411100 car_list_clear
+0x411120 car_list_add ; 'get_free_car_list_entry'
+0x411170 init_racer_cars ; 3 CPU racers: grid slot, car model, behaviour 7..13, HANDLE_RACER_AI 0x40ac90
+0x411410 racer_pick_model_up ; nearest unused racer model >= player car
+0x411460 racer_pick_model_down ; nearest unused racer model <= player car
+0x4114a0 racers_finish_estimate ; race end: extrapolate unfinished racers' times, compute positions
+0x411630 racer_timers_reset ; timers 8, 9, 10
+0x411650 racer_finished ; (obj) stamp finish time of the racer
+0x4150f0 cop_speech_start_chase
+0x415170 cop_speech_give_up
+0x4151f0 cops_event_camera ; event camera above next chunk looking at player, camera mode 6
+0x415300 cops_init ; game action 8 init: g_times_caught++, warning text, arrest voice, start tick
+0x415420 cops_handle ; done after 4000 ms; 3rd arrest -> game over reason 2 (GEARRESTEERD)
+0x415490 cops_exit ; restore camera/view, game_action_start(0)
+0x415990 nullsub ; bare ret, shared no-op callback
+0x4159a0 ev_unused_player_effect ; unreferenced: random effect near player every 200 ms
+0x415b20 game_over_camera ; copy current camera into event camera attached to player, mode 6
+0x416760 game_action_register ; (slot, init, handle, exit) call init if slot free
+0x4168c0 game_actions_run ; per frame: handle(); if !=0 exit() and free slot
+0x424d20 game_action_start ; sets g_game_action and registers game action (8 -> slot 11 cops)
+0x4289e0 sndfx_set_object_sample ; (object, sample): stop current sample, object+0x14 = sample
+0x429a20 trigger_find_start_position ; first chunk with trigger 0xe (finish)
+0x42ae90 txt_blit_anim ; (texcopy index, frame) texture copy (14 = siren lights)
+0x434140 return_true ; returns 1 (cop 5->6)
+0x45e1b0 matrix_get_row0 ; sret vec3 = m+0x00
+0x45e1f0 matrix_get_row1 ; sret vec3 = m+0x10
+0x45e230 matrix_get_row2 ; sret vec3 = m+0x20 (called with object3d+0x10 -> forward axis at o3d+0x30)
+0x464c80 debug_set_channel ; (a,b): 0x4eac10=a, 0x4eac0c=b, debug printf filter
+# ---- globals / data
+0x482258 g_rubber_tab ; float[2 diff][7 track][3 racer][3] {ahead, behind, gain}
+0x482b58 g_default_lane_info ; t_lane_info {0,-1,-1,-1.0,0,-1,-1.0,0}
+0x483850 g_finish_chunk ; init -1, set lazily by add_ai via trigger_find_start_position
+0x484a48 g_traffic_types ; int[12][2] {car_type, behavior}
+0x484aa8 g_traffic_same_side ; number of traffic cars on the player's side (10 hard / 5 easy)
+0x484aac g_traffic_oncoming ; number of oncoming traffic cars (14 hard / 7 easy)
+0x485b20 g_racers ; 3 x 0x58: +0 car model, +4 finish time, +8 position, +0xc object, +0x10 finished
+0x486648 g_arrest1_samples ; int[6] 0x30..0x35
+0x486660 g_arrest2_samples ; int[5] 0x36..0x3a
+0x486678 g_arrest3_samples ; int[5] 0x3b..0x3f
+0x486690 g_chase_samples ; int[13] 0x40..0x4c
+0x4866c8 g_quit_samples ; int[5] 0x4d..0x51
+0x4866dc g_cop_chase_voice ; sound handle
+0x4866e0 g_cop_quit_voice ; sound handle
+0x4867a4 g_game_over_reason ; 0 total loss, 1 time up, 2 arrested
+0x48b438 g_player_ai ; t_ai index of the player autopilot (-1 initially)
+0x4a5238 g_cop_states ; T_ARRAY<t_cop> (data,count,last,initted,used,name,type)
+0x4a5280 g_cop_transitions ; t_fsm_transition[25]
+0x4a5410 g_racer_transitions ; t_fsm_transition[25]
+0x4a55a0 g_fsm ; t_fsm[15] stride 0x60
+0x4a5b40 g_ai_states ; T_ARRAY<t_ai_state> "AI_States", stride 0x6c
+0x4a5b88 g_ai_behaviors ; T_ARRAY<t_ai_behavior> "AI Behaviors", 16 x 0x2c
+0x4a5bd0 g_no_lane_trigger_count
+0x4a5bd8 g_obstacle_list
+0x4a5c08 g_world_mappers ; 8 x 0x18
+0x4a5cc8 g_adac_arrived
+0x4a5ccc g_adac_object
+0x4a5cd0 g_adac_beacon_on ; never written (beacon disabled)
+0x4a5cd4 g_adac_beacon_state
+0x4a5cd8 g_adac_beacon_tick ; GetTickCount of last toggle
+0x4a5ce0 g_cop_list ; int[20]
+0x4a5d30 g_cop_siren_active ; siren count != 0
+0x4a5d34 g_active_cops_initted
+0x4a5d38 g_siren_count
+0x4a5d3c g_siren_light_frame
+0x4a5d40 g_siren_light_tick
+0x4a5f10 g_car_gears ; float[31] per car type: [0..4] 5-speed, [6..11] 6-speed ratios
+0x4a64a0 g_car_list ; 250 x {active, object, type} type 1 player, 2 traffic, 3 racer, 4 cop, 5 adac
+0x4a7058 g_racer_model_used ; int[7]
+0x4a70d8 g_cops_sequence_mode ; always 0
+0x4a70dc g_cops_saved_view_mode
+0x4a70e0 g_cops_saved_camera
+0x4a70e4 g_cops_start_tick
+0x4a70e8 g_times_caught ; arrests this race; 3 = game over
+0x4a75c8 g_game_actions ; 13 x {init, handle, exit, free}
+0x4d9a88 g_startchunk ; Game.ini [OPTIONS] startchunk (0 -> computed)
+0x4d9ab8 g_frame_counter ; incremented in main loop
+0x4d9ac4 g_direction ; Game.ini [ETAPPE] DIRECTION (absent -> 0): player side = (g_direction == 0)
+0x4d9ad8 g_nr_laps
+0x4eac0c g_debug_channel_b ; read by debug printf sub_464ca0
+0x4eac10 g_debug_channel_a ; read by debug printf sub_464ca0
