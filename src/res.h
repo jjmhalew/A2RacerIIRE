@@ -22,6 +22,12 @@ const char *res_name(const ResArchive *a, int i);   /* "0012" for the unnamed ar
 int res_find(const ResArchive *a, const char *name);   /* index or -1, ignoring case */
 uint8_t *res_read(ResArchive *a, int i, size_t *size);   /* malloc'd */
 
+/* The settings files the original writes (Game.ini, Raser.ini, menu.ini, SLOTS.RAS, options.ras): this port keeps
+ * them in the user folder (plat_user_dir), copied from the data folder the first time they are asked for, so the
+ * game files stay as they came from the CD. The menu and the race exchange the career through them, as menu.dat and
+ * spel.dat do (docs/GAMEFLOW.md). */
+void res_user_path(char *out, size_t cap, const char *name);
+
 /* the race archive RCS, opened on first use; then the loose files */
 uint8_t *res_load(const char *name, size_t *size);
 #endif

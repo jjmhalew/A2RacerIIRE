@@ -41,7 +41,7 @@ static int open_file(Rd *r, int etappe, const char *ext)
 static void read_map_info(Track *t, int etappe)
 {
     char p[600], key[8];
-    res_path(p, sizeof p, "Raser.ini");
+    res_user_path(p, sizeof p, "Raser.ini");
     Ini *ini = ini_load(p);
     snprintf(key, sizeof key, "%d", etappe);
     const char *v = ini_get(ini, "MAPS", key);

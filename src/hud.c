@@ -103,7 +103,7 @@ const char *hud_text(int n) { return n >= 0 && n < 56 ? g_text[n] : ""; }
 static void load_texts(void)
 {
     char p[1024];
-    res_path(p, sizeof p, "language.ini");
+    res_user_path(p, sizeof p, "language.ini");
     Ini *ini = ini_load(p);
     int lang = ini_int(ini, "SETTINGS", "LANGUAGE", 0);
     static const char *sec[3] = { "NEDERLANDS", "ENGELS", "DUITS" };

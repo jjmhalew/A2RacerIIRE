@@ -454,7 +454,7 @@ static void load_car_types(Race *r)
 static void read_ini(Race *r)
 {
     char p[1024];
-    res_path(p, sizeof p, "Game.ini");
+    res_user_path(p, sizeof p, "Game.ini");
     Ini *g = ini_load(p);
     static const char *keys[6] = { "LEFT", "RIGHT", "UP", "DOWN", "EXTRA1", "EXTRA2" };
     static const int defs[6] = { VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_CONTROL, VK_MENU };

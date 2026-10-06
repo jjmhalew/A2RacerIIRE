@@ -45,6 +45,18 @@ uint8_t *res_load_file(const char *name, size_t *size)
     return d;
 }
 
+void res_user_path(char *out, size_t cap, const char *name)
+{
+    snprintf(out, cap, "%s%s", plat_user_dir(), name);
+    if (plat_exists(out)) return;
+    size_t n = 0;
+    uint8_t *d = res_load_file(name, &n);         /* the CD's copy, when it has one */
+    if (!d) return;
+    FILE *f = fopen(out, "wb");
+    if (f) { fwrite(d, 1, n, f); fclose(f); }
+    free(d);
+}
+
 static uint32_t rd32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 
 ResArchive *res_open(const char *base)
