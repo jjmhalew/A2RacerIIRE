@@ -9,7 +9,7 @@ Code range `0x401000-0x40c860`, `0x4108d0-0x411710`, `0x4150f0-0x415990`.
 Names: [names/spel_ai.txt](names/spel_ai.txt). Some functions and globals that the AI uses were already named by
 other areas (physics, render, road, objects); `spel_ai.txt` does not redefine them, and this document uses the
 names below. When a name here differs from the one in the other names file, the address is always given, and
-section 9 lists the mapping.
+section 10 lists the mapping.
 
 How to read the pseudocode:
 - It is transcribed from the disassembly. Every branch, constant and field offset is in it. Float constants are
@@ -1606,7 +1606,7 @@ Two helper "constructors" (thiscall):
 | +0x08 | 0x485b28 | int | race position, 0 = leading (computed by sub_408cb0) | 408cb0, 401780, 4018b0, 401b60 |
 | +0x0c | 0x485b2c | int | object index of the racer | 408c00, 408cb0, 409540 |
 | +0x10 | 0x485b30 | int | finished flag | 4088f0, sub_411650 |
-(coordinator: +0x00 car model, +0x04 finish time.)
+(also: +0x00 car model, +0x04 finish time, see section 9.)
 
 #### t_fsm_transition (16 bytes) - racers 0x4a5410[25], cops 0x4a5280[25]
 | off | type | name |
@@ -2365,7 +2365,7 @@ from the backtracked trigger at the cop's chunk, racers use their own fsm speed_
 
 ---
 
-### State handlers (summary only - transcribed by the 'path' agent)
+### State handlers (summary only; full transcription in section 7)
 - 0x409d10 (0,1,3 via 0x409df0): +0x40=0; mapper = sub_40be70(obj,1,-1,5,3); wp=sub_40bf70(mapper); twp=sub_409670(i,mapper,5,wp,..); if twp>-1 { if !ai_slower_car_ahead(wp,obj) sub_4012c0(i,..) } else twp=old; sub_4013c0(i,..); sub_40bf20(mapper).
 - 0x409e00 (2): same with mapper on the target (sub_40be70(target,1,twp,5,3)); on failure +0x38=+0x3c=0; timer +0x10 += dt.
 - 0x409f60 (4): mapper on own object with own waypoint; if target slower: +0x3c=50,+0x38=0; else sub_4012c0 and if target angle in (1800,2200): +0x3c=100.
@@ -2406,7 +2406,7 @@ from the backtracked trigger at the cop's chunk, racers use their own fsm speed_
 | 0x4a5d30/3c/40 | int | siren light state/toggle/tick | sub_40c860 |
 
 ### Open questions
-- Exact semantics of fsm +0x34/+0x38/+0x3c/+0x40/+0x44..+0x58 (driving control block) - consumer sub_410280/sub_40ff90/sub_4012c0/sub_4013c0 (path agent).
+- Exact semantics of fsm +0x34/+0x38/+0x3c/+0x40/+0x44..+0x58 (driving control block) - consumer sub_410280/sub_40ff90/sub_4012c0/sub_4013c0 (see section 7: steer, throttle, brake, coast flag, gear, skid state, stopped latch).
 - sub_428bc0 is called every frame for every active FSM with sample 1 (0 for a cop in state 9); check whether this is really "play sample" or "set engine sound on/off".
 - cfun_cop_stuck (0x401ff0) can practically never fire (resets time_in_chunk each frame while <= 2 s); faithful port keeps it.
 - In 408cb0's tie fix the inner loop has no array bound; with consistent data it terminates within 3 entries.
@@ -2425,7 +2425,7 @@ Conventions used below (same as sec_fsm.md):
 - `dt()` = `sub_441cd0(this=0x4e4970)` clamped frame time. `fatal()` = sub_464e50. Debug prints (sub_464ca0) omitted.
 - Floats: decimal, hex given when not exact. `(a > b)` on floats = x87 `fcom`; NaN never occurs.
 - IMPORTANT for porting: several functions use a raw chunk *number* as chunk *record index* (no
-  `g_road_chunk_order[0x4e5d2c]` lookup). The road agent says that map is the identity, so this is harmless; kept literal.
+  `g_road_chunk_order[0x4e5d2c]` lookup). The road code fills that map with the identity, so this is harmless; kept literal.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -3470,9 +3470,9 @@ void car_add_cop(int obj) {
 }
 ```
 `add_ai` (sub_406800) for behavior 14 does: `AI.cop(+0x44) = cop_new(obj); AI.max_speed(+0x18) = 0.0f;
-reset_cop(obj, AI.cop);` (0x406b04..0x406b40). NOTE: the brief's add_ai signature is (object, behavior, waypoint, lane).
+reset_cop(obj, AI.cop);` (0x406b04..0x406b40). add_ai signature: (object, behavior, waypoint, lane).
 
-#### car_cops_init (0x40c8b0) (init, reported by coordinator, verified)
+#### car_cops_init (0x40c8b0) (init)
 For every car-list entry {active, obj, type==4}: `COP(AI(OBJ(obj).ai).cop).target = g_player_obj;`
 then `g_active_cops[0..19] = -1; g_active_cops_initted (0x4a5d34) = 1`.
 
@@ -3626,7 +3626,7 @@ void cop_find_waypoint_in_chunk(int chunk, int wp, int *p_side, int *p_lane) {
 }
 ```
 
-#### cop_new (0x4026c0) — T_ARRAY::get_new + init (the brief's "0x4026c0 HANDLE_COP_AI" is two functions)
+#### cop_new (0x4026c0) — T_ARRAY::get_new + init (HANDLE_COP_AI itself starts at 0x402790)
 `int cop_new(int cop_obj)`; returns cop index.
 ```c
 int cop_new(int cop_obj) {
@@ -4085,14 +4085,14 @@ See section 6 "Transition tables" (authoritative: 20 entries at indices 0..11 an
 
 ### Open questions
 * 0x489631 (sub_420740): unaligned global used as sound volume/enable; check sound init.
-* t_object +0x38 / +0x3c / +0x2c semantics belong to the object/physics agent (named here by usage).
-* FSM entry +0x2c (racer) compared against racer speed in cop_fsm_lookout: probably the racer's "legal speed" — FSM
-  agent to confirm. [0x4d9e2c] stored in FSM +0x30 at cop start (used widely in racer code; time stamp?).
+* t_object +0x38 / +0x3c / +0x2c semantics belong to the object/physics area (named here by usage).
+* FSM entry +0x2c (racer), compared against the racer speed in cop_fsm_lookout, is the racer speed limit from the
+  speed triggers (section 6). [0x4d9e2c] (player car model) is stored in FSM +0x30 at cop start.
 * sub_470340 = malloc (assumed; T_ARRAY data not explicitly cleared, so t_cop +0x08..+0x10 start as heap contents
   unless malloc zeroes - pursuit timer +0x10 is never reset, so in the old model a cop can chase only 40 s total
   per race, and state 3 never returns to 0).
-* ai_frame_update (sub_4084b0), change_lane (sub_403660), handle_basic_ai (sub_4076b0) documented by the
-  traffic/lane agents.
+* ai_frame_update (sub_4084b0), change_lane (sub_403660), handle_basic_ai (sub_4076b0) are documented in
+  sections 4 and 5.
 
 
 ## 9. Car creation, traffic, racers, ADAC (Car_main.cpp, ai_racer.cpp / ai_wmap.cpp, Car_cops.cpp)

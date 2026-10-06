@@ -4,6 +4,8 @@
 #include "race.h"
 #include "exetab.h"
 #include "gfx.h"
+#include "hud.h"
+#include "texture.h"
 #include "ini.h"
 #include "model.h"
 #include "plat.h"
@@ -463,6 +465,7 @@ static void read_ini(Race *r)
     r->upg_turbo = ini_int(g, "PLAYER", "TURBO", 0);
     r->upg_gearbox = ini_int(g, "PLAYER", "VERSNELLINGSBAK", 0);
     r->detail = ini_int(g, "GFX OPTIONS", "overlay_detail", 3) & 3;
+    tex_set_gamma(ini_int(g, "GFX OPTIONS", "gamma", 1) == 1);
     ini_free(g);
 }
 
@@ -478,6 +481,14 @@ int race_init(Race *r, int etappe, int car)
     load_car_types(r);
     read_ini(r);
     r->plr_car = car >= 0 && car < 7 ? car : 0;
+    static int hud_ok;
+    if (!hud_ok) hud_ok = hud_init();
+    {   /* the sky: one of back1..7.pcx at random (0x4234e0), loaded without gamma */
+        char n[16];
+        snprintf(n, sizeof n, "back%d", rand() % 7 + 1);
+        const Texture *t = tex_get(n);
+        r->sky_tex = t ? t->id : 0;
+    }
     r->turbo = r->upg_turbo ? 100 : 0;
     r->plr_obj = -1;
     /* start: the chunk of the finish trigger (14), the player in the right-hand lanes (side 1) */
@@ -492,6 +503,7 @@ int race_init(Race *r, int etappe, int car)
     if (ch->nwp[1] > 0) pos = r->track.wps[ch->wp[1][ch->nwp[1] > 1 ? 1 : 0]].pos;
     float yaw = atan2f(-ch->fwd.x, ch->fwd.z) * 1024.0f / TWO_PI;
     if (yaw < 0) yaw += 1024;
+    r->start_chunk = start;
     char anim[32];
     snprintf(anim, sizeof anim, "%s", r->car_types[r->plr_car].anim[0] ? r->car_types[r->plr_car].anim : "RACER_1_ANIM");
     int o = obj_add(anim_find(anim), pos, yaw);
@@ -544,6 +556,86 @@ static void race_tick(void)
     }
     R->cam_draw1 = R->cam_pos;
     R->tgt_draw1 = R->cam_target;
+    if (R->race_started) R->race_ms += 1000.0f / RACE_HZ;
+}
+
+/* the sky backdrop (gfx_bkg.cpp, draw_bkg 0x4190d0 / bkg_update_colors 0x418f00): two bands over the screen, the
+ * image scrolls with the car's heading, the horizon colour changes along the track */
+static void draw_sky(void)
+{
+    const Obj *c = &R->obj[R->plr_obj];
+    float u0 = 1.0f - (float)(ftol(c->yaw) & 1023) / 1024.0f, u1 = u0 + 0.15f;
+    int n = R->track.nchunks;
+    int dc = abs(c->chunk - R->start_chunk) * 2;
+    float t = (float)(dc % (2 * n)) / n;
+    float a = fabsf(sinf(t * PI_F / 2)), b = fabsf(sinf(t * PI_F)), cc = fabsf(sinf(t * PI_F / 4));
+    (void)a;
+    float br = 200 + 25 * cc, bg = 55 + 175 * cc, bb = 55;
+    uint8_t hr = (uint8_t)(br + (255 - br) * b), hg = (uint8_t)(bg + (255 - bg) * b), hb = (uint8_t)(bb + (255 - bb) * b);
+    float H = 480, y1 = H / 3;
+    GfxVertex v[12] = {
+        { 0, 0, 0, u0, 0, 255, 255, 255, 255 }, { 0, y1, 0, u0, 1.0f / 3, hr, hg, hb, 255 }, { 640, y1, 0, u1, 1.0f / 3, hr, hg, hb, 255 },
+        { 0, 0, 0, u0, 0, 255, 255, 255, 255 }, { 640, y1, 0, u1, 1.0f / 3, hr, hg, hb, 255 }, { 640, 0, 0, u1, 0, 255, 255, 255, 255 },
+        { 0, y1, 0, u0, 1.0f / 3, hr, hg, hb, 255 }, { 0, H, 0, u0, 1, 255, 255, 255, 255 }, { 640, H, 0, u1, 1, 255, 255, 255, 255 },
+        { 0, y1, 0, u0, 1.0f / 3, hr, hg, hb, 255 }, { 640, H, 0, u1, 1, 255, 255, 255, 255 }, { 640, y1, 0, u1, 1.0f / 3, hr, hg, hb, 255 } };
+    /* stretch over the whole window (the original's screen is the 640x480 viewport) */
+    int w, h;
+    plat_size(&w, &h);
+    for (int i = 0; i < 12; i++) { v[i].x = v[i].x * w / 640; v[i].y = v[i].y * h / 480; }
+    Mat4 p = m4_ortho(0, (float)w, (float)h, 0, -1, 1), id = m4_identity();
+    gfx_set_matrices(&p, &id);
+    GfxState st = { BLEND_NONE, 0, 0, 0, 0, 0 };
+    gfx_draw_tris(v, 12, R->sky_tex, &st);
+}
+
+/* draw_dashboard: the panels of docs/HUD.md 4 in the 640x480x16 layout */
+static void draw_hud(void)
+{
+    char b[64];
+    gfx_2d_begin(640, 480);
+    int D = R->detail;
+    int ms = (int)R->race_ms;
+    if (D >= 3) {
+        if (!R->track.city) {                                         /* 4.1 highway info panel */
+            hud_item(57, 0);
+            hud_item_text(38, 10, 0, hud_text(33));
+            snprintf(b, sizeof b, "%02d:%02d:%d", ms / 60000, ms / 1000 % 60, ms / 100 % 10);
+            hud_item_text(39, 11, 0, b);
+            hud_item_text(58, 10, 0, hud_text(52));
+            hud_item_text(59, 11, 0, "--:--:-");
+            hud_item_text(60, 10, 0, hud_text(38));
+            hud_item_text(61, 11, 0, "1/4");
+        } else {                                                      /* 4.2 city info panel */
+            hud_item(51, 0);
+            hud_item_text(38, 10, 0, hud_text(33));
+            snprintf(b, sizeof b, "%02d:%02d:%d", ms / 60000, ms / 1000 % 60, ms / 100 % 10);
+            hud_item_text(39, 11, 0, b);
+            hud_item_text(40, 10, 0, hud_text(34));
+            hud_item_text(41, 13, 0, hud_text(35));
+            hud_item_text(42, 12, 0, b);
+            hud_item_text(43, 13, 0, hud_text(36));
+            hud_item_text(44, 12, 0, "--:--:-");
+            hud_item_text(45, 13, 0, hud_text(37));
+            hud_item_text(46, 12, 0, "--:--:-");
+            hud_item_text(47, 10, 0, hud_text(38));
+            hud_item_text(48, 11, 0, "1/4");
+            hud_item_text(49, 10, 0, hud_text(39));
+            hud_item_text(50, 11, 0, "1/2");
+        }
+    }
+    if (D >= 2) {                                                     /* 4.3 speed panel */
+        hud_item(52, 0);
+        hud_item_text(53, 10, 0, hud_text(53));
+        int n = 11, f = ftol(R->turbo * 0.990099f) * n / 100;
+        hud_item(54, f < 0 ? 0 : f > n - 1 ? n - 1 : f);
+        hud_item_text(55, 10, 0, hud_text(54));
+        snprintf(b, sizeof b, "%03d", abs(R->speed_kmh));
+        hud_item_text(56, 0, 0, b);
+        hud_item_text(7, 10, 0, hud_text(55));
+        int dn = 11, df = (int)(R->damage / (100.0f / (dn - 1)));
+        if (R->damage < 80 || !((int)(R->race_ms / 200) & 1)) hud_item(3, df < 0 ? 0 : df > dn - 1 ? dn - 1 : df);
+    }
+    gfx_2d_end();
 }
 
 static Mat4 view_lh(Vec3 eye, Vec3 target)
@@ -566,6 +658,7 @@ static void race_draw(float alpha)
     int w, h;
     plat_size(&w, &h);
     gfx_begin(w, h, 0.55f, 0.7f, 0.9f);
+    draw_sky();
     Vec3 eye = v3_lerp(R->cam_draw0, R->cam_draw1, alpha), tgt = v3_lerp(R->tgt_draw0, R->tgt_draw1, alpha);
     float fovy = 2 * atanf(tanf(40.5f * PI_F / 180) * 0.75f);
     Mat4 proj = m4_perspective(fovy, (float)w / h, 10, 12500), view = view_lh(eye, tgt);
@@ -593,6 +686,7 @@ static void race_draw(float alpha)
         model_draw_matrix(anim_model(c->anim, c->frame), &m);
     }
     gfx_set_model(NULL);
+    draw_hud();
 }
 
 int race_frame(Race *r, double now)

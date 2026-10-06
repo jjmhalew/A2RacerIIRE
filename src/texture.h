@@ -6,6 +6,7 @@
 #ifndef A2_TEXTURE_H
 #define A2_TEXTURE_H
 #include "image.h"
+#include <stdint.h>
 
 typedef struct {
     unsigned id;
@@ -17,4 +18,8 @@ const Texture *tex_get(const char *name);
 /* the decoded image (RGBA) of name, as tex_get picks it; 0 = missing. Free with image_free. */
 int tex_image(const char *name, Image *out);
 void tex_free_all(void);
+/* Game.ini [GFX OPTIONS] gamma=1 ("dark", the CD's setting): every colour channel c -> c*c/256 when an image is
+ * converted to the screen format (pformat_set_gamma 0x468220), except the sky backdrop */
+void tex_set_gamma(int on);
+void tex_apply_gamma(uint8_t *rgba, int npixels);
 #endif

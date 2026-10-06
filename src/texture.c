@@ -10,6 +10,16 @@
 
 typedef struct { char name[32]; Texture t; } Entry;
 static Entry *g_tex;
+static int g_gamma;
+
+void tex_set_gamma(int on) { g_gamma = on; }
+void tex_apply_gamma(uint8_t *q, int n)
+{
+    if (!g_gamma) return;
+    for (int i = 0; i < n; i++, q += 4) {
+        q[0] = (uint8_t)(q[0] * q[0] / 256); q[1] = (uint8_t)(q[1] * q[1] / 256); q[2] = (uint8_t)(q[2] * q[2] / 256);
+    }
+}
 static int g_n, g_cap;
 
 static void base_name(const char *name, char *out, size_t cap)
@@ -80,6 +90,7 @@ const Texture *tex_get(const char *name)
     Image img;
     if (!tex_image(b, &img)) { fprintf(stderr, "texture %s missing\n", b); return NULL; }
     key_and_bleed(&img);
+    if (_strnicmp(b, "back", 4)) tex_apply_gamma(img.rgba, img.w * img.h);   /* not the sky (0x423565) */
     e->t.id = gfx_texture(img.rgba, img.w, img.h, TEX_MIPMAP);
     e->t.w = img.w;
     e->t.h = img.h;

@@ -81,7 +81,10 @@ typedef struct {
     int detail;                     /* overlay detail 0..3 (D) */
     int input_keys[8];              /* Game.ini [INPUT] LEFT RIGHT UP DOWN EXTRA1 EXTRA2 */
     int quit;
-    float test_gas, test_steer;     /* --drive: hold gas / steer (tests) */
+    float test_gas, test_steer;
+    unsigned sky_tex;
+    int start_chunk;
+    float race_ms;                  /* timer 3: race time */     /* --drive: hold gas / steer (tests) */
 } Race;
 
 int  race_init(Race *r, int etappe, int car);
