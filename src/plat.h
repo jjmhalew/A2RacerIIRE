@@ -48,6 +48,7 @@ void plat_rumble(float low, float high, int ms);
 
 /* mouse in window pixels; buttons bit 0 = left, 1 = right */
 void plat_mouse(int *x, int *y, unsigned *buttons, unsigned *clicked);
+void plat_show_cursor(int on);              /* the system's pointer (the menu draws its own hand) */
 
 /* ---- sound ----------------------------------------------------------------------------------------------------- */
 /* The mixer callback fills `frames` stereo frames of signed 16-bit at plat_audio_rate(); runs on the audio thread. */

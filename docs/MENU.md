@@ -32,9 +32,15 @@ A player named **COPLAND** gets `Game.ini [PLAYER] COPLAND=1` (cop mode in the r
 - Forms (winlib `forms.cpp`, `create_form` 0x411ba0): a table of 28-byte entries `{int x, y, type, ctrl*, style, 0,
   0}` ending with type -1. Type 1 = button `{int id, -1, -1, char key, char *text, 1, char *font, 0, -1, 0}` (37
   bytes, packed), type 4 = mouse hotspot `{int w, h, ...}`. The event code returned by `get_menu_event` 0x409d00 is
-  the index in the table; 0x2710 = Esc (cancel), 0x2711-0x2714 = cursor keys (move focus, `click3.wav`).
-  Enter activates the focused button. Button fonts: `butfnt.img` (big), `smallbt.img`; text fonts `stdfont.img`,
-  `midfont.img`, `carved.img` (slot names), `cyber.img`, `ascii12.img`.
+  the index in the table; 0x2710 = Esc (cancel), 0x2711/0x2712 = Up/Down (the screens move the focus with
+  `focus_prev`/`focus_next`(n) over the first n controls, `click3.wav`), 0x2713/0x2714 = Left/Right (unused),
+  0x2715 = Enter in the name edit box, 0x2716-0x2719 = PgUp/PgDn/Home/End. Enter activates the focused control; the
+  hot key letter works with **Alt** held (`check_form_key_pressed` 0x411ca0). A button is drawn with its anim's frame 0
+  (normal), 1 (pressed), 3 (focused), and frame 2 laid over the caption when disabled. The `style` field is the
+  initial control state: 1 = focused, 3 = enabled. Controls are drawn straight onto the screen surface; the screens
+  build their picture in the back buffer and present it. Button fonts: `butfnt.img` (big), `smallbt.img`; text fonts
+  `stdfont.img`, `midfont.img`, `carved.img` (slot names), `cyber.img`, `ascii12.img`. A font colour change
+  (0x40f4f0) recolours the glyph pixels in place.
 - Big buttons slide in from x=-100 to x=8 (`add_animated_button` 0x40c470, delays 0,2,2,4,6,8,10 frames); the title
   bar (0,0)-(640,47) has a per-screen animated header (`init_animated_header` 0x40c320: 0 player, 1 main, 2 garage,
   3 showroom, 5 options, 6 standings).
@@ -42,10 +48,12 @@ A player named **COPLAND** gets `Game.ini [PLAYER] COPLAND=1` (cop mode in the r
   `slide.wav` when the animated buttons slide in (`init_animated_buttons` 0x40c430), `print.wav` per frame of the
   typewriter text (`next_animated_text_frame` 0x40c110),
   `motor.wav` on Start. The help button **H** at (562,14) plays a spoken guided tour (`play_help` 0x40fcb0): each
-  step highlights a form element and plays a `help_NN.wav`; any key stops it; music is turned down to -2000 during
-  the tour. Help_05/06/07/53.wav exist but are not used.
-- Dialogs: `janee_request` 0x4025a0 = centred panel (menu anim 0x47) with title (stdfont), message (midfont) and
-  buttons **JA** (J) / **NEE** (N); returns 1 for JA.
+  step dims the whole screen with a black checkerboard (8x8 pattern 0x437bd8), lights one form element (a button
+  redrawn, an area copied back from the copy of the screen in surface 2) and plays a `help_NN.wav`; Enter, Space or
+  Esc stops it; music is turned down to -2000 during the tour. Help_05/06/07/53.wav exist but are not used.
+- Dialogs: `janee_request` 0x4025a0 = the screen dimmed (checkerboard), centred panel (menu anim 0x38) with title
+  (stdfont), message (midfont, word-wrapped by sub_40d130) and buttons **JA** (J) / **NEE** (N); returns 1 for JA.
+  The screen under it is saved to surface 2 and the screens put it back (`sub_40e200`) when they reopen.
 - Menu animation bank: `menurc.img/.ind` (MENURC archive), frames by `anim_frame(anim, frame)` 0x409c80.
 
 ## Screens
@@ -58,7 +66,7 @@ A player named **COPLAND** gets `Game.ini [PLAYER] COPLAND=1` (cop mode in the r
 | 2 | **Besturing** (B) | (8,183) | `menu_bediening` | help_15 |
 | 3 | **Opties** (O) | (8,243) | `menu_opties` | help_16 |
 | 4 | **Standen** (C) | (8,303) | `menu_highscore` | help_17 |
-| 5 | **Nieuwe speler** (P) | (8,363) | JA/NEE "Weet je zeker dat je de race wilt onderbreken?" -> stop music, `menu_nspeler(0)` | help_18 |
+| 5 | **Nieuwe speler** (P) | (8,363) | JA/NEE "Weet je zeker dat je de race wilt onderbreken?" -> stop the click (the music keeps playing), `menu_nspeler(0)` | help_18 |
 | 6 | **Einde** (E) | (8,423) | JA/NEE "Wil je het spel beeindigen?" -> exit 0xFF; Esc does the same | help_19 |
 | 7 | H (help) | (562,14) | guided help | - |
 | 8 | title bar hotspot | (0,0) 640x47 | | help_09 |
@@ -90,8 +98,11 @@ at x+275, total time `%02d:%02d` (sum of the player's times in the etappe tables
 
 The initially selected row is the most recently used slot (`get_last_slot` 0x40b710). If no slot is used at all, OK is
 triggered at once. New player: `nsp_request` 0x40a490 - panel "Vul je naam in en wordt lid van de A2 racing club",
-edit box (max 8 characters), OK/Annuleren; then slot.used=1, `slot_touch`, `g_new_player`=1, `menu_kopen(1)`
-(showroom, OK continues to `menu_garage(1)`; cancelling the garage returns to the showroom).
+owner-drawn edit box (Ownedit.cpp, midfont, 8 characters, default text "Speler", cursor at 0 in overwrite mode,
+Insert toggles insert mode; colours 0x3f on 0x7c, cursor cell 0x6a), OK/Annuleren; an empty name is not accepted;
+then slot.used=1, `slot_touch`, `g_new_player`=1, `menu_kopen(1)` (showroom, OK continues to `menu_garage(1)` where
+Showroom is disabled; cancelling the garage returns to the showroom; cancelling the showroom returns to the list
+with the slot already in use). The Up/Down keys only move between OK and Annuleren (the rows need the mouse).
 
 ### Garage (`menu_garage` 0x4046f0, background `garage.pcx`)
 "BUDGET" label (238,76) + "Fl %d" centred in (301,74)-(401,92); "SCHADE" (430,76) + "%d %%" centred in (498,..)-(598,..);
@@ -128,8 +139,12 @@ Astra, Kever, ?, Porsche, Mercedes, Lamborgini):
 
 Item effects ([percents] itemN_percM; M = 1 speed, 2 acceleration, 3 brakes, 4 grip): motor +15 speed, banden +50 grip,
 remmen +50 brakes, versnellingsbak +15 speed +20 accel; repair and turbo 0. The bars show `(v - min) / (max - min) * 100`
-with (min,max) = (100,300) for speed and (0,100) for the others, clamped to 1..100 for cars, 0..100 for items (so the
-+15 speed of an item is drawn as 0). These numbers are only for the menu bars; the race uses its own car data.
+with (min,max) = (100,300) for speed and (0,100) for the others, clamped to 1..100 for cars; an item's value is an
+increase, `v / (max - min) * 100` without the minimum, clamped 0..100 (+15 km/h = 7 %). The bought items are added to
+the car's bars (`get_current_car_props` 0x40cef0), the hovered item glows on top of them (menu anim 0x36). These
+numbers are only for the menu bars; the race uses its own car data.
+After a purchase the garage reopens without redrawing the BUDGET / SCHADE labels (the content rect is copied back from
+a fresh garage.pcx), so they are gone until the screen is opened again (kept as in the original).
 
 ### Showroom "kopen" (`menu_kopen` 0x405f10, background `showroom.pcx`)
 BUDGET + "Fl %d" as in the garage; own car: picture (car anim, frame 5) at (522,199), name (437,109), "Waarde : Fl %d"

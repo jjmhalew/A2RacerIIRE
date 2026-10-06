@@ -133,7 +133,8 @@ int plat_init(const PlatConfig *cfg)
 #ifdef __ANDROID__
     flags |= SDL_WINDOW_FULLSCREEN;
 #else
-    if (cfg->fullscreen) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    if (getenv("A2_HIDDEN")) flags |= SDL_WINDOW_HIDDEN;      /* tests and screenshots without a window on screen */
+    else if (cfg->fullscreen) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 #endif
     g_win = SDL_CreateWindow(cfg->title ? cfg->title : "A2RacerRE", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                              w, h, flags);
@@ -271,6 +272,8 @@ void plat_rumble(float low, float high, int ms)
 {
     if (g_ctrl) SDL_GameControllerRumble(g_ctrl, (Uint16)(low * 65535), (Uint16)(high * 65535), (Uint32)ms);
 }
+void plat_show_cursor(int on) { SDL_ShowCursor(on ? SDL_ENABLE : SDL_DISABLE); }
+
 void plat_mouse(int *x, int *y, unsigned *buttons, unsigned *clicked)
 {
     /* window coordinates -> drawable pixels (high-DPI) */
@@ -385,7 +388,12 @@ const char *plat_user_dir(void)
     return dir;
 }
 
-void plat_set_user_dir(const char *dir) { snprintf(g_user_override, sizeof g_user_override, "%s", dir ? dir : ""); }
+void plat_set_user_dir(const char *dir)
+{
+    size_t n = dir ? strlen(dir) : 0;
+    int sep = n && dir[n - 1] != '/' && dir[n - 1] != '\\';      /* plat_user_dir ends with a separator */
+    snprintf(g_user_override, sizeof g_user_override, "%s%s", dir ? dir : "", sep ? "/" : "");
+}
 
 const char *plat_base_dir(void)
 {
