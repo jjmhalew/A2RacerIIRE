@@ -7,6 +7,7 @@
 #include "effects.h"
 #include "exetab.h"
 #include "model.h"
+#include "pad.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -383,6 +384,13 @@ static void player_car_collision(void)                                /* 0x427de
 {
     plr_collision_sound();
     int J = ftol(g_last_impulse), d = 0;
+    /* PORT: the pad rumbles with the impulse (the original only bumped a DEVICE 4 force-feedback stick, 0.2 s):
+     * a scrape lightly, a damaging crash (18000 and up) hard and longer */
+    if (J > 2000) {
+        float s = (J - 2000) / 28000.0f;
+        if (s > 1) s = 1;
+        pad_rumble(0.2f + 0.8f * s, 120 + (int)(230 * s));
+    }
     if (J >= 18000) {
         if (J > 35000) J = 35000;
         int t = ftol(J * 0.0028571428f), maxd = ai_difficulty() == 1 ? 12 : 6;

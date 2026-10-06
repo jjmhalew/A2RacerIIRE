@@ -10,6 +10,7 @@
 #include "hud.h"
 #include "ini.h"
 #include "model.h"
+#include "pad.h"
 #include "plat.h"
 #include "res.h"
 #include "sfx.h"
@@ -335,11 +336,11 @@ static int prize_money(Race *r)                      /* get_prize_money 0x4280c0
     return m;
 }
 
-/* Esc, Enter or Space held (key_down 0x466910 = GetAsyncKeyState), or a controller's A / B / Start */
+/* Esc, Enter or Space held (key_down 0x466910 = GetAsyncKeyState), or a controller's A / B / Start / pause action */
 static int continue_key_down(void)
 {
     return plat_key(VK_ESCAPE) || plat_key(VK_RETURN) || plat_key(VK_SPACE)
-        || (plat_pad()->buttons & (PAD_A | PAD_B | PAD_START));
+        || (plat_pad()->buttons & (PAD_A | PAD_B | PAD_START)) || pad_held(PA_PAUSE);
 }
 
 /* ---- the end events (ev_main.cpp game actions 4 and 12) ---------------------------------------------------------- */
@@ -494,11 +495,14 @@ void rules_tick(Race *r)
 void rules_keys(Race *r)                             /* check_game_keys 0x424ee0 */
 {
     if (G.pause) {                                   /* handle_pause 0x4248d0 */
-        if (G.pause == 1 && plat_any_key_pressed()) { G.pause = 0; sfx_pause(0); }
+        /* PORT: the pads answer the quit question with A (yes) and B / Start / the pause action (no) */
+        unsigned pp = plat_pad()->pressed;
+        if (G.pause == 1 && (plat_any_key_pressed() || pp)) { G.pause = 0; sfx_pause(0); }
         else if (G.pause == 2) {
-            if (plat_key_pressed('J') || plat_key_pressed('Y') || (plat_pad()->pressed & PAD_A)) {
+            if (plat_key_pressed('J') || plat_key_pressed('Y') || (pp & PAD_A)) {
                 G.pause = 0; sfx_pause(0); set_state(r, GS_QUIT);
-            } else if (plat_key_pressed('N') || plat_key_pressed(VK_ESCAPE) || (plat_pad()->pressed & PAD_B)) {
+            } else if (plat_key_pressed('N') || plat_key_pressed(VK_ESCAPE) || (pp & (PAD_B | PAD_START))
+                       || pad_pressed(PA_PAUSE)) {
                 G.pause = 0; sfx_pause(0);
             }
         }
@@ -506,9 +510,9 @@ void rules_keys(Race *r)                             /* check_game_keys 0x424ee0
     }
     if (G.state != GS_FINISHED && G.state != GS_GAMEOVER) {
         if (plat_key_pressed('P')) { G.pause = 1; sfx_pause(1); }
-        if (plat_key_pressed(VK_ESCAPE) || (plat_pad()->pressed & PAD_START)) { G.pause = 2; sfx_pause(1); }
+        if (plat_key_pressed(VK_ESCAPE) || pad_pressed(PA_PAUSE)) { G.pause = 2; sfx_pause(1); }
     }
-    if (plat_key('T')) sfx_play(SFX_TOETER);
+    if (plat_key('T') || pad_held(PA_HORN)) sfx_play(SFX_TOETER);
     if (plat_key(VK_CONTROL) && plat_key(VK_SPACE)) {
         if (plat_key_pressed('T') && !r->track.city && G.t[11].start >= 0) { timer_start(11, 180000, 1); rules_message(44); }
         if (plat_key_pressed('I')) { G.invincible = 1; rules_message(46); }

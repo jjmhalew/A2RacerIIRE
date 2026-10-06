@@ -6,6 +6,7 @@
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "menu_int.h"
+#include "pad.h"
 #include "plat.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,6 +100,8 @@ int nsp_request(char *name, int max, const char *title)
         } else if (ev == 0 || ev == EV_ENTER) {
             if (ev == EV_ENTER) mui_focus(0);
             /* nsp_req_get_name 0x40a430: only a name that is not empty ends the request */
+            size_t n = strlen(e->buf);
+            while (n && e->buf[n - 1] == ' ') e->buf[--n] = 0;      /* PORT: the pad's letter picker leaves blanks */
             if (e->buf[0]) {
                 snprintf(name, (size_t)max + 1, "%s", e->buf);
                 running = 0;
@@ -956,12 +959,17 @@ static const char *key_name(int vk)
     return "";
 }
 
+/* PORT: with the joypad or a wheel / joystick chosen, the panel shows and sets the game controller mapping of the
+ * six functions instead (controller.ini, pad.h); the keys stay as they are */
+static int g_panel_pad;
+
 static void show_key(int surf, int i, int vk, int active)
 {
     mui_set_font(F_STD);
     int keep = mui_get_colour();
     mui_set_colour(active ? 0x3a : 0x64);
-    mui_print(surf, 0x210, KEY_Y[i] + 0x64, "%s", key_name(vk));
+    const char *name = g_panel_pad ? pad_display_name(pad_bind_name(i, 0), pad_display_kind()) : key_name(vk);
+    mui_print(surf, 0x210, KEY_Y[i] + 0x64, "%s", name);
     mui_set_colour(keep);
 }
 
@@ -985,7 +993,7 @@ static void show_key_panel(int surf, int active)
     int keep = mui_get_colour();
     if (active) { show_key_config_button(surf, 0); mui_set_colour(0x3f); }
     else { show_key_config_button(surf, 2); mui_set_colour(0x64); }
-    mui_print_centered(surf, 0x1a9, 0x69, 0x25d, 0x81, F_STD, "Toetsen");
+    mui_print_centered(surf, 0x1a9, 0x69, 0x25d, 0x81, F_STD, g_panel_pad && active ? "Knoppen" : "Toetsen");
     mui_set_colour(active ? 0x1f : 0x64);
     for (int i = 0; i < 6; i++) mui_print(surf, 0x1a1 + 0xa, KEY_Y[i] + 0x64, "%s", KEY_FN[i]);
     for (int i = 0; i < 6; i++) show_key(surf, i, cur_slot()->keys[i], active);
@@ -1015,10 +1023,12 @@ static void show_device(int surf, int dev)
         const MuiCtrl *c = &g_form_bedien.c[3 + i];
         mui_blit(surf, mui_anim_frame(0xc + i, i == dev), c->x, c->y, 2);
     }
+    g_panel_pad = 0;
     show_key_panel(1, 0);
     show_sensitivity(1, 0);
-    if (dev == 0) show_key_panel(1, 1);
-    else if (dev >= 2 && dev <= 3) show_sensitivity(1, 1);
+    g_panel_pad = dev != 0;
+    show_key_panel(1, 1);                          /* PORT: for the controllers too (the original: keyboard only) */
+    if (dev >= 2 && dev <= 3) show_sensitivity(1, 1);
 }
 
 static void restore_key_help_area(int surf) { mui_copy(2, surf, 0x1b5, 0x175, 0x259, 0x19d); }
@@ -1032,7 +1042,8 @@ static void restore_key_background(int surf, int i)
 static void show_key_help_text(int surf, int i)
 {
     char buf[64];
-    snprintf(buf, sizeof buf, "Druk op een toets voor %s", KEY_FN[i]);
+    snprintf(buf, sizeof buf, g_panel_pad ? "Knop of as voor %s" : "Druk op een toets voor %s",
+             KEY_FN[i]);
     restore_key_help_area(surf);
     mui_print_wrapped(surf, 0x1b6, 0x175, 0xa3, buf);
 }
@@ -1096,6 +1107,52 @@ static void configure_keys(void)
     end_draw();
 }
 
+/* PORT: configure_keys for a game controller or wheel: the six functions in turn take the button, stick half,
+ * trigger, hat or axis that is pressed / moved (the first element of each in controller.ini; the other elements of an
+ * action stay). The same rules as for the keys: already used by an earlier function = refused, by a later one =
+ * swapped. Esc or the pad's Start breaks off and restores the old mapping. */
+static int configure_pad(void)
+{
+    int snd = -1, i = 0, abort = 0, changed = 0;
+    pad_backup();
+    mui_blit(2, mui_anim_frame(0x10, 0), 0x1a1, 0x64, 2);
+    mui_pump();
+    pad_capture_begin();
+    do {
+        begin_draw();
+        show_key_help_text(1, i);
+        if ((long)(mui_ticks() / 100) & 1) restore_key_background(1, i);
+        else show_key(1, i, 0, 1);
+        char el[32];
+        if (plat_key_pressed(VK_ESCAPE) || (plat_pad()->pressed & PAD_START)) {
+            pad_restore();
+            for (int j = 0; j < 6; j++) { restore_key_background(1, j); show_key(1, j, 0, 1); }
+            abort = 1;
+        } else if (pad_capture(el, sizeof el)) {
+            printf("controls: %s = %s\n", pad_action_key(i), el);
+            int dup = -1;
+            for (int j = 0; j < 6; j++) {
+                const char *p = pad_bind_name(j, 0);
+                if (j != i && p && !strcmp(p, el)) { dup = j; break; }
+            }
+            if (dup >= 0 && dup < i) play_sfx(&snd, "fout.wav");
+            else {
+                if (dup > i) pad_swap_primary(i, dup);
+                else pad_set_primary(i, el);
+                changed = 1;
+                for (int j = 0; j < 6; j++) { restore_key_background(1, j); show_key(1, j, 0, 1); }
+                i++;
+            }
+        }
+        end_draw();
+        mui_pump();
+    } while (i < 6 && !abort);
+    begin_draw();
+    restore_key_help_area(1);
+    end_draw();
+    return changed && !abort;
+}
+
 static void mbed_open_screen(AnimHeader *hdr, AnimButtons *btn, int dev)
 {
     mui_screen_tag("bediening");
@@ -1117,10 +1174,11 @@ static int nudge(int v, int ev)
 
 int menu_bediening(void)
 {
-    int snd = -1, need_form = 1, cancel = 0;
+    int snd = -1, need_form = 1, cancel = 0, pad_changed = 0;
     Slot *s = cur_slot();
     Slot backup = *s;
     int dev = s->device;
+    pad_load();                                    /* controller.ini as it is now (it may have been edited) */
     AnimHeader hdr;
     AnimButtons btn;
     mbed_open_screen(&hdr, &btn, dev);
@@ -1162,8 +1220,7 @@ int menu_bediening(void)
                 s->sensitivity = drag_percent_slider(&g_form_bedien.c[7], s->sensitivity, &snd);
             }
             break;
-        case 8:                                    /* Instellen */
-            if (dev != 0) break;
+        case 8:                                    /* Instellen (PORT: the controllers' too) */
             begin_draw();
             show_key_config_button(1, 1);
             end_draw();
@@ -1174,7 +1231,8 @@ int menu_bediening(void)
             mui_enable(0, 0);
             mui_enable(1, 0);
             mui_focus(2);
-            configure_keys();
+            if (dev == 0) configure_keys();
+            else if (configure_pad()) pad_changed = 1;
             mui_enable(0, 1);
             mui_enable(1, 1);
             mui_focus(0);
@@ -1200,6 +1258,10 @@ int menu_bediening(void)
         }
     }
     if (cancel) *s = backup;
+    if (pad_changed) {                             /* configure_pad's backup is of the last Instellen only */
+        if (cancel) { pad_load(); }
+        else if (!pad_save()) fprintf(stderr, "controller.ini could not be written\n");
+    }
     close_screen();
     return 0;
 }

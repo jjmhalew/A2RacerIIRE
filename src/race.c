@@ -12,6 +12,7 @@
 #include "texture.h"
 #include "ini.h"
 #include "model.h"
+#include "pad.h"
 #include "paths.h"
 #include "plat.h"
 #include "res.h"
@@ -338,38 +339,43 @@ static void car_drive_new(int o, float steer, float gas, float brake)
     car_body_height(o);
 }
 
-/* ---- input: plr_input_keyboard 0x4265b0 (new model), plus a game controller (PORT) ------------------------------- */
+/* ---- input: plr_input_keyboard 0x4265b0 (new model), plus the game controllers (PORT, pad.h): their buttons count
+ * as the keys (as the original's joypad, DEVICE 2), their sticks / triggers / wheel axes are analogue (DEVICE 3) --- */
+static int g_pad_steering;                           /* the analogue steering had the wheel last tick */
+
 static void plr_input(int o)
 {
     (void)o;
     float dt = R->dt;
     const int *k = R->input_keys;
-    const PlatPad *pad = plat_pad();
-    int left = plat_key(k[0]), right = plat_key(k[1]), up = plat_key(k[2]), down = plat_key(k[3]);
-    int turbo = plat_key(k[4]), hand = plat_key(k[5]);
-    R->handbrake = hand || (pad->buttons & PAD_B) ? 1 : 0;
+    int left = plat_key(k[0]) || pad_digital(PA_STEER_LEFT), right = plat_key(k[1]) || pad_digital(PA_STEER_RIGHT);
+    int up = plat_key(k[2]) || pad_digital(PA_GAS), down = plat_key(k[3]) || pad_digital(PA_BRAKE);
+    int turbo = plat_key(k[4]) || pad_held(PA_TURBO), hand = plat_key(k[5]) || pad_held(PA_HANDBRAKE);
+    R->handbrake = hand ? 1 : 0;
     R->turbo_active = 0;
-    if ((turbo || (pad->buttons & (PAD_Y | PAD_RB))) && R->turbo > 0) {   /* plr_handle_turbo 0x425cf0 (simplified) */
+    if (turbo && R->turbo > 0) {                     /* plr_handle_turbo 0x425cf0 (simplified) */
         static unsigned last;
         if (R->tick - last >= 3) { last = R->tick; R->turbo--; }        /* one charge per 100 ms */
         R->turbo_active = 1;
+        pad_rumble(0.12f, 150);                      /* PORT: a light buzz (the FF stick of DEVICE 4 got a jolt) */
     }
-    float pad_gas = pad->rt > 0.05f ? pad->rt * 100 : (pad->buttons & PAD_A) ? 100 : 0;
-    float pad_brake = pad->lt > 0.05f ? pad->lt * 100 : (pad->buttons & PAD_X) ? 100 : 0;
+    float pad_gas = pad_analog(PA_GAS) * 100, pad_brake = pad_analog(PA_BRAKE) * 100;
     if (up) { R->gas = R->gas + 70 * dt; if (R->gas > 100) R->gas = 100; }
     else R->gas = 0;
     if (down) { R->brake = ftol((float)R->brake + 40 * dt); if (R->brake > 100) R->brake = 100; }
     else R->brake = 0;
     if (R->test_gas > 0) { R->gas = R->test_gas; R->steer = R->test_steer; return; }
-    if (!up && pad_gas > 0) R->gas = pad_gas;
-    if (!down && pad_brake > 0) R->brake = (int)pad_brake;
-    float lx = pad->lx;
-    if (fabsf(lx) > 0.15f || (pad->buttons & (PAD_LEFT | PAD_RIGHT))) {
-        /* analogue: as DEVICE 3 does, steer = position (with a dead zone), no curve */
-        float v = (pad->buttons & PAD_LEFT) ? -1 : (pad->buttons & PAD_RIGHT) ? 1 : (lx - (lx > 0 ? 0.15f : -0.15f)) / 0.85f;
-        R->steer = v * 100;
+    if (pad_gas > R->gas) R->gas = pad_gas;
+    if (pad_brake > R->brake) R->brake = (int)pad_brake;
+    float st = pad_steer();
+    if (st != 0 && !left && !right) {
+        /* analogue: as DEVICE 3 does, steer = position (dead zone and curve from controller.ini) */
+        R->steer = st * 100;
+        g_pad_steering = 1;
         return;
     }
+    if (g_pad_steering && !left && !right) R->steer = 0;   /* the stick let go: straight, as a centred stick */
+    g_pad_steering = 0;
     float s = R->steer, kk = 2.0f * (1.0f - fabsf(s) * 0.01f);
     if (left) {
         if (R->steer > 0) { R->steer = 0; return; }
@@ -406,15 +412,21 @@ static int handle_player_car(int o)
     if (!R->control) return 1;
     if (R->stuur_model == 1) {                       /* the old model: per-frame steps, forces for obj_integrate */
         const int *k = R->input_keys;
-        const PlatPad *pad = plat_pad();
         int ev = R->game_event, stop = ev == 8 || ev == 6 || ev == 3;
-        int left = plat_key(k[0]) || pad->lx < -0.3f || (pad->buttons & PAD_LEFT);
-        int right = plat_key(k[1]) || pad->lx > 0.3f || (pad->buttons & PAD_RIGHT);
-        int up = !stop && (plat_key(k[2]) || pad->rt > 0.3f || (pad->buttons & PAD_A));
-        int down = stop || plat_key(k[3]) || pad->lt > 0.3f || (pad->buttons & PAD_X);
+        int left = plat_key(k[0]) || pad_digital(PA_STEER_LEFT);
+        int right = plat_key(k[1]) || pad_digital(PA_STEER_RIGHT);
+        int up = !stop && (plat_key(k[2]) || pad_digital(PA_GAS));
+        int down = stop || plat_key(k[3]) || pad_digital(PA_BRAKE);
         if (R->test_gas > 0) { up = 1; left = R->test_steer < 0; right = R->test_steer > 0; }
-        R->handbrake = plat_key(k[5]) || (pad->buttons & PAD_B) ? 1 : 0;
+        R->handbrake = plat_key(k[5]) || pad_held(PA_HANDBRAKE) ? 1 : 0;
         car_old_input(R, left, right, up, down);
+        if (R->test_gas <= 0) {
+            /* PORT: the analogue elements in the old model's ranges, as DEVICE 3 there: steer 30 +- 30, gas 0..40
+             * around the neutral 20 (below 20 brakes / reverses) */
+            float st = pad_steer(), g = pad_analog(PA_GAS) - pad_analog(PA_BRAKE);
+            if (st != 0 && !left && !right) R->steer = (float)ftol(30 + st * 30 + (st > 0 ? 0.5f : -0.5f));
+            if (g != 0 && !up && !down) R->gas = 20 + 20 * g;
+        }
         car_old_drive(R, o, R->input_device);
         return 1;
     }
@@ -499,12 +511,12 @@ static void camera_update(void)
 
 static void game_keys(void)
 {
-    const PlatPad *pad = plat_pad();
     if (plat_key_pressed('1')) R->cam_mode = 1;
     if (plat_key_pressed('2')) R->cam_mode = 3;
     if (plat_key_pressed('4')) R->cam_mode = 0;
-    if (pad->pressed & PAD_BACK) R->cam_mode = R->cam_mode == 1 ? 3 : R->cam_mode == 3 ? 0 : 1;
-    int back = plat_key('3') || (pad->buttons & PAD_LB);
+    if (pad_pressed(PA_CAMERA)) R->cam_mode = R->cam_mode == 1 ? 3 : R->cam_mode == 3 ? 0 : 1;
+    int back = plat_key('3') || pad_held(PA_LOOK_BACK);
+    pad_race_active(!rules_paused() && rules_hud_on());  /* a force-feedback wheel's centring spring */
     if (back && R->cam_mode != 5) { R->cam_saved_mode = R->cam_mode; R->cam_mode = 5; }
     if (!back && R->cam_mode == 5) R->cam_mode = R->cam_saved_mode;
     if (plat_key_pressed('D')) R->detail = (R->detail + 1) & 3;
@@ -560,6 +572,11 @@ static void read_ini(Race *r)
     r->collision_off = ini_int(g, "OPTIONS", "collisionoff", 0);
     r->stuur_model = ini_int(g, "OPTIONS", "stuur_model", 0);
     r->input_device = ini_int(g, "INPUT", "DEVICE", 1);
+    /* SENSITIVITY (the menu's Gevoeligheid, shown for the wheel / joystick devices, which the menu writes as DEVICE
+     * 3 - the Sidewinder too): the original's analogue steering curve. The original used it only in the old model
+     * (DEVICE 3) and for DEVICE 4; PORT: with DEVICE 3 it shapes the controllers' analogue steering in both models,
+     * else controller.ini's steer_linearity does */
+    pad_set_steer_curve(r->input_device >= 3 ? ini_int(g, "INPUT", "SENSITIVITY", 50) : -1);
     tex_set_gamma(ini_int(g, "GFX OPTIONS", "gamma", 1) == 1);
     fx_init(ini_int(g, "GFX OPTIONS", "skidmarks", 1), ini_int(g, "GFX OPTIONS", "fade_skmarks", 1),
             ini_int(g, "GFX OPTIONS", "clouds", 1), ini_int(g, "GFX OPTIONS", "alpha_blending", 1));
@@ -646,6 +663,8 @@ int race_init(Race *r, int etappe, int car)
 
 void race_free(Race *r)
 {
+    pad_race_active(0);
+    g_pad_steering = 0;
     sfx_stop_all();
     rules_free();
     paths_free();

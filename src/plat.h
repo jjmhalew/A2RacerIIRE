@@ -33,8 +33,40 @@ int  plat_key(int vk);                      /* held */
 int  plat_key_pressed(int vk);              /* went down since the previous plat_poll */
 int  plat_any_key_pressed(void);            /* VK of a key that went down since the previous poll, 0 = none */
 const char *plat_text_input(void);          /* typed text since the previous poll (UTF-8 limited to Latin-1) */
+void plat_text_mode(int on);                /* a text field has the focus (Android: the soft keyboard) */
 
-/* The first game controller (SDL GameController: Xbox / PlayStation / Steam Deck naming), all values 0 when none. */
+/* Every game controller and joystick SDL sees, opened when plugged in and closed when pulled out (several at once).
+ * A device SDL knows as a game controller (XInput / Xbox, DualShock 4, DualSense, Switch Pro, Steam Deck / Steam
+ * Input, everything in SDL's database or in a gamecontrollerdb.txt) has its elements in SDL_GameController order and
+ * Xbox naming (A = the bottom face button); anything else (wheels, pedals, flight sticks) is a raw joystick with
+ * numbered axes, buttons and hats. pad.h maps them onto the race's actions. */
+enum { PADKIND_GENERIC, PADKIND_XBOX, PADKIND_PS, PADKIND_SWITCH, PADKIND_STEAM };  /* how the buttons are labelled */
+#define PLAT_MAX_DEVICES 8
+#define PLAT_DEV_AXES 16
+#define PLAT_DEV_BUTTONS 32
+#define PLAT_DEV_HATS 4
+enum { GP_LEFTX, GP_LEFTY, GP_RIGHTX, GP_RIGHTY, GP_LT, GP_RT, GP_NAXES };          /* = SDL_GameControllerAxis */
+enum { GP_A, GP_B, GP_X, GP_Y, GP_BACK, GP_GUIDE, GP_START, GP_LS, GP_RS, GP_LB, GP_RB, GP_DPUP, GP_DPDOWN,
+       GP_DPLEFT, GP_DPRIGHT, GP_MISC1, GP_PADDLE1, GP_PADDLE2, GP_PADDLE3, GP_PADDLE4, GP_TOUCHPAD, GP_NBUTTONS };
+typedef struct {
+    int gamepad;                            /* 1 = SDL game controller (GP_* elements), 0 = raw joystick */
+    int kind;                               /* PADKIND_* */
+    char name[64];
+    int naxes, nbuttons, nhats;
+    float axis[PLAT_DEV_AXES];              /* sticks / raw axes -1..1 (down / right positive), triggers 0..1 */
+    float prev_axis[PLAT_DEV_AXES];         /* ... at the previous plat_poll */
+    uint32_t buttons, prev_buttons;         /* bit i = button i (GP_* or raw button number) */
+    uint8_t hat[PLAT_DEV_HATS], prev_hat[PLAT_DEV_HATS];    /* 1 up, 2 right, 4 down, 8 left (SDL_HAT_*) */
+    double active;                          /* plat_time() of its last input (the last used device rumbles) */
+    int can_rumble, can_spring;
+} PlatDevice;
+const PlatDevice *plat_device(int i);       /* i < PLAT_MAX_DEVICES; NULL = no device in that place */
+int  plat_last_device(void);                /* the device used last, -1 = none */
+void plat_device_rumble(int i, float low, float high, int ms);
+void plat_device_spring(int i, float strength);   /* a wheel's centring spring (SDL haptic) 0..1, 0 = off */
+
+/* All devices merged for the menus and films (the d-pad, the left stick, A / B / Start; a raw joystick's hat and
+ * buttons 0 / 1 count as d-pad and A / B), all values 0 when none. */
 typedef struct {
     int present;
     float lx, ly, rx, ry;                   /* sticks -1..1 */
@@ -44,7 +76,7 @@ typedef struct {
 enum { PAD_A = 1, PAD_B = 2, PAD_X = 4, PAD_Y = 8, PAD_LB = 16, PAD_RB = 32, PAD_BACK = 64, PAD_START = 128,
        PAD_UP = 256, PAD_DOWN = 512, PAD_LEFT = 1024, PAD_RIGHT = 2048, PAD_LS = 4096, PAD_RS = 8192 };
 const PlatPad *plat_pad(void);
-void plat_rumble(float low, float high, int ms);
+void plat_rumble(float low, float high, int ms);   /* the device used last */
 
 /* mouse in window pixels; buttons bit 0 = left, 1 = right */
 void plat_mouse(int *x, int *y, unsigned *buttons, unsigned *clicked);

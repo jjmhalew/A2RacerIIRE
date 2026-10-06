@@ -42,25 +42,48 @@ an ISO image of the CD, or a folder with a copy of it, in Android's file picker.
 to `Android/data/io.github.jjmhalew.a2racerre/files/data` with a USB cable.
 
 ### Controls
-| Action | Keyboard (as the original, changeable in the menu) | Game controller |
-|---|---|---|
-| Steer | Left / Right | left stick or D-pad |
-| Gas | Up | right trigger or A |
-| Brake / reverse | Down | left trigger or X |
-| Turbo | Ctrl | Y or RB |
-| Handbrake | Alt | B |
-| Cameras: chase, cockpit, far chase | 1, 2, 4 | Back cycles |
-| Look back (held) | 3 | LB |
-| Overlay detail | D | |
-| Horn | T | |
-| Pause / quit | P / Esc | Start |
-| Fullscreen / window | Alt+Enter | |
+| Action | Keyboard (as the original, changeable in the menu) | Xbox / Steam Deck controller | PlayStation controller |
+|---|---|---|---|
+| Steer | Left / Right | left stick or D-pad | left stick or D-pad |
+| Gas | Up | RT or A | R2 or Cross |
+| Brake / reverse | Down | LT or X | L2 or Square |
+| Turbo | Ctrl | Y or RB | Triangle or R1 |
+| Handbrake | Alt | B | Circle |
+| Cameras: chase, cockpit, far chase | 1, 2, 4 | View / Back cycles | Share / Create cycles |
+| Look back (held) | 3 | LB | L1 |
+| Overlay detail | D | | |
+| Horn | T | LS (click) | L3 |
+| Pause / quit question | P / Esc | Start / Menu (then A = quit, B = go on) | Options (then Cross = quit, Circle = go on) |
+| Fullscreen / window | Alt+Enter | | |
+
+The controller column is the default mapping; a Switch Pro controller uses the letters printed on it (A = gas is the
+right face button there).
+
+### Controllers
+Every controller SDL knows works, several at once (their input is merged): Xbox and other XInput pads, DualShock 4
+and DualSense (with rumble, lightbar and player LEDs), Switch Pro, the Steam Deck (with Steam Input's gamepad template,
+the default for non-Steam games) and the many pads in SDL's built-in database. Pads SDL does not know can be added with
+a `gamecontrollerdb.txt` ([SDL's format](https://github.com/mdqinc/SDL_GameControllerDB)) in the user folder or next
+to the program. Wheels, pedals and flight sticks that are not game controllers work as plain joysticks with numbered
+axes and buttons. Controllers can be plugged in and out at any time. The pad rumbles on collisions (stronger with the
+impulse) and lightly with the turbo; a force-feedback wheel gets a centring spring during the race.
+
+All menus work with a pad: D-pad or left stick to move, A (Cross) to choose, B (Circle) to go back. The player name:
+up / down turn the letter under the cursor, left / right move the cursor, X (Square) deletes, A or Start accepts.
+
+The mapping is in `controller.ini` in the user folder, written with comments and the defaults above at the first
+start. In the menu's controls screen (*Besturing*) choose the joypad or the wheel / joystick device, then
+*Instellen*: press a button or move a stick, trigger, pedal or wheel for each of the six driving functions in turn
+(Start or Esc breaks off), and *OK* saves it. Look back, camera, horn and pause, the dead zones, the steering curve
+(`steer_linearity`, `steer_sensitivity`), rumble and the wheel spring are edited in the file. With the wheel /
+joystick device the screen's *Gevoeligheid* slider shapes the analogue steering, as in the original. Buttons work like
+the keys (gas and steering build up); sticks, triggers, wheels and pedals are analogue.
 
 ### Files
 Everything the game writes lives in the user folder (`%APPDATA%\A2RacerRE` on Windows, `~/.local/share/A2RacerRE` on
 Linux), or next to `A2RacerRE.exe` when a `data` folder is there (portable). The original's own settings files are kept
 there in their original formats, so they can be edited the same way: `Game.ini` and `Raser.ini` (commented), `SLOTS.RAS`
-(the nine save slots), `options.ras`.
+(the nine save slots), `options.ras`. The port adds `controller.ini` (the controller mapping, see above).
 
 ### Texture packs and mods
 A `mods` folder in the user folder (or next to the program) replaces the game's files without touching them:
@@ -139,5 +162,8 @@ Environment: `A2_HIDDEN=1` opens no visible window (screenshots still work; with
 `A2_TEST_FINISH=N` finishes a race N seconds after the start (and continues 3 s later), `A2_TEST_GAMEOVER=N[,R]` ends
 it N seconds after the start with game over reason R (0 total loss, 1 time up, 2 arrested; continues 8 s later),
 `A2_TEST_CAM=N` holds camera view N (0..10, the original's player views, e.g. 6 front-left, 8 low rear-left),
-`A2_NO_FILMS=1` skips the films, `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
+`A2_NO_FILMS=1` skips the films, `A2_TEST_PAD="T:EL=V ...; T:..."` attaches a virtual game controller and sets its
+elements T seconds after the start (e.g. `"0:RT=1; 5:LEFTX=-0.5; 7:START=1; 7.2:START=0"`, also `T:unplug` / `T:plug`;
+`A2_TEST_PAD_NAME` names it, e.g. `"DualSense Wireless Controller"`), `A2_TEST_JOY` the same for a raw wheel-like
+joystick (`axis0=-1..1 button3=1 hat0=down`); rumble reaching them is printed (needs SDL 2.24 or later), `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
 `A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state.

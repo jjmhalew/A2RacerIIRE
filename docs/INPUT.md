@@ -720,3 +720,42 @@ g_pause_request = 0;
   velocity correction; not decoded here (physics).
 - `0x4a63cc` is `g_plr_brake_light` (set by the engine code while braking, see PHYSICS.md 5.2); DEVICE 3 clears it on handbrake.
 - The meaning of the car-table float at 0x484bf2 + 238*type that turbo sets to 6.0 belongs to the physics doc.
+
+## 11. The port's controller layer (not in the original)
+
+The original reads one winmm / DirectInput joystick with fixed meanings per DEVICE (sections 3-7). The port replaces
+that with SDL2 game controllers and a mapping file, and keeps the keyboard path of DEVICE 1 exactly as above.
+
+**Devices** (`src/plat_sdl.c`, `plat.h` `PlatDevice`): every joystick SDL reports is opened when it arrives and closed
+when it leaves (`SDL_JOYDEVICEADDED` / `REMOVED`), up to 8 at once. One SDL has a mapping for (XInput / Xbox, DualShock
+4 and DualSense through SDL's HIDAPI drivers with rumble enabled, Switch Pro, the Steam Deck and Steam Input's virtual
+pads, the built-in database, `gamecontrollerdb.txt` in the user folder or next to the program) is a *game controller*
+with Xbox-named elements by position; anything else (wheels, pedals, flight sticks) is a *raw joystick* with numbered
+axes, buttons and hats. Haptic raw joysticks (force-feedback wheels) are opened with SDL haptic. The button labels
+shown to the player (Xbox, PlayStation, Switch, Steam Deck) come from SDL's controller type, else from the name. The
+device with the most recent input is "last used": it rumbles and its labels are shown. The menus see all devices
+merged into one pad (`plat_pad`: d-pad, left stick, A / B / Start; a raw joystick's hats and first two buttons).
+
+**Mapping** (`src/pad.c`, `pad.h`, `controller.ini` in the user folder, created with comments at the first use):
+ten actions (`steer_left`, `steer_right`, `gas`, `brake`, `turbo`, `handbrake`, `look_back`, `camera`, `horn`,
+`pause`) take up to four elements each: game controller buttons (`A`, `LB`, `DPLEFT`, ... and PlayStation aliases),
+stick halves (`LEFTX-`), triggers (`LT`), raw `axisN+` / `axisN-` / `axisN` (whole range, a pedal), `buttonN`,
+`hatNup`..., `~` inverting an axis. All devices are merged: an action takes its strongest element on any device.
+Dead zones (`stick_deadzone`, `trigger_deadzone`, `axis_deadzone`) rescale the rest of the travel to 0..1.
+
+**How the race uses it** (`race.c`, `rules.c`):
+
+| Original | Port |
+|---|---|
+| DEVICE 2: joystick buttons become virtual keys | the *digital* elements (buttons, hats) are OR-ed with the six Game.ini keys, so gas, brake and steering build up exactly as on the keyboard (5.2), in both steering models |
+| DEVICE 3: steer = stick position, gas / brake = stick Y (5.3) | the *analogue* elements (sticks, triggers, raw axes): new model `steer = 100 * pad_steer()`, gas and brake = the trigger pressure * 100 (the larger of key and pad); old model `steer = 30 + 30 * pad_steer()`, `gas = 20 + 20 * (gas - brake)` |
+| SENSITIVITY curve (6), old model / DEVICE 4 only | with DEVICE 3 (the menu's wheel / joystick devices, the Sidewinder included: the menu writes it as 3) the 31-entry curve of SENSITIVITY shapes the analogue steering in both models, interpolated between its integer steps; with DEVICE 1 / 2 `steer_linearity` (an exponent) does; `steer_sensitivity` multiplies either |
+| in-race keys (8) | `look_back` held = key 3, `camera` cycles 1 / 2 / 4, `horn` = T, `pause` = Esc (the quit question; A = yes, B / Start = no; a pad press ends the P pause); A / B / Start continue the end screens |
+| DEVICE 4 FF springs and bumps (7.3) | `SDL_HAPTIC_SPRING` on force-feedback raw joysticks while the race runs (`wheel_spring` percent); rumble on every game controller: `player_car_collision` (0x427de0) rumbles with `0.2 + 0.8 * (J - 2000) / 28000` for `120 + 230 * that` ms from impulse J = 2000 up, the turbo gives a light buzz; `rumble` / `rumble_strength` |
+
+**Menu** (`menu_screens.c` `menu_bediening`, `menu_ui.c`): with the joypad, wheel / joystick or Sidewinder device
+chosen the key panel ("Knoppen") shows the first element of the six driving actions and *Instellen* captures them
+(`configure_pad`, the same rules as `configure_keys`: an element already used by an earlier function is refused,
+one of a later function is swapped; the element leaves the other actions; Start or Esc breaks off). OK writes
+controller.ini, Annuleren reloads it; SLOTS.RAS keeps only the keys (its format is unchanged). The name edit box takes
+the pad: up / down turn the letter under the cursor (repeating while held), left / right move it, X deletes.

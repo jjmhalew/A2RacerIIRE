@@ -740,6 +740,7 @@ void mui_create_form(MuiForm *f)
 
 void mui_destroy_form(void)
 {
+    plat_text_mode(0);
     g_cur = NULL;
     g_focus = -1;
     g_capture = -1;
@@ -825,6 +826,46 @@ static void edit_keys(MuiCtrl *c)
     if (plat_key_pressed(VK_HOME)) { c->cursor = 0; changed = 1; }
     if (plat_key_pressed(VK_END)) { c->cursor = len; changed = 1; }
     if (changed) draw_edit(c, 1);
+}
+
+/* PORT: the edit box with a pad (no keyboard on a Steam Deck or a TV): up / down (d-pad or left stick, repeating
+ * while held) turn the character under the cursor through the letters the font has, left / right move the cursor,
+ * X deletes the character before the cursor; A / Start accept, B cancels (get_menu_event). 1 = the pad was used. */
+static int edit_pad(MuiCtrl *c, const PlatPad *pad, int stick)
+{
+    static const char SET[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.!";
+    static double next;
+    static const MuiCtrl *owner;                     /* the box the held direction was pressed on */
+    unsigned held = pad->buttons & (PAD_UP | PAD_DOWN);
+    int step = (pad->pressed & PAD_UP) || stick < 0 ? 1 : (pad->pressed & PAD_DOWN) || stick > 0 ? -1 : 0;
+    double now = mui_ticks();
+    if (!held) owner = NULL;
+    if (step) { next = now + 400; owner = c; }
+    else if (held && owner == c && now >= next) { step = (held & PAD_UP) ? 1 : -1; next = now + 70; }
+    int len = (int)strlen(c->buf), used = step != 0;
+    const Font *f = &g_font[c->font >= 0 ? c->font : F_MID];
+    if (step && c->cursor < c->maxlen) {
+        const char *p = strchr(SET, c->cursor < len ? c->buf[c->cursor] : ' ');
+        int i = p && *p ? (int)(p - SET) : 0, n = (int)sizeof SET - 1;
+        for (int k = 0; k < n; k++) {               /* the next character the font can draw */
+            i = (i + step + n) % n;
+            if (SET[i] == ' ' || f->present[(unsigned char)SET[i]]) break;
+        }
+        if (c->cursor == len) { if (SET[i] != ' ') { c->buf[len] = SET[i]; c->buf[len + 1] = 0; } }
+        else c->buf[c->cursor] = SET[i];
+        len = (int)strlen(c->buf);
+        while (len > 0 && c->buf[len - 1] == ' ' && c->cursor < len - 1) c->buf[--len] = 0;  /* no trailing blanks */
+    }
+    if ((pad->pressed & PAD_LEFT) && c->cursor > 0) { c->cursor--; used = 1; }
+    if ((pad->pressed & PAD_RIGHT) && c->cursor < len && c->cursor < c->maxlen - 1) { c->cursor++; used = 1; }
+    if ((pad->pressed & PAD_X) && c->cursor > 0) {
+        memmove(c->buf + c->cursor - 1, c->buf + c->cursor, (size_t)(len - c->cursor + 1));
+        c->cursor--;
+        used = 1;
+    }
+    if (pad->pressed & (PAD_LEFT | PAD_RIGHT | PAD_X)) used = 1;
+    if (used) draw_edit(c, 1);
+    return used;
 }
 
 /* --menu-shot SCREEN: once the form is up and 2.5 s have passed; SCREEN@MS: MS milliseconds after the screen opened,
@@ -923,17 +964,20 @@ int get_menu_event(void)
         if (ctrl_at(mx, my) == i) return i;
     }
     /* keys and the pad */
+    plat_text_mode(fc && fc->type == CT_EDIT);   /* Android: the soft keyboard only for the name */
     if (fc && fc->type == CT_EDIT) edit_keys(fc);
     if (plat_key_pressed(VK_ESCAPE) || (pad->pressed & PAD_B)) return EV_ESC;
     int up = plat_key_pressed(VK_UP) || (pad->pressed & PAD_UP);
     int down = plat_key_pressed(VK_DOWN) || (pad->pressed & PAD_DOWN);
-    int sd = pad->ly < -0.6f ? -1 : pad->ly > 0.6f ? 1 : 0;
+    int sd = pad->ly < -0.6f ? -1 : pad->ly > 0.6f ? 1 : 0, stick = 0;
     if (sd != g_stick_dir) {
         if (sd < 0) up = 1;
         if (sd > 0) down = 1;
         g_stick_dir = sd;
+        stick = sd;
         if (sd) g_mui_kbd = 1;
     }
+    if (fc && fc->type == CT_EDIT && fc->enabled && edit_pad(fc, pad, stick)) return EV_NONE;
     if (up) return EV_UP;
     if (down) return EV_DOWN;
     int edit = fc && fc->type == CT_EDIT;

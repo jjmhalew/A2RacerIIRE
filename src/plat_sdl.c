@@ -1,12 +1,13 @@
 /* plat_sdl.c - plat.h on SDL2: window and GL context (desktop OpenGL 2.1, or OpenGL ES 2.0 on Android), keyboard as
- * Windows VK codes, the first game controller, mouse / touch as mouse, the audio device, time and case-insensitive
- * file lookup.
+ * Windows VK codes, every game controller and joystick (hot-plugged, rumble, wheel springs), mouse / touch as mouse,
+ * the audio device, time and case-insensitive file lookup.
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #define SDL_MAIN_HANDLED
 #include "plat.h"
 #include <SDL.h>
 #include <errno.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -21,7 +22,20 @@ static int g_gles;
 static unsigned char g_keys[256], g_down[256];
 static char g_text[64];
 static PlatPad g_pad;
-static SDL_GameController *g_ctrl;
+typedef struct {
+    int used;
+    SDL_GameController *gc;                 /* NULL = a raw joystick */
+    SDL_Joystick *joy;                      /* the joystick (of the game controller too) */
+    SDL_JoystickID id;
+    SDL_Haptic *haptic;                     /* raw joysticks with force feedback (wheels) */
+    int spring_fx, spring_on, haptic_rumble;
+    float spring;
+    PlatDevice d;
+} Dev;
+static Dev g_dev[PLAT_MAX_DEVICES];
+static int g_last_dev = -1;
+static void test_pad_init(void);
+static void test_pad_step(void);
 static SDL_AudioDeviceID g_audio;
 static int g_audio_rate = 44100;
 static PlatAudioFn g_audio_fn;
@@ -102,6 +116,7 @@ static void set_key(int vk, int down)
 void plat_message(const char *text, int warn)
 {
     fprintf(stderr, "%s\n", text);
+    if (getenv("A2_HIDDEN")) return;                          /* tests: no window */
     SDL_ShowSimpleMessageBox(warn ? SDL_MESSAGEBOX_WARNING : SDL_MESSAGEBOX_INFORMATION, "A2RacerRE", text, g_win);
 }
 
@@ -110,10 +125,33 @@ int plat_init(const PlatConfig *cfg)
     SDL_SetMainReady();
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    /* the PlayStation pads through SDL's own HIDAPI drivers: rumble (also over Bluetooth), lightbar, player LEDs
+     * (the names, not the SDL_HINT_ macros: an older system SDL, as on Ubuntu 22.04, lacks some and ignores them) */
+    SDL_SetHint("SDL_JOYSTICK_HIDAPI_PS4", "1");
+    SDL_SetHint("SDL_JOYSTICK_HIDAPI_PS5", "1");
+    SDL_SetHint("SDL_JOYSTICK_HIDAPI_PS4_RUMBLE", "1");
+    SDL_SetHint("SDL_JOYSTICK_HIDAPI_PS5_RUMBLE", "1");
+    SDL_SetHint("SDL_JOYSTICK_HIDAPI_PS5_PLAYER_LED", "1");
+    SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");   /* Android: the phone's tilt is not a controller */
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER | SDL_INIT_TIMER) != 0) {
         fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());
         return 0;
     }
+    if (SDL_InitSubSystem(SDL_INIT_HAPTIC) != 0) fprintf(stderr, "no haptic: %s\n", SDL_GetError());   /* wheels */
+    /* extra controller mappings (SDL's gamecontrollerdb.txt format) next to the program and in the user folder;
+     * SDL itself also reads the file named by SDL_GAMECONTROLLERCONFIG_FILE */
+    {
+        const char *dirs[2] = { plat_base_dir(), plat_user_dir() };
+        for (int i = 0; i < 2; i++) {
+            char p[1024];
+            snprintf(p, sizeof p, "%sgamecontrollerdb.txt", dirs[i]);
+            if (i == 1 && !strcmp(dirs[0], dirs[1])) break;
+            if (!plat_exists(p)) continue;
+            int n = SDL_GameControllerAddMappingsFromFile(p);
+            printf("%s: %d controller mappings\n", p, n);
+        }
+    }
+    test_pad_init();
     g_t0 = SDL_GetPerformanceCounter();
 #ifdef __ANDROID__
     g_gles = 1;
@@ -149,17 +187,51 @@ int plat_init(const PlatConfig *cfg)
         return 0;
     }
     SDL_GL_SetSwapInterval(cfg->vsync ? 1 : 0);
+#ifdef __ANDROID__
+    SDL_StopTextInput();             /* no soft keyboard over the game: only while a name is typed (plat_text_mode) */
+#else
     SDL_StartTextInput();
+#endif
     return 1;
+}
+
+void plat_text_mode(int on)
+{
+#ifdef __ANDROID__
+    static int cur;
+    if (on == cur) return;
+    cur = on;
+    if (on) SDL_StartTextInput();
+    else SDL_StopTextInput();
+#else
+    (void)on;                        /* the desktop keeps text input on (it brings up nothing) */
+#endif
 }
 
 void plat_shutdown(void)
 {
     if (g_audio) SDL_CloseAudioDevice(g_audio);
-    if (g_ctrl) SDL_GameControllerClose(g_ctrl);
+    for (int i = 0; i < PLAT_MAX_DEVICES; i++) {
+        Dev *v = &g_dev[i];
+        if (!v->used) continue;
+        if (v->haptic) SDL_HapticClose(v->haptic);
+        if (v->gc) SDL_GameControllerClose(v->gc);
+        else SDL_JoystickClose(v->joy);
+    }
     if (g_gl) SDL_GL_DeleteContext(g_gl);
     if (g_win) SDL_DestroyWindow(g_win);
     SDL_Quit();
+    /* Android can start SDL_main again in the same process: nothing may point at the old SDL */
+    memset(g_dev, 0, sizeof g_dev);
+    memset(&g_pad, 0, sizeof g_pad);
+    g_last_dev = -1;
+    memset(g_keys, 0, sizeof g_keys);
+    memset(g_down, 0, sizeof g_down);
+    g_audio = 0;
+    g_audio_fn = NULL;
+    g_audio_user = NULL;
+    g_gl = NULL;
+    g_win = NULL;
 }
 
 void plat_swap(void) { SDL_GL_SwapWindow(g_win); }
@@ -178,29 +250,165 @@ void plat_toggle_fullscreen(void)
 /* ---- input ----------------------------------------------------------------------------------------------------- */
 static float axis(Sint16 v) { return v < 0 ? v / 32768.0f : v / 32767.0f; }
 
+/* case-insensitive strstr (SDL_strcasestr needs SDL 2.26; Linux builds use the system's SDL) */
+static int has_word(const char *s, const char *w)
+{
+    size_t n = strlen(w);
+    for (; *s; s++)
+        if (!SDL_strncasecmp(s, w, n)) return 1;
+    return 0;
+}
+
+/* how a pad's buttons are labelled: SDL's controller type, else its name (Steam Input and virtual pads) */
+static int pad_kind(SDL_GameController *c, const char *name)
+{
+    switch (SDL_GameControllerGetType(c)) {
+    case SDL_CONTROLLER_TYPE_XBOX360: case SDL_CONTROLLER_TYPE_XBOXONE:
+        if (has_word(name, "steam")) return PADKIND_STEAM;            /* Steam Input's virtual gamepad */
+        return PADKIND_XBOX;
+    case SDL_CONTROLLER_TYPE_PS3: case SDL_CONTROLLER_TYPE_PS4: case SDL_CONTROLLER_TYPE_PS5: return PADKIND_PS;
+    case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO:
+#if SDL_VERSION_ATLEAST(2, 24, 0)
+    case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_LEFT: case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+    case SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+#endif
+        return PADKIND_SWITCH;
+    default: break;
+    }
+    static const struct { const char *s; int k; } N[] = {
+        { "dualsense", PADKIND_PS }, { "dualshock", PADKIND_PS }, { "playstation", PADKIND_PS }, { "ps5", PADKIND_PS },
+        { "ps4", PADKIND_PS }, { "ps3", PADKIND_PS }, { "steam", PADKIND_STEAM }, { "switch", PADKIND_SWITCH },
+        { "joy-con", PADKIND_SWITCH }, { "xbox", PADKIND_XBOX }, { "xinput", PADKIND_XBOX }, { "x-box", PADKIND_XBOX } };
+    for (size_t i = 0; i < sizeof N / sizeof N[0]; i++)
+        if (has_word(name, N[i].s)) return N[i].k;
+    return PADKIND_GENERIC;
+}
+
+static void read_device(Dev *v)
+{
+    PlatDevice *d = &v->d;
+    memcpy(d->prev_axis, d->axis, sizeof d->axis);
+    memcpy(d->prev_hat, d->hat, sizeof d->hat);
+    d->prev_buttons = d->buttons;
+    d->buttons = 0;
+    int active = 0;
+    if (v->gc) {
+        for (int a = 0; a < GP_NAXES; a++) {
+            Sint16 r = SDL_GameControllerGetAxis(v->gc, (SDL_GameControllerAxis)a);
+            d->axis[a] = a >= GP_LT ? (r > 0 ? r / 32767.0f : 0) : axis(r);
+            if (a < GP_LT ? fabsf(d->axis[a]) > 0.5f : d->axis[a] > 0.3f) active = 1;
+        }
+        for (int b = 0; b < GP_NBUTTONS; b++)
+            if (SDL_GameControllerGetButton(v->gc, (SDL_GameControllerButton)b)) d->buttons |= 1u << b;
+    } else {
+        for (int a = 0; a < d->naxes; a++) {
+            d->axis[a] = axis(SDL_JoystickGetAxis(v->joy, a));
+            if (fabsf(d->axis[a] - d->prev_axis[a]) > 0.05f) active = 1;
+        }
+        for (int b = 0; b < d->nbuttons; b++)
+            if (SDL_JoystickGetButton(v->joy, b)) d->buttons |= 1u << b;
+        for (int h = 0; h < d->nhats; h++) {
+            d->hat[h] = SDL_JoystickGetHat(v->joy, h);
+            if (d->hat[h] != d->prev_hat[h]) active = 1;
+        }
+    }
+    if (d->buttons != d->prev_buttons) active = 1;
+    if (active) { d->active = plat_time(); g_last_dev = (int)(v - g_dev); }
+}
+
+static void open_device(int index)
+{
+    SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(index);
+    const char *jn = SDL_JoystickNameForIndex(index);
+    if (jn && has_word(jn, "accelerometer")) return;                 /* Android's tilt sensor, if SDL offers it */
+    int slot = -1;
+    for (int i = 0; i < PLAT_MAX_DEVICES; i++) {
+        if (g_dev[i].used && g_dev[i].id == id) return;
+        if (!g_dev[i].used && slot < 0) slot = i;
+    }
+    if (slot < 0) return;
+    Dev *v = &g_dev[slot];
+    memset(v, 0, sizeof *v);
+    v->spring_fx = -1;
+    if (SDL_IsGameController(index) && (v->gc = SDL_GameControllerOpen(index)) != NULL)
+        v->joy = SDL_GameControllerGetJoystick(v->gc);
+    else v->joy = SDL_JoystickOpen(index);
+    if (!v->joy) { fprintf(stderr, "controller %d: %s\n", index, SDL_GetError()); memset(v, 0, sizeof *v); return; }
+    v->used = 1;
+    v->id = SDL_JoystickInstanceID(v->joy);
+    PlatDevice *d = &v->d;
+    const char *name = v->gc ? SDL_GameControllerName(v->gc) : SDL_JoystickName(v->joy);
+    snprintf(d->name, sizeof d->name, "%s", name ? name : "?");
+    d->gamepad = v->gc != NULL;
+    if (v->gc) {
+        d->kind = pad_kind(v->gc, d->name);
+        d->naxes = GP_NAXES;
+        d->nbuttons = GP_NBUTTONS;
+        SDL_GameControllerSetPlayerIndex(v->gc, slot);               /* the DualSense's player LEDs */
+        if (SDL_GameControllerHasLED(v->gc)) SDL_GameControllerSetLED(v->gc, 0xff, 0x60, 0x00);   /* lightbar */
+    } else {
+        d->kind = PADKIND_GENERIC;
+        d->naxes = SDL_min(SDL_JoystickNumAxes(v->joy), PLAT_DEV_AXES);
+        d->nbuttons = SDL_min(SDL_JoystickNumButtons(v->joy), PLAT_DEV_BUTTONS);
+        d->nhats = SDL_min(SDL_JoystickNumHats(v->joy), PLAT_DEV_HATS);
+        if (SDL_JoystickIsHaptic(v->joy) == 1 && (v->haptic = SDL_HapticOpenFromJoystick(v->joy)) != NULL) {
+            d->can_spring = (SDL_HapticQuery(v->haptic) & SDL_HAPTIC_SPRING) != 0;
+            v->haptic_rumble = SDL_HapticRumbleSupported(v->haptic) == 1 && SDL_HapticRumbleInit(v->haptic) == 0;
+        }
+    }
+    d->can_rumble = SDL_JoystickHasRumble(v->joy) || v->haptic_rumble;
+    read_device(v);
+    read_device(v);                                                  /* prev = now: nothing "went down" on arrival */
+    d->active = 0;
+    printf("controller %d: %s (%s, %d axes, %d buttons, %d hats%s%s)\n", slot, d->name,
+           v->gc ? "game controller" : "joystick", d->naxes, d->nbuttons, d->nhats, d->can_rumble ? ", rumble" : "",
+           d->can_spring ? ", force feedback" : "");
+}
+
+static void close_device(SDL_JoystickID id)
+{
+    for (int i = 0; i < PLAT_MAX_DEVICES; i++) {
+        Dev *v = &g_dev[i];
+        if (!v->used || v->id != id) continue;
+        printf("controller %d: %s removed\n", i, v->d.name);
+        if (v->haptic) SDL_HapticClose(v->haptic);
+        if (v->gc) SDL_GameControllerClose(v->gc);
+        else SDL_JoystickClose(v->joy);
+        memset(v, 0, sizeof *v);
+        if (g_last_dev == i) g_last_dev = -1;
+    }
+}
+
+/* the merged pad of the menus: every game controller, and the hats / first two buttons of raw joysticks */
 static void update_pad(void)
 {
     unsigned before = g_pad.buttons;
     memset(&g_pad, 0, sizeof g_pad);
-    if (!g_ctrl) return;
-    SDL_GameController *c = g_ctrl;
-    g_pad.present = 1;
-    g_pad.lx = axis(SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTX));
-    g_pad.ly = axis(SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTY));
-    g_pad.rx = axis(SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_RIGHTX));
-    g_pad.ry = axis(SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_RIGHTY));
-    g_pad.lt = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) / 32767.0f;
-    g_pad.rt = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) / 32767.0f;
-    static const struct { SDL_GameControllerButton b; unsigned bit; } M[] = {
-        { SDL_CONTROLLER_BUTTON_A, PAD_A }, { SDL_CONTROLLER_BUTTON_B, PAD_B }, { SDL_CONTROLLER_BUTTON_X, PAD_X },
-        { SDL_CONTROLLER_BUTTON_Y, PAD_Y }, { SDL_CONTROLLER_BUTTON_LEFTSHOULDER, PAD_LB },
-        { SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, PAD_RB }, { SDL_CONTROLLER_BUTTON_BACK, PAD_BACK },
-        { SDL_CONTROLLER_BUTTON_START, PAD_START }, { SDL_CONTROLLER_BUTTON_DPAD_UP, PAD_UP },
-        { SDL_CONTROLLER_BUTTON_DPAD_DOWN, PAD_DOWN }, { SDL_CONTROLLER_BUTTON_DPAD_LEFT, PAD_LEFT },
-        { SDL_CONTROLLER_BUTTON_DPAD_RIGHT, PAD_RIGHT }, { SDL_CONTROLLER_BUTTON_LEFTSTICK, PAD_LS },
-        { SDL_CONTROLLER_BUTTON_RIGHTSTICK, PAD_RS } };
-    for (size_t i = 0; i < sizeof M / sizeof M[0]; i++)
-        if (SDL_GameControllerGetButton(c, M[i].b)) g_pad.buttons |= M[i].bit;
+    static const unsigned M[GP_NBUTTONS] = { PAD_A, PAD_B, PAD_X, PAD_Y, PAD_BACK, 0, PAD_START, PAD_LS, PAD_RS,
+                                             PAD_LB, PAD_RB, PAD_UP, PAD_DOWN, PAD_LEFT, PAD_RIGHT };
+    for (int i = 0; i < PLAT_MAX_DEVICES; i++) {
+        Dev *v = &g_dev[i];
+        if (!v->used) continue;
+        read_device(v);
+        const PlatDevice *d = &v->d;
+        g_pad.present = 1;
+        if (d->gamepad) {
+            float *dst[6] = { &g_pad.lx, &g_pad.ly, &g_pad.rx, &g_pad.ry, &g_pad.lt, &g_pad.rt };
+            for (int a = 0; a < GP_NAXES; a++)
+                if (fabsf(d->axis[a]) > fabsf(*dst[a])) *dst[a] = d->axis[a];
+            for (int b = 0; b < GP_NBUTTONS; b++)
+                if (d->buttons & (1u << b)) g_pad.buttons |= M[b];
+        } else {
+            for (int h = 0; h < d->nhats; h++) {
+                if (d->hat[h] & SDL_HAT_UP) g_pad.buttons |= PAD_UP;
+                if (d->hat[h] & SDL_HAT_DOWN) g_pad.buttons |= PAD_DOWN;
+                if (d->hat[h] & SDL_HAT_LEFT) g_pad.buttons |= PAD_LEFT;
+                if (d->hat[h] & SDL_HAT_RIGHT) g_pad.buttons |= PAD_RIGHT;
+            }
+            if (d->buttons & 1) g_pad.buttons |= PAD_A;
+            if (d->buttons & 2) g_pad.buttons |= PAD_B;
+        }
+    }
     g_pad.pressed = g_pad.buttons & ~before;
 }
 
@@ -211,7 +419,7 @@ int plat_poll(void)
     memset(g_down, 0, sizeof g_down);
     g_text[0] = 0;
     g_mclick = 0;
-    unsigned before = g_pad.buttons;
+    test_pad_step();
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_QUIT: alive = 0; break;
@@ -239,21 +447,13 @@ int plat_poll(void)
             if (e.button.button == SDL_BUTTON_LEFT) g_mb &= ~1u;
             if (e.button.button == SDL_BUTTON_RIGHT) g_mb &= ~2u;
             break;
-        case SDL_CONTROLLERDEVICEADDED:
-            if (!g_ctrl) g_ctrl = SDL_GameControllerOpen(e.cdevice.which);
-            break;
-        case SDL_CONTROLLERDEVICEREMOVED:
-            if (g_ctrl && e.cdevice.which == SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_ctrl))) {
-                SDL_GameControllerClose(g_ctrl);
-                g_ctrl = NULL;
-                for (int i = 0; i < SDL_NumJoysticks(); i++)
-                    if (SDL_IsGameController(i) && (g_ctrl = SDL_GameControllerOpen(i))) break;
-            }
-            break;
+        /* every joystick (game controllers too) arrives and leaves as a joystick; it is opened as a game controller
+         * when SDL has a mapping for it */
+        case SDL_JOYDEVICEADDED: open_device(e.jdevice.which); break;
+        case SDL_JOYDEVICEREMOVED: close_device(e.jdevice.which); break;
         default: break;
         }
     }
-    g_pad.buttons = before;
     update_pad();
     return alive;
 }
@@ -268,10 +468,194 @@ int plat_any_key_pressed(void)
 }
 const char *plat_text_input(void) { return g_text; }
 const PlatPad *plat_pad(void) { return &g_pad; }
-void plat_rumble(float low, float high, int ms)
+const PlatDevice *plat_device(int i) { return i >= 0 && i < PLAT_MAX_DEVICES && g_dev[i].used ? &g_dev[i].d : NULL; }
+int plat_last_device(void)
 {
-    if (g_ctrl) SDL_GameControllerRumble(g_ctrl, (Uint16)(low * 65535), (Uint16)(high * 65535), (Uint32)ms);
+    if (g_last_dev >= 0 && g_dev[g_last_dev].used) return g_last_dev;
+    for (int i = 0; i < PLAT_MAX_DEVICES; i++)
+        if (g_dev[i].used) return i;
+    return -1;
 }
+
+static Uint16 u16(float v) { return (Uint16)(v <= 0 ? 0 : v >= 1 ? 65535 : v * 65535); }
+
+void plat_device_rumble(int i, float low, float high, int ms)
+{
+    if (i < 0 || i >= PLAT_MAX_DEVICES || !g_dev[i].used) return;
+    Dev *v = &g_dev[i];
+    if (SDL_JoystickHasRumble(v->joy)) SDL_JoystickRumble(v->joy, u16(low), u16(high), (Uint32)ms);
+    else if (v->haptic_rumble) {
+        float s = low > high ? low : high;
+        if (s > 0) SDL_HapticRumblePlay(v->haptic, s > 1 ? 1 : s, (Uint32)ms);
+        else SDL_HapticRumbleStop(v->haptic);
+    }
+}
+
+void plat_rumble(float low, float high, int ms) { plat_device_rumble(plat_last_device(), low, high, ms); }
+
+/* the centring spring of a force-feedback wheel / stick (what the original's DEVICE 4 made with constant forces) */
+void plat_device_spring(int i, float strength)
+{
+    if (i < 0 || i >= PLAT_MAX_DEVICES || !g_dev[i].used || !g_dev[i].d.can_spring) return;
+    Dev *v = &g_dev[i];
+    if (strength < 0) strength = 0;
+    if (strength > 1) strength = 1;
+    if (fabsf(strength - v->spring) < 0.01f && (strength > 0) == v->spring_on) return;
+    v->spring = strength;
+    if (strength <= 0) {
+        if (v->spring_fx >= 0 && v->spring_on) SDL_HapticStopEffect(v->haptic, v->spring_fx);
+        v->spring_on = 0;
+        return;
+    }
+    SDL_HapticEffect fx;
+    memset(&fx, 0, sizeof fx);
+    fx.type = SDL_HAPTIC_SPRING;
+    fx.condition.length = SDL_HAPTIC_INFINITY;
+    fx.condition.direction.type = SDL_HAPTIC_CARTESIAN;
+    fx.condition.direction.dir[0] = 1;
+    for (int a = 0; a < 3; a++) {
+        fx.condition.right_sat[a] = fx.condition.left_sat[a] = 0xffff;
+        fx.condition.right_coeff[a] = fx.condition.left_coeff[a] = (Sint16)(strength * 32767);
+    }
+    if (v->spring_fx < 0) v->spring_fx = SDL_HapticNewEffect(v->haptic, &fx);
+    else SDL_HapticUpdateEffect(v->haptic, v->spring_fx, &fx);
+    if (v->spring_fx < 0) { v->d.can_spring = 0; fprintf(stderr, "spring: %s\n", SDL_GetError()); return; }
+    if (!v->spring_on) SDL_HapticRunEffect(v->haptic, v->spring_fx, 1);
+    v->spring_on = 1;
+}
+
+/* ---- developer: a virtual controller driven by a script (tests without a pad) ----------------------------------
+ * A2_TEST_PAD="T:EL=V EL=V; T:..." attaches a virtual game controller (A2_TEST_PAD_NAME names it, e.g. "DualSense
+ * Wireless Controller") and sets its elements T seconds after the start: A B X Y BACK GUIDE START LS RS LB RB DPUP
+ * DPDOWN DPLEFT DPRIGHT = 0/1, LEFTX LEFTY RIGHTX RIGHTY = -1..1, LT RT = 0..1; "T:unplug" / "T:plug" detach and
+ * attach it again. A2_TEST_JOY does the same with a raw wheel-like joystick (3 axes, 12 buttons, a hat):
+ * axisN=-1..1 buttonN=0/1 hatN=up|down|left|right|c. Rumble reaching the virtual pad is printed. */
+#if SDL_VERSION_ATLEAST(2, 24, 0)
+typedef struct { const char *script; int raw, index; SDL_Joystick *joy; const char *pos; double t0; } TestPad;
+static TestPad g_test[2];
+
+static int SDLCALL test_rumble(void *user, Uint16 lo, Uint16 hi)
+{
+    printf("test pad %d: rumble %u %u\n", (int)(intptr_t)user, lo, hi);
+    return 0;
+}
+
+static void test_attach(TestPad *t)
+{
+    static const char *const names[2] = { "A2 test pad", "A2 test wheel" };
+    SDL_VirtualJoystickDesc desc;
+    SDL_zero(desc);
+    desc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
+    if (t->raw) {
+        desc.type = SDL_JOYSTICK_TYPE_WHEEL;
+        desc.naxes = 3;
+        desc.nbuttons = 12;
+        desc.nhats = 1;
+        desc.name = names[1];
+    } else {
+        desc.type = SDL_JOYSTICK_TYPE_GAMECONTROLLER;
+        desc.naxes = SDL_CONTROLLER_AXIS_MAX;
+        desc.nbuttons = SDL_CONTROLLER_BUTTON_MISC1;
+        desc.button_mask = (1u << SDL_CONTROLLER_BUTTON_MISC1) - 1;
+        desc.axis_mask = (1u << SDL_CONTROLLER_AXIS_MAX) - 1;
+        desc.name = getenv("A2_TEST_PAD_NAME") ? getenv("A2_TEST_PAD_NAME") : names[0];
+    }
+    desc.userdata = (void *)(intptr_t)t->raw;
+    desc.Rumble = test_rumble;
+    t->index = SDL_JoystickAttachVirtualEx(&desc);
+    t->joy = t->index >= 0 ? SDL_JoystickOpen(t->index) : NULL;
+    if (!t->joy) { fprintf(stderr, "test pad: %s\n", SDL_GetError()); return; }
+    if (!t->raw)                                             /* the triggers rest at the axis minimum */
+        for (int a = SDL_CONTROLLER_AXIS_TRIGGERLEFT; a <= SDL_CONTROLLER_AXIS_TRIGGERRIGHT; a++)
+            SDL_JoystickSetVirtualAxis(t->joy, a, -32768);
+}
+
+static void test_pad_init(void)
+{
+    g_test[0].script = getenv("A2_TEST_PAD");
+    g_test[1].script = getenv("A2_TEST_JOY");
+    g_test[1].raw = 1;
+    for (int i = 0; i < 2; i++) {
+        TestPad *t = &g_test[i];
+        if (!t->script) continue;
+        t->pos = t->script;
+        t->t0 = -1;
+        test_attach(t);
+    }
+}
+
+static void test_set(TestPad *t, const char *el, float v)
+{
+    static const char *const AX[] = { "LEFTX", "LEFTY", "RIGHTX", "RIGHTY", "LT", "RT" };
+    static const char *const BT[] = { "A", "B", "X", "Y", "BACK", "GUIDE", "START", "LS", "RS", "LB", "RB", "DPUP",
+                                      "DPDOWN", "DPLEFT", "DPRIGHT" };
+    Sint16 full = (Sint16)(v <= -1 ? -32768 : v >= 1 ? 32767 : v * 32767);
+    if (!t->raw) {
+        for (int a = 0; a < 6; a++)
+            if (!SDL_strcasecmp(el, AX[a])) {
+                SDL_JoystickSetVirtualAxis(t->joy, a, a >= 4 ? (Sint16)(-32768 + (v < 0 ? 0 : v > 1 ? 1 : v) * 65535) : full);
+                return;
+            }
+        for (int b = 0; b < 15; b++)
+            if (!SDL_strcasecmp(el, BT[b])) { SDL_JoystickSetVirtualButton(t->joy, b, v > 0.5f); return; }
+    } else if (!SDL_strncasecmp(el, "axis", 4)) { SDL_JoystickSetVirtualAxis(t->joy, atoi(el + 4), full); return; }
+    else if (!SDL_strncasecmp(el, "button", 6)) { SDL_JoystickSetVirtualButton(t->joy, atoi(el + 6), v > 0.5f); return; }
+    fprintf(stderr, "test pad: unknown element %s\n", el);
+}
+
+static void test_pad_step(void)
+{
+    for (int i = 0; i < 2; i++) {
+        TestPad *t = &g_test[i];
+        if (!t->script) continue;
+        double now = plat_time();
+        if (t->t0 < 0) t->t0 = now;
+        while (*t->pos) {
+            const char *p = t->pos;
+            while (*p == ' ' || *p == ';') p++;
+            if (!*p) { t->pos = p; break; }
+            char *e;
+            double at = strtod(p, &e);
+            if (e == p || *e != ':') { fprintf(stderr, "test pad: bad script at %s\n", p); t->pos = p + strlen(p); break; }
+            if (now - t->t0 < at) break;
+            p = e + 1;
+            const char *end = strchr(p, ';');
+            if (!end) end = p + strlen(p);
+            while (p < end) {
+                char tok[64];
+                size_t n = 0;
+                while (p < end && *p == ' ') p++;
+                while (p < end && *p != ' ' && n + 1 < sizeof tok) tok[n++] = *p++;
+                tok[n] = 0;
+                if (!n) continue;
+                printf("test pad %d at %.2f s: %s\n", i, now - t->t0, tok);
+                if (!SDL_strcasecmp(tok, "unplug")) {
+                    if (t->joy) { SDL_JoystickClose(t->joy); t->joy = NULL; SDL_JoystickDetachVirtual(t->index); }
+                    continue;
+                }
+                if (!SDL_strcasecmp(tok, "plug")) { if (!t->joy) test_attach(t); continue; }
+                char *eq = strchr(tok, '=');
+                if (!eq || !t->joy) continue;
+                *eq = 0;
+                if (t->raw && !SDL_strncasecmp(tok, "hat", 3)) {
+                    const char *d = eq + 1;
+                    Uint8 h = !SDL_strcasecmp(d, "up") ? SDL_HAT_UP : !SDL_strcasecmp(d, "down") ? SDL_HAT_DOWN
+                            : !SDL_strcasecmp(d, "left") ? SDL_HAT_LEFT : !SDL_strcasecmp(d, "right") ? SDL_HAT_RIGHT
+                            : SDL_HAT_CENTERED;
+                    SDL_JoystickSetVirtualHat(t->joy, atoi(tok + 3), h);
+                } else test_set(t, tok, (float)atof(eq + 1));
+            }
+            t->pos = end;
+        }
+    }
+}
+#else
+static void test_pad_init(void)
+{
+    if (getenv("A2_TEST_PAD") || getenv("A2_TEST_JOY")) fprintf(stderr, "test pad: needs SDL 2.24 or later\n");
+}
+static void test_pad_step(void) {}
+#endif
 void plat_show_cursor(int on) { SDL_ShowCursor(on ? SDL_ENABLE : SDL_DISABLE); }
 
 void plat_mouse(int *x, int *y, unsigned *buttons, unsigned *clicked)
@@ -318,7 +702,7 @@ void plat_audio_unlock(void) { if (g_audio) SDL_UnlockAudioDevice(g_audio); }
 double plat_time(void) { return (double)(SDL_GetPerformanceCounter() - g_t0) / (double)SDL_GetPerformanceFrequency(); }
 void plat_sleep_ms(int ms) { SDL_Delay((Uint32)(ms > 0 ? ms : 0)); }
 
-int plat_exists(const char *path) { struct stat st; return stat(path, &st) == 0; }
+static int exists_exact(const char *path) { struct stat st; return stat(path, &st) == 0; }
 
 #ifndef _WIN32
 /* path with every part matched ignoring case against what is on disk; 0 = some part is not there */
@@ -335,7 +719,7 @@ static int resolve(const char *in, char *out, size_t cap)
         char *e = strchr(p, '/'), test[1100];
         if (e) *e = 0;
         snprintf(test, sizeof test, "%s%s", out, p);
-        if (!strcmp(p, ".") || !strcmp(p, "..") || plat_exists(test)) o += (size_t)snprintf(out + o, cap - o, "%s", p);
+        if (!strcmp(p, ".") || !strcmp(p, "..") || exists_exact(test)) o += (size_t)snprintf(out + o, cap - o, "%s", p);
         else {
             DIR *d = opendir(o ? out : ".");
             struct dirent *de;
@@ -357,6 +741,18 @@ static int resolve(const char *in, char *out, size_t cap)
     return 1;
 }
 #endif
+
+/* on case-sensitive file systems also when only the case differs (a user's game.ini, slots.ras, mods folder) */
+int plat_exists(const char *path)
+{
+    if (exists_exact(path)) return 1;
+#ifndef _WIN32
+    char real[1024];
+    return resolve(path, real, sizeof real);
+#else
+    return 0;
+#endif
+}
 
 FILE *plat_fopen(const char *path, const char *mode)
 {
