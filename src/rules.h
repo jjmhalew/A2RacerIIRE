@@ -44,5 +44,7 @@ int  rules_lap_record(void);
 int  rules_race_record(void);
 int  rules_last_lap(void);
 int  rules_position(void);
-void rules_keys(Race *r);                                 /* check_game_keys 0x424ee0: P, Esc, T, cheats */
+void rules_keys(Race *r);
+/* the loading screen of etappe (Raser.ini [wait_hi] with .tga) with the bar at load step 0..10 (Raser.ini [progress]) */
+void rules_loading_screen(int etappe, int step);                                 /* check_game_keys 0x424ee0: P, Esc, T, cheats */
 #endif

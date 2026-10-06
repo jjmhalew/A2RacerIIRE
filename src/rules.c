@@ -10,6 +10,7 @@
 #include "plat.h"
 #include "res.h"
 #include "sfx.h"
+#include "texture.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -548,4 +549,25 @@ void rules_draw_hud(Race *r)
         hud_item_text(36, 6, 1, hud_text(base + 1));
         hud_item_text(37, 6, 1, hud_text(base + 2));
     }
+}
+
+void rules_loading_screen(int etappe, int step)       /* handle_progress_bar 0x41c410, gfx_draw_wait_screen 0x41bde0 */
+{
+    char p[1024], k[16], name[64];
+    res_user_path(p, sizeof p, "Raser.ini");
+    Ini *ini = ini_load(p);
+    snprintf(k, sizeof k, "%d", etappe);
+    ini_str(ini, "wait_hi", k, "e01_w_hi.pcx", name, sizeof name);
+    snprintf(k, sizeof k, "percent%d", step);
+    int pct = ini_int(ini, "progress", k, step * 10);
+    ini_free(ini);
+    const Texture *t = tex_get(name);                  /* the 16-bit mode loads the name with .tga */
+    int w, h;
+    plat_size(&w, &h);
+    gfx_begin(w, h, 0, 0, 0);
+    gfx_2d_begin(640, 480);
+    if (t) gfx_2d_quad(t->id, 0, 0, 640, 480, 0, 0, 1, 1, 0xffffffffu, BLEND_NONE);
+    hud_item_part(14, 0, pct / 100.0f);
+    gfx_2d_end();
+    plat_swap();
 }

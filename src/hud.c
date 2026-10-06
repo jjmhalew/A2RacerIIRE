@@ -206,6 +206,19 @@ void hud_item(int item, int frame)
     hud_sprite(g_item[item].anim, frame, g_item[item].x, g_item[item].y, hs);
 }
 
+void hud_item_part(int item, int frame, float part)
+{
+    if (item < 0 || item >= 84) return;
+    int anim = g_item[item].anim;
+    if (anim < 0 || anim >= 45 || g_anim[anim].n == 0) return;
+    Sprite *s = sprite(g_anim[anim].id[frame < g_anim[anim].n ? frame : 0]);
+    if (!s) return;
+    float w = s->w * (part < 0 ? 0 : part > 1 ? 1 : part);
+    if (w < 2) w = 2;
+    gfx_2d_quad(s->tex, (float)g_item[item].x, (float)g_item[item].y, w, (float)s->h, 0, 0, w / s->w, 1, 0xffffffffu,
+                BLEND_ALPHA);
+}
+
 void hud_item_pos(int item, int *x, int *y)
 {
     *x = item >= 0 && item < 84 ? g_item[item].x : 0;
