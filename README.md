@@ -39,7 +39,26 @@ a non-Steam game.
 
 **Android** (7.0 or later, 64-bit, OpenGL ES 2.0): install the `.apk` from the Releases page. At the first start choose
 an ISO image of the CD, or a folder with a copy of it, in Android's file picker. You can also copy the CD's `data` folder
-to `Android/data/io.github.jjmhalew.a2racerre/files/data` with a USB cable.
+to `Android/data/io.github.jjmhalew.a2racerre/files/data` with a USB cable. The menus are played by tapping; the races
+have touch controls (below), or plug in or pair a controller. The back button pauses the race and asks to quit.
+
+### Touch controls
+On a phone, tablet or Windows touch screen the race shows on-screen controls from the first touch on, and hides them
+again when a key or controller is used:
+- bottom left: steer left / right (they steer as the arrow keys do), with *look back* above them;
+- bottom right: gas (green) and brake / reverse (red), with turbo and the handbrake above them. On a screen too narrow
+  for them beside the original's speed panel they move left of it;
+- top left: pause and camera.
+
+Several fingers work at once (steer and accelerate), and a finger can slide from left to right or from gas to brake.
+The pause button asks whether to quit: tap the tick to quit or the cross to drive on (also the pause button again, or
+the back button). The finish results and the game over screen go on with a tap anywhere.
+
+The settings are in the `[touch]` section of `controller.ini` (the file and its section are written at the first
+start): `show` = `auto` / `on` / `off`, `size` and `opacity` in percent, `steer=drag` for analogue steering instead of
+the buttons (put a thumb down anywhere on the lower left and slide it left or right: the further, the sharper), and
+`tilt=1` to steer by tilting the device like a wheel (`tilt=-1` reverses it, `tilt_angle` is the tilt for full lock;
+the steering buttons are not shown then).
 
 ### Controls
 | Action | Keyboard (as the original, changeable in the menu) | Xbox / Steam Deck controller | PlayStation controller |
@@ -83,7 +102,8 @@ the keys (gas and steering build up); sticks, triggers, wheels and pedals are an
 Everything the game writes lives in the user folder (`%APPDATA%\A2RacerRE` on Windows, `~/.local/share/A2RacerRE` on
 Linux), or next to `A2RacerRE.exe` when a `data` folder is there (portable). The original's own settings files are kept
 there in their original formats, so they can be edited the same way: `Game.ini` and `Raser.ini` (commented), `SLOTS.RAS`
-(the nine save slots), `options.ras`. The port adds `controller.ini` (the controller mapping, see above).
+(the nine save slots), `options.ras`. The port adds `controller.ini` (the controller mapping and the touch controls,
+see above).
 
 ### Texture packs and mods
 A `mods` folder in the user folder (or next to the program) replaces the game's files without touching them:
@@ -165,5 +185,9 @@ it N seconds after the start with game over reason R (0 total loss, 1 time up, 2
 `A2_NO_FILMS=1` skips the films, `A2_TEST_PAD="T:EL=V ...; T:..."` attaches a virtual game controller and sets its
 elements T seconds after the start (e.g. `"0:RT=1; 5:LEFTX=-0.5; 7:START=1; 7.2:START=0"`, also `T:unplug` / `T:plug`;
 `A2_TEST_PAD_NAME` names it, e.g. `"DualSense Wireless Controller"`), `A2_TEST_JOY` the same for a raw wheel-like
-joystick (`axis0=-1..1 button3=1 hat0=down`); rumble reaching them is printed (needs SDL 2.24 or later), `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
+joystick (`axis0=-1..1 button3=1 hat0=down`); rumble reaching them is printed (needs SDL 2.24 or later),
+`A2_TEST_TOUCH="T:CMD; ..."` puts fingers on the screen T seconds after the start: `down ID X Y`, `move ID X Y`
+(X, Y 0..1 of the window), `up ID`, `tap ID X Y`, `accel X Y Z` (the accelerometer's reading in m/s^2) and `key` (a key
+press, which hides the touch controls), e.g. `"0.5:down 1 0.93 0.85; 7:down 2 0.2 0.85; 7.5:up 2"`;
+`A2_TEST_WINDOW=WxH` sets the window size (e.g. `1600x720`, a phone's 20:9), `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
 `A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state.

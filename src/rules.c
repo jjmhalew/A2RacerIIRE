@@ -15,6 +15,7 @@
 #include "res.h"
 #include "sfx.h"
 #include "texture.h"
+#include "touch.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -336,11 +337,12 @@ static int prize_money(Race *r)                      /* get_prize_money 0x4280c0
     return m;
 }
 
-/* Esc, Enter or Space held (key_down 0x466910 = GetAsyncKeyState), or a controller's A / B / Start / pause action */
+/* Esc, Enter or Space held (key_down 0x466910 = GetAsyncKeyState), or a controller's A / B / Start / pause action, or
+ * a finger put on the touch screen during the end screen (touch.h) */
 static int continue_key_down(void)
 {
     return plat_key(VK_ESCAPE) || plat_key(VK_RETURN) || plat_key(VK_SPACE)
-        || (plat_pad()->buttons & (PAD_A | PAD_B | PAD_START)) || pad_held(PA_PAUSE);
+        || (plat_pad()->buttons & (PAD_A | PAD_B | PAD_START)) || pad_held(PA_PAUSE) || touch_held();
 }
 
 /* ---- the end events (ev_main.cpp game actions 4 and 12) ---------------------------------------------------------- */
@@ -495,14 +497,16 @@ void rules_tick(Race *r)
 void rules_keys(Race *r)                             /* check_game_keys 0x424ee0 */
 {
     if (G.pause) {                                   /* handle_pause 0x4248d0 */
-        /* PORT: the pads answer the quit question with A (yes) and B / Start / the pause action (no) */
+        /* PORT: the pads answer the quit question with A (yes) and B / Start / the pause action (no), the touch
+         * screen with its yes / no buttons (or the pause button: no); a tap ends the P pause */
         unsigned pp = plat_pad()->pressed;
-        if (G.pause == 1 && (plat_any_key_pressed() || pp)) { G.pause = 0; sfx_pause(0); }
+        int ta = touch_answer();
+        if (G.pause == 1 && (plat_any_key_pressed() || pp || touch_tapped())) { G.pause = 0; sfx_pause(0); }
         else if (G.pause == 2) {
-            if (plat_key_pressed('J') || plat_key_pressed('Y') || (pp & PAD_A)) {
+            if (plat_key_pressed('J') || plat_key_pressed('Y') || (pp & PAD_A) || ta == 1) {
                 G.pause = 0; sfx_pause(0); set_state(r, GS_QUIT);
             } else if (plat_key_pressed('N') || plat_key_pressed(VK_ESCAPE) || (pp & (PAD_B | PAD_START))
-                       || pad_pressed(PA_PAUSE)) {
+                       || pad_pressed(PA_PAUSE) || ta == 0) {
                 G.pause = 0; sfx_pause(0);
             }
         }
@@ -520,6 +524,7 @@ void rules_keys(Race *r)                             /* check_game_keys 0x424ee0
 }
 
 int rules_paused(void) { return G.pause != 0; }
+int rules_pause_kind(void) { return G.pause; }
 int rules_done(void) { return G.done; }
 int rules_hud_on(void) { return G.state == GS_RACING || G.state == GS_START || G.state == GS_COPSTOP; }
 int rules_race_ms(void) { return timer_get(3); }

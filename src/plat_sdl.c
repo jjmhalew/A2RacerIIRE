@@ -1,6 +1,7 @@
 /* plat_sdl.c - plat.h on SDL2: window and GL context (desktop OpenGL 2.1, or OpenGL ES 2.0 on Android), keyboard as
- * Windows VK codes, every game controller and joystick (hot-plugged, rumble, wheel springs), mouse / touch as mouse,
- * the audio device, time and case-insensitive file lookup.
+ * Windows VK codes, every game controller and joystick (hot-plugged, rumble, wheel springs), mouse, the fingers of a
+ * touch screen (also as SDL's emulated mouse, outside the race), the accelerometer, the audio device, time and
+ * case-insensitive file lookup.
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #define SDL_MAIN_HANDLED
@@ -43,6 +44,12 @@ static void *g_audio_user;
 static int g_mx, g_my;
 static unsigned g_mb, g_mclick;
 static Uint64 g_t0;
+static PlatFinger g_fing[PLAT_MAX_FINGERS];
+static int g_nfing, g_input_kind, g_touch_capture;
+static void test_touch_init(void);
+static void test_touch_step(void);
+static int g_test_accel;                  /* A2_TEST_TOUCH set the accelerometer */
+static float g_test_accel_v[3];
 
 /* ---- keys: SDL scancode -> Windows VK (position based, letters and digits as on a US layout) -------------------- */
 static int sc_to_vk(SDL_Scancode sc)
@@ -152,6 +159,7 @@ int plat_init(const PlatConfig *cfg)
         }
     }
     test_pad_init();
+    test_touch_init();
     g_t0 = SDL_GetPerformanceCounter();
 #ifdef __ANDROID__
     g_gles = 1;
@@ -168,6 +176,10 @@ int plat_init(const PlatConfig *cfg)
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
     int w = cfg->width > 0 ? cfg->width : 1280, h = cfg->height > 0 ? cfg->height : 960;
+    if (getenv("A2_TEST_WINDOW")) {                           /* tests: "WxH", e.g. a phone's 20:9 */
+        int tw = 0, th = 0;
+        if (sscanf(getenv("A2_TEST_WINDOW"), "%dx%d", &tw, &th) == 2 && tw > 0 && th > 0) { w = tw; h = th; }
+    }
 #ifdef __ANDROID__
     flags |= SDL_WINDOW_FULLSCREEN;
 #else
@@ -208,9 +220,12 @@ void plat_text_mode(int on)
 #endif
 }
 
+static void accel_close(void);
+
 void plat_shutdown(void)
 {
     if (g_audio) SDL_CloseAudioDevice(g_audio);
+    accel_close();
     for (int i = 0; i < PLAT_MAX_DEVICES; i++) {
         Dev *v = &g_dev[i];
         if (!v->used) continue;
@@ -227,6 +242,9 @@ void plat_shutdown(void)
     g_last_dev = -1;
     memset(g_keys, 0, sizeof g_keys);
     memset(g_down, 0, sizeof g_down);
+    g_nfing = 0;
+    g_input_kind = PLAT_INPUT_NONE;
+    g_touch_capture = 0;
     g_audio = 0;
     g_audio_fn = NULL;
     g_audio_user = NULL;
@@ -313,7 +331,7 @@ static void read_device(Dev *v)
         }
     }
     if (d->buttons != d->prev_buttons) active = 1;
-    if (active) { d->active = plat_time(); g_last_dev = (int)(v - g_dev); }
+    if (active) { d->active = plat_time(); g_last_dev = (int)(v - g_dev); g_input_kind = PLAT_INPUT_OTHER; }
 }
 
 static void open_device(int index)
@@ -357,9 +375,11 @@ static void open_device(int index)
         }
     }
     d->can_rumble = SDL_JoystickHasRumble(v->joy) || v->haptic_rumble;
+    int kind = g_input_kind;
     read_device(v);
     read_device(v);                                                  /* prev = now: nothing "went down" on arrival */
     d->active = 0;
+    g_input_kind = kind;                                             /* arriving is not using it */
     printf("controller %d: %s (%s, %d axes, %d buttons, %d hats%s%s)\n", slot, d->name,
            v->gc ? "game controller" : "joystick", d->naxes, d->nbuttons, d->nhats, d->can_rumble ? ", rumble" : "",
            d->can_spring ? ", force feedback" : "");
@@ -412,6 +432,69 @@ static void update_pad(void)
     g_pad.pressed = g_pad.buttons & ~before;
 }
 
+/* ---- touch ----------------------------------------------------------------------------------------------------- */
+static void finger_event(const SDL_TouchFingerEvent *f, Uint32 type)
+{
+#ifdef SDL_MOUSE_TOUCHID
+    if (f->touchId == SDL_MOUSE_TOUCHID) return;                     /* the mouse posing as a finger */
+#endif
+    int dw = 1, dh = 1, i;
+    SDL_GL_GetDrawableSize(g_win, &dw, &dh);
+    float x = f->x * dw, y = f->y * dh;
+    for (i = 0; i < g_nfing; i++)
+        if (g_fing[i].id == (int64_t)f->fingerId) break;
+    if (type == SDL_FINGERDOWN) {
+        if (i == g_nfing) {
+            if (g_nfing == PLAT_MAX_FINGERS) return;
+            g_nfing++;
+        }
+        g_fing[i].id = (int64_t)f->fingerId;
+        g_fing[i].down = g_fing[i].fresh = 1;
+    } else if (i == g_nfing) return;                                 /* went down before the race / window */
+    g_fing[i].x = x;
+    g_fing[i].y = y;
+    if (type == SDL_FINGERUP) g_fing[i].down = 0;
+    g_input_kind = PLAT_INPUT_TOUCH;
+}
+
+int plat_fingers(const PlatFinger **list) { *list = g_fing; return g_nfing; }
+int plat_input_kind(void) { return g_input_kind; }
+void plat_touch_capture(int on) { g_touch_capture = on; }
+
+#if SDL_VERSION_ATLEAST(2, 0, 9)
+static SDL_Sensor *g_accel;
+static int g_accel_tried;
+
+int plat_accel(float xyz[3])
+{
+    if (g_test_accel) { memcpy(xyz, g_test_accel_v, sizeof g_test_accel_v); return 1; }
+    if (!g_accel_tried) {
+        g_accel_tried = 1;
+        if (SDL_InitSubSystem(SDL_INIT_SENSOR) == 0) {
+            for (int i = 0; i < SDL_NumSensors() && !g_accel; i++)
+                if (SDL_SensorGetDeviceType(i) == SDL_SENSOR_ACCEL) g_accel = SDL_SensorOpen(i);
+        }
+        if (g_accel) printf("accelerometer: %s\n", SDL_SensorGetName(g_accel));
+        else fprintf(stderr, "no accelerometer\n");
+    }
+    return g_accel && SDL_SensorGetData(g_accel, xyz, 3) == 0;      /* SDL_PollEvent updates the sensors */
+}
+
+static void accel_close(void)
+{
+    if (g_accel) SDL_SensorClose(g_accel);
+    g_accel = NULL;
+    g_accel_tried = 0;
+}
+#else
+int plat_accel(float xyz[3])
+{
+    if (g_test_accel) { memcpy(xyz, g_test_accel_v, sizeof g_test_accel_v); return 1; }
+    return 0;
+}
+static void accel_close(void) {}
+#endif
+
 int plat_poll(void)
 {
     SDL_Event e;
@@ -419,13 +502,31 @@ int plat_poll(void)
     memset(g_down, 0, sizeof g_down);
     g_text[0] = 0;
     g_mclick = 0;
+    {   /* the fingers lifted at the previous poll leave the list */
+        int n = 0;
+        for (int i = 0; i < g_nfing; i++)
+            if (g_fing[i].down) { g_fing[n] = g_fing[i]; g_fing[n++].fresh = 0; }
+        g_nfing = n;
+    }
     test_pad_step();
+    test_touch_step();
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_QUIT: alive = 0; break;
-        case SDL_KEYDOWN:
-            if (!e.key.repeat) set_key(sc_to_vk(e.key.keysym.scancode), 1);
+        case SDL_KEYDOWN: {
+            int vk = sc_to_vk(e.key.keysym.scancode);
+            if (!e.key.repeat) set_key(vk, 1);
+            if (vk && e.key.keysym.scancode != SDL_SCANCODE_AC_BACK) g_input_kind = PLAT_INPUT_OTHER;
             if (e.key.keysym.scancode == SDL_SCANCODE_RETURN && (e.key.keysym.mod & KMOD_ALT)) plat_toggle_fullscreen();
+            break;
+        }
+        case SDL_FINGERDOWN: case SDL_FINGERMOTION: case SDL_FINGERUP: finger_event(&e.tfinger, e.type); break;
+        /* the fingers on the screen when the game loses it may never send their release */
+        case SDL_WINDOWEVENT:
+            if (e.window.event != SDL_WINDOWEVENT_FOCUS_LOST) break;
+            /* fall through */
+        case SDL_APP_WILLENTERBACKGROUND:
+            for (int i = 0; i < g_nfing; i++) g_fing[i].down = 0;
             break;
         case SDL_KEYUP: set_key(sc_to_vk(e.key.keysym.scancode), 0); break;
         case SDL_TEXTINPUT: {
@@ -437,8 +538,14 @@ int plat_poll(void)
             g_text[n] = 0;
             break;
         }
-        case SDL_MOUSEMOTION: g_mx = e.motion.x; g_my = e.motion.y; break;
+        /* the race has its own touch controls: there a finger does not also press the emulated mouse (its releases
+         * still count, so nothing stays held) */
+        case SDL_MOUSEMOTION:
+            if (g_touch_capture && e.motion.which == SDL_TOUCH_MOUSEID) break;
+            g_mx = e.motion.x; g_my = e.motion.y;
+            break;
         case SDL_MOUSEBUTTONDOWN:
+            if (g_touch_capture && e.button.which == SDL_TOUCH_MOUSEID) break;
             g_mx = e.button.x; g_my = e.button.y;
             if (e.button.button == SDL_BUTTON_LEFT) { g_mb |= 1; g_mclick |= 1; }
             if (e.button.button == SDL_BUTTON_RIGHT) { g_mb |= 2; g_mclick |= 2; }
@@ -656,6 +763,90 @@ static void test_pad_init(void)
 }
 static void test_pad_step(void) {}
 #endif
+
+/* ---- developer: fingers driven by a script (touch tests without a touch screen) ---------------------------------
+ * A2_TEST_TOUCH="T:CMD; T:CMD; ..." pushes SDL finger events T seconds after the start, one command per entry:
+ * "down ID X Y", "move ID X Y" (X, Y 0..1 of the window), "up ID", "tap ID X Y" (down and up in the same frame),
+ * "accel X Y Z" (fixes the accelerometer's reading, m/s^2) and "key" (a press of Shift: input that is not touch). */
+static struct { const char *script, *pos; double t0; float x[16], y[16]; } g_tt;
+
+static void test_touch_init(void)
+{
+    g_tt.script = g_tt.pos = getenv("A2_TEST_TOUCH");
+    g_tt.t0 = -1;
+}
+
+static void test_finger(Uint32 type, int id, float x, float y)
+{
+    SDL_Event ev;
+    SDL_zero(ev);
+    ev.type = type;
+    ev.tfinger.touchId = 77;
+    ev.tfinger.fingerId = id;
+    ev.tfinger.x = x;
+    ev.tfinger.y = y;
+    ev.tfinger.pressure = type == SDL_FINGERUP ? 0 : 1;
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+    ev.tfinger.windowID = SDL_GetWindowID(g_win);
+#endif
+    SDL_PushEvent(&ev);
+}
+
+static void test_touch_step(void)
+{
+    if (!g_tt.script) return;
+    double now = plat_time();
+    if (g_tt.t0 < 0) g_tt.t0 = now;
+    while (*g_tt.pos) {
+        const char *p = g_tt.pos;
+        while (*p == ' ' || *p == ';') p++;
+        if (!*p) { g_tt.pos = p; break; }
+        char *e;
+        double at = strtod(p, &e);
+        if (e == p || *e != ':') { fprintf(stderr, "test touch: bad script at %s\n", p); g_tt.pos = p + strlen(p); break; }
+        if (now - g_tt.t0 < at) break;
+        p = e + 1;
+        const char *end = strchr(p, ';');
+        if (!end) end = p + strlen(p);
+        char cmd[96];
+        size_t n = (size_t)(end - p) < sizeof cmd - 1 ? (size_t)(end - p) : sizeof cmd - 1;
+        memcpy(cmd, p, n);
+        cmd[n] = 0;
+        g_tt.pos = end;
+        printf("test touch at %.2f s: %s\n", now - g_tt.t0, cmd);
+        char op[16];
+        int id = 0;
+        float x = 0, y = 0, z = 0;
+        int k = sscanf(cmd, " %15s %d %f %f", op, &id, &x, &y);
+        if (k < 1) continue;
+        if (!SDL_strcasecmp(op, "accel") && sscanf(cmd, " %15s %f %f %f", op, &x, &y, &z) == 4) {
+            g_test_accel = 1;
+            g_test_accel_v[0] = x; g_test_accel_v[1] = y; g_test_accel_v[2] = z;
+            continue;
+        }
+        if (!SDL_strcasecmp(op, "key")) {
+            SDL_Event ev;
+            SDL_zero(ev);
+            ev.type = SDL_KEYDOWN;
+            ev.key.state = SDL_PRESSED;
+            ev.key.keysym.scancode = SDL_SCANCODE_LSHIFT;
+            SDL_PushEvent(&ev);
+            ev.type = SDL_KEYUP;
+            ev.key.state = SDL_RELEASED;
+            SDL_PushEvent(&ev);
+            continue;
+        }
+        if (k < 2 || id < 0 || id >= 16) { fprintf(stderr, "test touch: bad command %s\n", cmd); continue; }
+        if (k == 4) { g_tt.x[id] = x; g_tt.y[id] = y; }
+        if (!SDL_strcasecmp(op, "down") && k == 4) test_finger(SDL_FINGERDOWN, id, x, y);
+        else if (!SDL_strcasecmp(op, "move") && k == 4) test_finger(SDL_FINGERMOTION, id, x, y);
+        else if (!SDL_strcasecmp(op, "up")) test_finger(SDL_FINGERUP, id, g_tt.x[id], g_tt.y[id]);
+        else if (!SDL_strcasecmp(op, "tap") && k == 4) {
+            test_finger(SDL_FINGERDOWN, id, x, y);
+            test_finger(SDL_FINGERUP, id, x, y);
+        } else fprintf(stderr, "test touch: bad command %s\n", cmd);
+    }
+}
 void plat_show_cursor(int on) { SDL_ShowCursor(on ? SDL_ENABLE : SDL_DISABLE); }
 
 void plat_mouse(int *x, int *y, unsigned *buttons, unsigned *clicked)

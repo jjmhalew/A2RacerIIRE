@@ -219,6 +219,21 @@ void hud_item_part(int item, int frame, float part)
                 BLEND_ALPHA);
 }
 
+int hud_item_rect(int item, int *x, int *y, int *w, int *h)
+{
+    if (item < 0 || item >= 84) return 0;
+    int anim = g_item[item].anim;
+    if (anim < 0 || anim >= 45 || g_anim[anim].n == 0) return 0;
+    Sprite *s = sprite(g_anim[anim].id[0]);
+    if (!s) return 0;
+    int hs = item == 29 || item == 34 || item == 64;           /* as hud_item draws it */
+    *x = g_item[item].x - (hs ? s->hx : 0);
+    *y = g_item[item].y - (hs ? s->hy : 0);
+    *w = s->w;
+    *h = s->h;
+    return 1;
+}
+
 void hud_item_pos(int item, int *x, int *y)
 {
     *x = item >= 0 && item < 84 ? g_item[item].x : 0;

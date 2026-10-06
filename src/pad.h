@@ -4,6 +4,7 @@
  *
  *   [race]   steer_left = LEFTX- DPLEFT      one or more elements per action, separated by spaces
  *   [tuning] stick_deadzone = 15 ...         dead zones, steering response, rumble
+ *   [touch]  show = auto ...                 the on-screen touch controls of the race (touch.h)
  *
  * Elements: A B X Y LB RB LT RT LS RS BACK START GUIDE DPUP DPDOWN DPLEFT DPRIGHT MISC1 PADDLE1..4 TOUCHPAD and the
  * PlayStation names CROSS CIRCLE SQUARE TRIANGLE L1 R1 L2 R2 L3 R3 SHARE OPTIONS for game controllers; the stick
@@ -37,6 +38,21 @@ float pad_steer(void);                      /* -1..1 from the analogue steering 
  * shapes the analogue steering instead of controller.ini's steer_linearity; -1 = off (steer_linearity).
  * controller.ini's steer_sensitivity multiplies either. */
 void  pad_set_steer_curve(int sensitivity);
+
+/* the race's touch controls (touch.c) as one more device: digital[a] / analog[a] 0..1 per action, set once per frame
+ * (pad_pressed compares with the previous frame's); NULL, NULL = no touch input */
+void  pad_set_touch(const float *digital, const float *analog);
+
+/* controller.ini [touch]: the on-screen controls of the race */
+enum { TOUCH_SHOW_OFF, TOUCH_SHOW_AUTO, TOUCH_SHOW_ON };
+typedef struct {
+    int show;                               /* TOUCH_SHOW_*: auto = after the first touch, until a key / pad is used */
+    int size, opacity;                      /* percent */
+    int drag;                               /* steering: 0 = left / right buttons, 1 = a drag zone (analogue) */
+    int tilt;                               /* steering by tilting the device: 0 off, 1 on, -1 on and inverted */
+    int tilt_angle;                         /* degrees of tilt for full lock */
+} PadTouchConfig;
+const PadTouchConfig *pad_touch_config(void);
 
 void  pad_rumble(float strength, int ms);   /* 0..1 on the device used last, scaled by the configuration */
 void  pad_race_active(int on);              /* the wheels' centring springs on / off (FF wheels) */

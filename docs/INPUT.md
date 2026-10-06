@@ -759,3 +759,64 @@ chosen the key panel ("Knoppen") shows the first element of the six driving acti
 one of a later function is swapped; the element leaves the other actions; Start or Esc breaks off). OK writes
 controller.ini, Annuleren reloads it; SLOTS.RAS keeps only the keys (its format is unchanged). The name edit box takes
 the pad: up / down turn the letter under the cursor (repeating while held), left / right move it, X deletes.
+
+### 11.1 Touch controls (not in the original)
+
+For phones, tablets and Windows touch screens the race draws its own controls (`src/touch.c`, `touch.h`); the menus
+keep using touches as SDL's emulated mouse.
+
+**Fingers** (`plat_sdl.c`, `plat_fingers`): `SDL_FINGERDOWN` / `MOTION` / `UP` by finger id, the normalized
+coordinates turned into drawable pixels; the mouse posing as a finger (`SDL_MOUSE_TOUCHID`) is ignored. A finger that
+goes down and up between two polls is still listed for one poll (`fresh`), so a quick tap is not lost. While a race
+runs (`plat_touch_capture`) the touch-emulated mouse presses and moves are dropped (releases still count), so a finger
+on the gas does not also click. Focus loss and going to the background lift every finger (Android may not send their
+release). `plat_input_kind` remembers whether a finger or a key / controller was used last; the Android back button
+(Escape) does not count, as it is how a touch player pauses.
+
+**Showing them** (`controller.ini [touch] show`): `auto` (the default) from the first finger until a key or
+controller is used, `on` always, `off` never (fingers then do nothing in the race).
+
+**Layout**, in window pixels, scaled by the shorter side of the window and `size`; drawn after the overlay with
+`opacity`, as circles with simple icons (one batch of triangles on `gfx_2d_begin` in window pixels):
+
+| Where | Controls |
+|---|---|
+| bottom left | steer left / right (`steer=buttons`), or a slider (`steer=drag`); look back above them |
+| bottom right | brake (red, down arrow) and gas (green, up arrow); handbrake (P) and turbo (double chevron) above them |
+| top left | pause, camera |
+
+The overlay keeps its 4:3 frame, so on a wide screen (phones) its panels sit inside and the controls in the bars beside
+it. When the gas / brake cluster would cover the speed panel (HUD.md 4.3) it shrinks to fit beside it (down to 70 %),
+or else moves left of it, small enough to stay in the right half (down to 55 %; a 4:3 or 16:10 screen). The info
+panel is on the right at the top, so pause and camera are at the top left.
+
+**Fingers and controls**: a finger takes the control it went down on (a little beside a button counts; below the
+look-back button the lower left is all steering, below turbo / handbrake the lower right is gas / brake, nearest by
+x). A finger on left / right slides between the two, one on gas / brake likewise; every other control keeps its
+finger. Fingers are independent, so steering, gas and turbo can be held together. A finger that was already down when
+the race began does nothing.
+
+**Into the action layer** (`pad_set_touch`, once per frame from `game_keys`): the touch controls are one more device
+of pad.h. Buttons are *digital* (steer left / right, gas, brake, turbo, handbrake, look back, camera, pause), so gas,
+brake and steering build up as with the keys (5.2) in the new model and go through `car_old_input` in the old one;
+`pad_pressed` compares with the previous frame (camera cycles, pause opens the quit question). The drag slider is
+*analogue*: the thumb's distance from where it went down, 1.5 button radii for full lock (the centre follows a thumb
+that goes further, so turning back reacts at once), with a 4 % dead zone, as `steer_left` / `steer_right` analogue
+values; `pad_steer` then applies `steer_linearity` / the SENSITIVITY curve and `steer_sensitivity` as for a stick,
+and the race uses it as DEVICE 3 does (new model `steer = 100 * s`, old model `30 + 30 * s`).
+
+**Tilt** (`tilt=1`, off by default; `-1` reverses it): the accelerometer through SDL's sensor API (`plat_accel`; the
+accelerometer-as-joystick of SDL stays off). The device is held in landscape like a wheel, so gravity lies along its x
+axis (+ or -, whichever way round Android shows the picture); the steering angle is `atan2(s * y, s * x)` with s the
+sign of x, 2 degrees dead zone, `tilt_angle` degrees for full lock, nothing when the device lies flat (less than
+3 m/s^2 in the screen's plane). It is analogue steering like the slider, used while no finger steers and only while
+the touch controls are shown; the steering buttons are not drawn then.
+
+**The race's questions**: during the quit question (Esc, back button, the pause button) the controls make way for a
+tick (quit, as J / Y) and a cross (go on, as N); the pause button stays and also means go on. The P pause ends with a
+tap. On the finish results and the game over screen a finger put down there counts as a continue key held
+(`continue_key_down`), with the finish's wait for the release; a finger still on the gas from the race does not.
+
+**Tests**: `A2_TEST_TOUCH="T:down ID X Y; T:move ID X Y; T:up ID; T:tap ID X Y; T:accel X Y Z; T:key"` pushes finger
+events with `SDL_PushEvent` (X, Y 0..1 of the window), fixes the accelerometer's reading, or presses a key;
+`A2_TEST_WINDOW=WxH` sets the window size (a phone's 20:9 is `1600x720`).

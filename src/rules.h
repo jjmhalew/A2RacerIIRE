@@ -34,6 +34,7 @@ void rules_draw_3d(Race *r);                              /* finish flag (gfx_fl
 void rules_draw_hud(Race *r);                             /* the rules' part of the overlay (HUD.md 4) */
 int  rules_hud_on(void);                                  /* the dashboard is drawn (states 0 and 1) */
 int  rules_paused(void);                                  /* the pause / quit dialog is open: no game ticks */
+int  rules_pause_kind(void);                              /* 0 none, 1 the P pause, 2 the quit question */
 int  rules_done(void);                                    /* the race program would end now (state 4) */
 /* the HUD's numbers */
 int  rules_race_ms(void);

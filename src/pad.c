@@ -22,6 +22,8 @@ typedef struct {
 } Config;
 static Config C, g_backup;
 static int g_loaded;
+static PadTouchConfig g_touch;
+static float g_touch_in[2][2][PA_COUNT];     /* [now / previous frame][digital / analogue][action] */
 
 static const char *const KEY[PA_COUNT] = { "steer_left", "steer_right", "gas", "brake", "turbo", "handbrake",
                                            "look_back", "camera", "horn", "pause" };
@@ -43,6 +45,7 @@ static const char DEFAULT_FILE[] =
     "; controls screen (Besturing); there \"Instellen\" with the joypad or wheel / joystick device chosen writes the\r\n"
     "; first element of the six driving actions here. Everything else is edited by hand; delete the file to get the\r\n"
     "; defaults back. The menus always use the d-pad or left stick, A (confirm), B (back) and Start.\r\n"
+    "; The on-screen touch controls of the race are set in [touch] at the end.\r\n"
     ";\r\n"
     "; Every action takes one or more elements separated by spaces; all connected controllers work at the same time.\r\n"
     "; Game controllers (Xbox names by position: A is the bottom face button, Cross on a PlayStation pad):\r\n"
@@ -83,7 +86,27 @@ static const char DEFAULT_FILE[] =
     "rumble=1\r\n"
     "rumble_strength=100\r\n"
     "; the centring spring of a force-feedback wheel during the race in percent, 0 = off\r\n"
-    "wheel_spring=40\r\n";
+    "wheel_spring=40\r\n"
+    "\r\n";
+
+/* written after the rest, and appended to a controller.ini of an older version that lacks it */
+static const char TOUCH_SECTION[] =
+    "[touch]\r\n"
+    "; the race's on-screen controls for touch screens (phones, tablets, Windows touch screens): steering on the left,\r\n"
+    "; gas and brake on the right, turbo and handbrake above them, look back above the steering, pause and camera at\r\n"
+    "; the top left. show: auto = from the first touch until a key or controller is used, on = always, off = never\r\n"
+    "show=auto\r\n"
+    "; size and opacity of the controls in percent\r\n"
+    "size=100\r\n"
+    "opacity=60\r\n"
+    "; steering: buttons = left / right buttons (they steer as the keys do), drag = slide a thumb left and right from\r\n"
+    "; where it touched the left half of the screen (analogue, like a stick: steer_linearity and steer_sensitivity\r\n"
+    "; above shape it)\r\n"
+    "steer=buttons\r\n"
+    "; steering by tilting the device like a wheel (its accelerometer, while the touch controls are shown): 1 on,\r\n"
+    "; -1 on with the direction reversed, 0 off; tilt_angle = the degrees of tilt for full lock\r\n"
+    "tilt=0\r\n"
+    "tilt_angle=30\r\n";
 
 /* ---- element names ------------------------------------------------------------------------------------------------ */
 static int parse_bind(const char *tok, Bind *b)
@@ -176,14 +199,45 @@ static void ini_path(char *p, size_t cap) { snprintf(p, cap, "%scontroller.ini",
 
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+static void write_default(const char *p)
+{
+    FILE *f = fopen(p, "wb");
+    if (!f) return;
+    fwrite(DEFAULT_FILE, 1, sizeof DEFAULT_FILE - 1, f);
+    fwrite(TOUCH_SECTION, 1, sizeof TOUCH_SECTION - 1, f);
+    fclose(f);
+    printf("%s written\n", p);
+}
+
+/* a controller.ini of a version before the touch controls: their section with its comments at the end */
+static void add_touch_section(const char *p)
+{
+    FILE *f = plat_fopen(p, "rb");
+    if (!f) return;
+    char line[512];
+    int found = 0, nl = 1, blank = 1;
+    while (!found && fgets(line, sizeof line, f)) {
+        const char *s = line;
+        while (*s == ' ' || *s == '\t') s++;
+        if (!_strnicmp(s, "[touch]", 7)) found = 1;
+        size_t n = strlen(line);
+        nl = n > 0 && line[n - 1] == '\n';
+        blank = *s == '\r' || *s == '\n' || !*s;
+    }
+    fclose(f);
+    if (found || !(f = plat_fopen(p, "ab"))) return;
+    if (!nl) fwrite("\r\n", 1, 2, f);
+    if (!blank) fwrite("\r\n", 1, 2, f);
+    fwrite(TOUCH_SECTION, 1, sizeof TOUCH_SECTION - 1, f);
+    fclose(f);
+}
+
 void pad_load(void)
 {
     char p[1024];
     ini_path(p, sizeof p);
-    if (!plat_exists(p)) {
-        FILE *f = fopen(p, "wb");
-        if (f) { fwrite(DEFAULT_FILE, 1, sizeof DEFAULT_FILE - 1, f); fclose(f); printf("%s written\n", p); }
-    }
+    if (!plat_exists(p)) write_default(p);
+    else add_touch_section(p);
     Ini *g = ini_load(p);
     for (int a = 0; a < PA_COUNT; a++) {
         const char *v = ini_get(g, "race", KEY[a]);
@@ -199,21 +253,38 @@ void pad_load(void)
     C.rumble = ini_int(g, "tuning", "rumble", 1) != 0;
     C.rumble_strength = clampi(ini_int(g, "tuning", "rumble_strength", 100), 0, 100);
     C.wheel_spring = clampi(ini_int(g, "tuning", "wheel_spring", 40), 0, 100);
+    char s[32];
+    ini_str(g, "touch", "show", "auto", s, sizeof s);
+    g_touch.show = !_stricmp(s, "on") || !strcmp(s, "1") ? TOUCH_SHOW_ON
+                 : !_stricmp(s, "off") || !strcmp(s, "0") ? TOUCH_SHOW_OFF : TOUCH_SHOW_AUTO;
+    g_touch.size = clampi(ini_int(g, "touch", "size", 100), 40, 250);
+    g_touch.opacity = clampi(ini_int(g, "touch", "opacity", 60), 10, 100);
+    ini_str(g, "touch", "steer", "buttons", s, sizeof s);
+    g_touch.drag = !_stricmp(s, "drag");
+    g_touch.tilt = clampi(ini_int(g, "touch", "tilt", 0), -1, 1);
+    g_touch.tilt_angle = clampi(ini_int(g, "touch", "tilt_angle", 30), 5, 90);
     ini_free(g);
     g_loaded = 1;
 }
 
 static void ensure(void) { if (!g_loaded) pad_load(); }
 
+const PadTouchConfig *pad_touch_config(void) { ensure(); return &g_touch; }
+
+void pad_set_touch(const float *digital, const float *analog)
+{
+    memcpy(g_touch_in[1], g_touch_in[0], sizeof g_touch_in[0]);
+    if (!digital || !analog) { memset(g_touch_in, 0, sizeof g_touch_in); return; }
+    memcpy(g_touch_in[0][0], digital, sizeof g_touch_in[0][0]);
+    memcpy(g_touch_in[0][1], analog, sizeof g_touch_in[0][1]);
+}
+
 int pad_save(void)
 {
     ensure();
     char p[1024];
     ini_path(p, sizeof p);
-    if (!plat_exists(p)) {
-        FILE *f = fopen(p, "wb");
-        if (f) { fwrite(DEFAULT_FILE, 1, sizeof DEFAULT_FILE - 1, f); fclose(f); }
-    }
+    if (!plat_exists(p)) write_default(p);
     Ini *g = ini_load(p);
     for (int a = 0; a < PA_COUNT; a++) {
         char v[256] = "";
@@ -268,8 +339,8 @@ static float bind_value(const PlatDevice *d, const Bind *b, int prev)
 /* the strongest element of an action: kind 1 = digital ones, 2 = analogue ones */
 static float action_value(int a, int kind, int prev)
 {
-    float best = 0;
     if (a < 0 || a >= PA_COUNT) return 0;
+    float best = g_touch_in[prev ? 1 : 0][kind == 1 ? 0 : 1][a];     /* the touch controls */
     for (int i = 0; i < PLAT_MAX_DEVICES; i++) {
         const PlatDevice *d = plat_device(i);
         if (!d) continue;

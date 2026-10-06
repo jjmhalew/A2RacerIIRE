@@ -18,6 +18,7 @@
 #include "res.h"
 #include "rules.h"
 #include "sfx.h"
+#include "touch.h"
 #include "wheels.h"
 #include <math.h>
 #include <stdio.h>
@@ -340,7 +341,8 @@ static void car_drive_new(int o, float steer, float gas, float brake)
 }
 
 /* ---- input: plr_input_keyboard 0x4265b0 (new model), plus the game controllers (PORT, pad.h): their buttons count
- * as the keys (as the original's joypad, DEVICE 2), their sticks / triggers / wheel axes are analogue (DEVICE 3) --- */
+ * as the keys (as the original's joypad, DEVICE 2), their sticks / triggers / wheel axes are analogue (DEVICE 3).
+ * The touch controls (touch.h) arrive the same way: their buttons digital, drag and tilt steering analogue ------- */
 static int g_pad_steering;                           /* the analogue steering had the wheel last tick */
 
 static void plr_input(int o)
@@ -511,6 +513,10 @@ static void camera_update(void)
 
 static void game_keys(void)
 {
+    /* PORT: the touch controls first (touch.h): what they show follows the rules' state, and they feed pad.h */
+    int pause = rules_pause_kind();
+    touch_frame(pause == 1 ? TOUCH_PAUSE : pause ? TOUCH_QUIT : rules_hud_on() ? TOUCH_RACE : TOUCH_END,
+                rules_hud_on() && !R->event_running && R->detail >= 2);
     if (plat_key_pressed('1')) R->cam_mode = 1;
     if (plat_key_pressed('2')) R->cam_mode = 3;
     if (plat_key_pressed('4')) R->cam_mode = 0;
@@ -658,12 +664,15 @@ int race_init(Race *r, int etappe, int car)
     static const RulesHooks hooks = { ai_player_position, ai_save_racers };
     rules_init(r, &hooks);                             /* state 1: the start camera and the countdown */
     r->race_ms = 0;
+    plat_touch_capture(1);                             /* fingers drive the touch controls, not the emulated mouse */
     return 1;
 }
 
 void race_free(Race *r)
 {
     pad_race_active(0);
+    touch_end();
+    plat_touch_capture(0);
     g_pad_steering = 0;
     sfx_stop_all();
     rules_free();
@@ -873,6 +882,7 @@ static void race_draw(float alpha)
     rules_draw_3d(R);                                   /* after the effects as in render_game: flag, 3D letters */
     gfx_set_model(NULL);
     draw_hud();
+    touch_draw();                                       /* PORT: the touch controls on top */
 }
 
 int race_frame(Race *r, double now)
