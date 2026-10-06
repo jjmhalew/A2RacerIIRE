@@ -3,6 +3,7 @@
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "rules.h"
+#include "font3d.h"
 #include "gfx.h"
 #include "hud.h"
 #include "ini.h"
@@ -49,8 +50,8 @@ static struct {
     int pause;                  /* 1 pause, 2 quit question */
     int cont;                   /* a continue key was pressed since the last tick (keys are read per frame) */
     int done;
-    char font3d[64];            /* the charset of FONT3D_ANIM (0x486b68) */
-    int anim_font3d;
+    char cd_text[4][11];        /* the countdown words and their font3d effect series (ev_start 0x4869d8) */
+    int cd_serie[4];
     float prize, total;
 } G;
 
@@ -147,11 +148,15 @@ void rules_init(Race *r, const RulesHooks *hooks)
     float kf = G.difficulty == 0 ? 0.4f : 0.65f;
     int ts = top_speed(r);
     G.limit_ms = (!r->track.city && r->etappe >= 0 && r->etappe < 7 && ts > 0) ? (int)(DIST[r->etappe] * 10 / (ts * kf)) * 1000 : 0;
-    G.anim_font3d = anim_find("FONT3D_ANIM");
+    font3d_init(1.0f / RACE_HZ);
     PeFile pe;
-    if (pe_open(&pe, "spel.dat")) {
-        const char *cs = pe_str(&pe, 0x486b68);
-        snprintf(G.font3d, sizeof G.font3d, "%s", cs ? cs : "");
+    if (pe_open(&pe, "spel.dat")) {                  /* the countdown: {char text[10]; int sound, serie;} x 4 */
+        for (int i = 0; i < 4; i++) {
+            const uint8_t *e = pe_ptr(&pe, 0x4869d8 + i * 18, 18);
+            if (!e) break;
+            memcpy(G.cd_text[i], e, 10);
+            G.cd_serie[i] = (int)pe_u32(&pe, 0x4869d8 + i * 18 + 14);
+        }
         pe_close(&pe);
     }
     r->race_started = 0;
@@ -159,7 +164,7 @@ void rules_init(Race *r, const RulesHooks *hooks)
     set_state(r, GS_START);
 }
 
-void rules_free(void) {}
+void rules_free(void) { font3d_free(); }
 
 /* ---- triggers ---------------------------------------------------------------------------------------------------- */
 static int moving_forward(int prev, int cur, int n)
@@ -330,11 +335,19 @@ void rules_tick(Race *r)
         if (in_state >= 3000) {
             int step = (in_state - 3000) / 1000;
             if (step != G.countdown_step || G.countdown_at == 0) {
-                if (step < 4 && (step != G.countdown_step || !G.countdown_at)) sfx_play(step < 3 ? SFX_GETSET : SFX_GO);
+                if (step < 4 && (step != G.countdown_step || !G.countdown_at)) {
+                    sfx_play(step < 3 ? SFX_GETSET : SFX_GO);
+                    /* countdown_init 0x416b00: a = 400 along the car's z axis + 30 up, b = that axis flat */
+                    const Obj *c = player(r);
+                    Mat4 m = font3d_inst_matrix(c->pos, c->pitch, c->yaw, c->roll);
+                    Vec3 f = v3(m.m[8], m.m[9], m.m[10]);
+                    font3d_text(G.cd_text[step], v3_add(v3_add(c->pos, v3_scale(f, 400)), v3(0, 30, 0)),
+                                v3(f.x, 0, f.z), G.cd_serie[step]);      /* countdown_update 0x416bd0 */
+                }
                 G.countdown_step = step;
                 G.countdown_at = G.clock;
             }
-            if (step >= 4) {
+            if (step >= 3) {                        /* "GO?": the race starts in the same frame (0x416bd0) */
                 set_state(r, GS_RACING);
                 r->cam_mode = 1;
                 if (G.copland) rules_message(47);
@@ -371,6 +384,7 @@ void rules_tick(Race *r)
         break;
     default: break;
     }
+    font3d_tick(player(r)->pos);                     /* the 3D letters (run by font3d_draw 0x417870 per frame) */
 }
 
 void rules_keys(Race *r)                             /* check_game_keys 0x424ee0 */
@@ -436,22 +450,10 @@ int rules_camera(Race *r, Vec3 *eye, Vec3 *target)
     }
 }
 
-/* ---- 3D countdown letters (gfx_3dft.cpp: FONT3D_ANIM, 400 units in front of the car, spacing 12.5) ------------- */
+/* ---- 3D countdown letters (gfx_3dft.cpp, src/font3d.c; started by the countdown in rules_tick) ------------------ */
 void rules_draw_3d(Race *r)
 {
-    if (G.state != GS_START || G.clock - G.state_since < 3000 || G.countdown_step > 3) return;
-    static const char *TXT[4] = { "3", "2", "1", "GO" };
-    const char *s = TXT[G.countdown_step];
-    const Obj *c = player(r);
-    int n = (int)strlen(s);
-    float yaw = -(c->yaw * 2 * PI_F / ANGLE_UNITS) + PI_F;        /* turned to face the car */
-    for (int i = 0; i < n; i++) {
-        const char *at = strchr(G.font3d, s[i]);
-        int frame = at ? (int)(at - G.font3d) : 0;
-        Vec3 p = car_point(c, v3((i - (n - 1) * 0.5f) * -12.5f, 15, 400));
-        model_draw(anim_model(G.anim_font3d, frame), p, yaw);
-    }
-    gfx_set_model(NULL);
+    font3d_draw((float)(r->accum * RACE_HZ));        /* the same interpolation as race_draw */
 }
 
 /* ---- overlay ----------------------------------------------------------------------------------------------------- */

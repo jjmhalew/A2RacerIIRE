@@ -272,10 +272,6 @@
 0x41b720 light_draw ; SRCALPHA/INVSRCALPHA
 0x4aa860 g_light ; [20] stride 0x10
 0x425500 create_brake_lights ; OBJ_LIGHT01_ANIM
-0x417140 font3d_create_text ; gfx_3dft = 3D font
-0x417720 font3d_init
-0x417810 font3d_free
-0x417870 font3d_draw ; ZENABLE off
 0x431f20 prt_init
 0x431f60 prt_frame
 0x431fb0 prt_alloc_pool ; 4000

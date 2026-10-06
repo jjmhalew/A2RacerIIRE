@@ -1,0 +1,38 @@
+0x417140 font3d_create_text ; gfx_3dft = 3D font: (text, Vec3 a, Vec3 b, serie 0..2), one FONT3D_ANIM instance per letter
+0x417720 font3d_init ; 30 records of 0x44 bytes, FONT3D_ANIM
+0x417810 font3d_free
+0x417870 font3d_draw ; per record: the instance's update (+0x91), then draw it; ZENABLE off
+0x4179e0 font3d_fx_next ; step++ in the serie: init + update of the next effect, or free record and instance
+0x417a90 font3d_fx0_hop_init ; phase = index*75, height 80, 3.0 s
+0x417b20 font3d_fx0_hop_update ; y = pos.y + sin(phase) * height, half sines, height -> 25
+0x417c30 font3d_fx1_burst_init ; vel = (pos - centre) * 0.2 + (0, 15, 0), random spin, 25 frames
+0x417d50 font3d_fx_move_update ; fx 1 and 2: object3d_move, frames--, next at 0
+0x417da0 font3d_fx2_fly_init ; 0.8 s: 90% of the way to the player, one turn of pitch
+0x417ec0 font3d_fx3_hold_init ; 0.2 s
+0x417f10 font3d_fx3_hold_update ; frames--, next at 0
+0x417f50 font3d_fx4_spin_init ; 1.0 s: the word turns once (yaw -4096/frames) around its centre
+0x418050 font3d_fx4_spin_update ; letter on the circle, centre slides to the player, object3d_move
+0x418200 font3d_array_get_new ; T_ARRAY::get_new: first free from the last new index, wrapping
+0x4181d0 vec_div ; (out, v, s): out = v / s
+0x458690 object3d_animate_all ; frame++ of type-2 instances every +0x85 calls, +0x91 callback; no direct caller found
+0x458fc0 object3d_cb_none ; the default instance update (+0x91): return 0
+0x458fd0 object3d_move ; (inst) pos +0x50 += vel +0x5c; pitch/yaw/roll +0x74 += +0x68
+0x459350 object3d_matrix_if_dirty ; inst +0x95 == 1 -> inst_build_matrix
+0x459460 object3d_draw ; (this = instance) the frame's mesh with the instance matrix
+0x45e060 mat_rot_x ; (out, angle) row-major [5]=c [6]=-s [9]=s [10]=c
+0x45e0d0 mat_rot_y ; (out, angle) [0]=c [2]=s [8]=-s [10]=c (model +z -> (-sin, 0, cos))
+0x45e140 mat_rot_z ; (out, angle) [0]=c [1]=-s [4]=s [5]=c
+0x45e450 mat_mul ; (out, a, b): out = b * a (row-major)
+0x4a7c00 g_font3d ; T_ARRAY t_3d_effect_object[30] (+4 count, +8 last new, +0x10 used flags)
+0x4a7c10 g_font3d_used ; byte[30]
+0x4a7c48 g_font3d_anim ; FONT3D_ANIM index
+0x4a7c4c g_font3d_inited
+0x486ab8 g_font3d_fx ; {init, update} x 5
+0x486ae0 g_font3d_series ; {int count; int fx[10];} x 3: {0,1} {2,3} {4,3}
+0x486b64 g_font3d_spacing ; 12.5f
+0x486b68 g_font3d_charset ; 48 chars "0-9A-Z", 4 umlaut letters (cp1252), '="-*+.!?', no 0 terminator
+0x4869d8 g_countdown_text ; {char text[10]; int sample; int effect_serie;} x 4: "3" "2" "1" "GO?"
+0x4a76a0 g_countdown_pos ; a: player + z axis * 400 + (0, 30, 0)
+0x4a76ac g_countdown_index
+0x4a76b0 g_countdown_tick ; GetTickCount of the last step
+0x4a76b8 g_countdown_dir ; b: the player's z axis (x, 0, z)

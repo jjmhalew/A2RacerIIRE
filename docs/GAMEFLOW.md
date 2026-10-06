@@ -134,8 +134,9 @@ init; `handle_game_actions` 0x4168c0 calls update every frame and, when it retur
    0x42a460). The player is placed `position` chunks behind it (last finish position = start position); copland=1
    forces car 6 (police car).
 3. Start camera (ev_stcam): wait 1000 ms, fly in for 2 s, then the countdown action.
-4. Countdown (ev_start, table 0x4869d8 of 18-byte entries `{char text[10]; int sample; int ?}`): every 1000 ms show
-   **"3", "2", "1"** as 3D text 400 units in front of the car with sound 42 **getset.wav**, then **"GO"** with sound 43
+4. Countdown (ev_start, table 0x4869d8 of 18-byte entries `{char text[10]; int sample; int effect_serie;}`): every 1000 ms show
+   **"3", "2", "1"** as 3D text 400 units in front of the car (RENDER.md "3D font", effect serie 1) with sound 42
+   **getset.wav**, then **"GO?"** (drawn as "GO!", serie 2) with sound 43
    **go.wav**. (3git/2git/1git/gogit.wav = sounds 12-15 are never played and not in RCS.) After the 4th step:
    state 0, camera view 1; if copland: flash message 47 "COP MODE".
 5. Trigger 13 (`trigger_race_start` 0x42a420, once) when crossing the start line: starts timer 0 (lap clock), timer 11

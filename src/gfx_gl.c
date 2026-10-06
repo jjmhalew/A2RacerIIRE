@@ -107,6 +107,7 @@ static Mat4 g_proj, g_view, g_model;
 static int g_w, g_h, g_has_mipmap;
 static float g_fog[5];
 static float g_tint[4] = { 1, 1, 1, 1 };
+static int g_depth_off;         /* gfx_set_depth_off */
 /* 2D */
 static int g_vw = 640, g_vh = 480;
 static float g_ox, g_oy, g_scale;
@@ -265,6 +266,8 @@ void gfx_set_tint(float r, float g, float b, float a)
     glUniform4f(u_tint, r, g, b, a);
 }
 
+void gfx_set_depth_off(int off) { g_depth_off = off; }
+
 GfxState gfx_state_opaque(void)
 {
     GfxState s = { BLEND_NONE, 1, 1, 1, 0, 0 };
@@ -281,8 +284,8 @@ static void apply_state(const GfxState *s)
         else if (s->blend == BLEND_INVALPHA) glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA);
         else glBlendFunc(GL_DST_COLOR, GL_ZERO);
     }
-    if (s->depth_test) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
-    glDepthMask(s->depth_write ? 1 : 0);
+    if (s->depth_test && !g_depth_off) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
+    glDepthMask(s->depth_write && !g_depth_off ? 1 : 0);
     if (s->cull) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
     glUniform1f(u_alpha_test, s->alpha_test ? 0.5f : -1.0f);
     glUniform1f(u_fog, s->fog ? 1.0f : 0.0f);

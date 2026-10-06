@@ -47,6 +47,8 @@ void gfx_set_matrices(const Mat4 *proj, const Mat4 *view);
 void gfx_set_model(const Mat4 *model);               /* NULL = identity */
 void gfx_set_fog(float r, float g, float b, float start, float end);
 void gfx_set_tint(float r, float g, float b, float a);
+/* 1: no depth test and no depth writes for what is drawn until it is set back to 0 (D3DRENDERSTATE_ZENABLE off) */
+void gfx_set_depth_off(int off);
 
 GfxMesh *gfx_mesh_create(const GfxVertex *v, int nv, const uint16_t *idx, int ni, const GfxRange *ranges, int nr);
 GfxMesh *gfx_mesh_create32(const GfxVertex *v, int nv, const uint32_t *idx, int ni, const GfxRange *ranges, int nr);

@@ -349,4 +349,133 @@ are frame based. Billboards copy the camera orientation matrix.
 ### Finish flag and 3D font
 - `0x41aee0` finish flag (Game.ini finish_flag): TRIANGLESTRIP LVERTEX, SRCALPHA/INVSRCALPHA, ZENABLE off.
 - gfx_3dft.cpp is the **3D font** (not 3dfx): "FONT3D_ANIM" objects per character, letter spacing 12.5
-  (`0x417140`, `0x417720`), drawn with ZENABLE off (`0x417870`).
+  (`0x417140`, `0x417720`), drawn with ZENABLE off (`0x417870`). Details in the next section.
+
+### 3D font (gfx_3dft.cpp): the countdown letters
+Port: src/font3d.c (names in docs/names/spel_font3d.txt). The only user is the race-start countdown
+(`countdown_update` 0x416bd0, GAMEFLOW.md 4): every 1000 ms `font3d_create_text(rec.text, a, b, rec.serie)` with
+the records at `0x4869d8` `{char text[10]; int sample; int effect_serie;}` = "3"/42/1, "2"/42/1, "1"/42/1,
+"GO?"/43/2. `countdown_init` 0x416b00 sets the first step 1000 ms ahead and computes, once, from the player instance's
+freshly built matrix M (`inst_build_matrix`, rows = the model's axes): a = M.row3 + M.row2 * 400 + (0, 30, 0) (row 2
+is the car's z axis, including its pitch), b = (M.row2.x, 0, M.row2.z). The countdown action ends (race state 0)
+in the same frame that creates "GO?"; the letters run on by themselves.
+
+Each letter is a record (`t_3d_effect_object`, 0x44 bytes, T_ARRAY of 30 at `0x4a7c00`) plus a 3D instance of
+FONT3D_ANIM (frame = the character). The record:
+
+| Off | Field |
+|---|---|
+| +0x00 | Vec3 centre: a (fx 4 moves it) |
+| +0x0c | Vec3 the letter's start position |
+| +0x1c | float angle around the centre (fx 4, 4096 units) |
+| +0x24 | int height (fx 0) / distance from the centre (fx 4) |
+| +0x28 | int phase (fx 0) |
+| +0x2c | int letter number (spaces not counted) |
+| +0x30 | int instance |
+| +0x34 | int frames of the running effect |
+| +0x38 / +0x3c | int effect serie / step in it |
+| +0x40 | int frames done (fx 0) |
+
+```c
+void font3d_create_text(char *text, Vec3 a, Vec3 b, int serie)        // 0x417140
+{
+    // 'Illegal value effect serie' unless 0 <= serie < 3; series[serie].count must be 1..9
+    srand(time(0));
+    Vec3 d = (b.z - 0, 0, 0 - b.x) / |...|;           // right of b: the letters go left to right, seen from behind
+    int n = strlen(text);
+    Vec3 p = a - d * 12.5 * (n / 2);                  // 12.5 = 0x486b64; int n/2
+    if (!(n & 1)) p += d * 12.5 * 0.5;                // centred on a
+    if (last_used_record_index + n > 30) return;      // (index of the highest used record, -1 if none)
+    for (i = 0, k = 0; i < n; i++, p += d * 12.5) {
+        int ch = index of text[i] in the 48 bytes at 0x486b68;  // -1: a space, only the advance
+        if (ch < 0) continue;
+        r = font3d_array_get_new();                   // 0x418200: first free from the last new index on, wrapping
+        rec[r] = { .centre = a, .pos = p, .index = k++, .serie = serie, .step = 0 };
+        fx = series[serie].fx[0];
+        inst = object3d_new(p, (0,0,0), FONT3D_ANIM, ch, fx_tab[fx].update ? : object3d_cb_none);
+        inst.vel = 0; inst.rotvel = 0;
+        inst.yaw = (atan2(b.z, b.x) - PI/2) * 4096 / (2 PI);   // the letter's z axis along b (pitch, roll 0)
+        inst.record = r; inst.visible = 1; inst_build_matrix(inst);
+        if (fx_tab[fx].init) fx_tab[fx].init(inst);
+    }
+}
+```
+
+`object3d_new` puts type 2 and +0x95 = 1 (rebuild the matrix when drawn) in the instance. The effects table at
+`0x486ab8` is `{init, update}` x 5 and the series at `0x486ae0` are `{int count; int fx[10];}` x 3:
+serie 0 = {0, 1}, serie 1 = {2, 3} ("3", "2", "1"), serie 2 = {4, 3} ("GO?"). `dt` below is `timer_frame_dt` (the
+last frame's time, at most 0.1 s), so the effects last a time, not a number of frames; `ftol` truncates.
+
+```c
+void font3d_draw(void)                                                   // 0x417870, from render_game
+{
+    ZENABLE = 0;                                      // always on top of the world (no depth test or write)
+    for (each used record r) {
+        inst = rec[r].inst;
+        inst.update(inst);                            // the effects run here, once per drawn frame
+        if (instance still used) object3d_draw(inst); // 0x459460: matrix from +0x50 / +0x74..+0x7c, the mesh
+    }
+    ZENABLE = 1;
+}
+void font3d_fx_next(inst)                                                // 0x4179e0
+{
+    if (++rec.step >= series[rec.serie].count) { used[r] = 0; object3d_free(inst); return; }
+    fx = series[rec.serie].fx[rec.step];
+    if (fx_tab[fx].init) fx_tab[fx].init(inst);
+    inst.update = fx_tab[fx].update;
+}
+void object3d_move(inst) { inst.pos += inst.vel; inst.rot += inst.rotvel; }   // 0x458fd0 (+0x50 += +0x5c, +0x74 += +0x68)
+
+// fx 0 "hop" (0x417a90 / 0x417b20): the word hops in a wave
+init:   rec.phase = rec.index * 75; if (rec.phase > 0x7ff) rec.phase -= 0x7ff;
+        rec.height = 80; rec.frames = ftol(3.0 / dt); rec.done = 0;
+update: rec.phase += 4096 / rec.frames; if (rec.phase >= 0x7ff) rec.phase = 0;      // half sines: hops
+        if (rec.height > 25) rec.height -= max(60 / rec.frames, 1);                 // int divisions
+        inst.pos.y = SIN[rec.phase] * rec.height + rec.pos.y;
+        if (++rec.done >= rec.frames) font3d_fx_next(inst);
+// fx 1 "burst" (0x417c30 / 0x417d50): the letters fly apart
+init:   inst.vel = ((inst.pos.x - rec.centre.x) * 0.2, 15.0, (inst.pos.z - rec.centre.z) * 0.2);
+        inst.rotvel = (rand() % 200, rand() % 200, rand() % 200); rec.frames = 25;     // frames, not seconds
+update: object3d_move(inst); if (--rec.frames == 0) font3d_fx_next(inst);          // (fx 2 uses it too)
+// fx 2 "fly" (0x417da0): to the player with one somersault
+init:   Q = player instance pos; rec.frames = ftol(0.8 / dt);
+        inst.vel = ((inst.pos.x - Q.x) * -0.9 / rec.frames, 0, (inst.pos.z - Q.z) * -0.9 / rec.frames);
+        inst.rotvel.x = 4096 / rec.frames;                                         // pitch: one turn (int division)
+// fx 3 "hold" (0x417ec0 / 0x417f10): stand still, then the end of both countdown series
+init:   rec.frames = ftol(0.2 / dt);
+update: if (--rec.frames == 0) font3d_fx_next(inst);
+// fx 4 "spin" (0x417f50 / 0x418050): the word turns once around its centre, which slides to the player
+init:   rec.frames = ftol(1.0 / dt); inst.rotvel = (0, -4096 / rec.frames, 0);
+        dx = rec.pos.x - rec.centre.x; dz = rec.pos.z - rec.centre.z; rec.radius = ftol(sqrt(dx*dx + dz*dz));
+        if (dx != 0 || dz != 0) rec.angle = (atan2(dz, dx) - PI/2) * 4096 / (2 PI);
+update: rec.angle += ftol(inst.rotvel.y);
+        a = ftol(rec.angle) + 0x400;                                               // + a quarter turn
+        inst.pos.x = COS[a & 4095] * rec.radius + rec.centre.x;
+        inst.pos.z = SIN[a & 4095] * rec.radius + rec.centre.z;
+        Q = player instance pos;
+        rec.centre.x += (Q.x - rec.centre.x) / rec.frames;                         // reaches Q on the last frame
+        rec.centre.z += (Q.z - rec.centre.z) / rec.frames;
+        object3d_move(inst);                                                       // the letter's own yaw turns along
+        if (--rec.frames == 0) font3d_fx_next(inst);
+```
+
+What it looks like (letters 8.9 x 13.6 x 5 units, s_letter.pcx; no scaling, no fading):
+- **"3", "2", "1"** (serie 1): the digit appears 400 units ahead of the car, 30 up, its face towards the camera behind
+  the car, and in 0.8 s flies 90% of the way to the car (ending 40 ahead) while it somersaults once forwards around
+  its x axis (4096/frames per frame: at 30 fps 170 x 24 = 4080, so it stops 16 units = 1.4 degrees short of upright);
+  it stands for 0.2 s and disappears: exactly the 1000 ms to the next digit.
+- **"GO?"** (serie 2): the three letters turn as one rigid word once around the middle letter in 1 s (orbit angle and
+  yaw both -4096/frames per frame, so the word shows its back half way), while the centre slides from 400 ahead to
+  the car's own position (y stays at a.y = car + 30); it stands 0.2 s over the car and disappears.
+- The charset `0x486b68` ("0-9A-Z", 4 umlauts, `="-*+.!?`) is one off against FONT3D_ANIM (49 frames: frame 36 is a
+  second LTR_T, and LTR_VRAG "?" is the 49th), so from the umlauts on every character gets the mesh of the one before:
+  '?' shows LTR_UITR **"!"**, which is why the record says "GO?" for a "GO!" on screen.
+- Matrix (`inst_build_matrix` 0x459360, D3D row vectors): M = Rz(roll) * Rx(pitch) * Ry(yaw), then the position,
+  with Rx [5]=c [6]=-s [9]=s [10]=c, Ry [0]=c [2]=s [8]=-s [10]=c, Rz [0]=c [1]=-s [4]=s [5]=c (`0x45e060`,
+  `0x45e0d0`, `0x45e140`; `mat_mul` 0x45e450 is out = b * a). A zero angle is skipped; the others are truncated to
+  whole units. Ry turns the model's +z to (-sin, 0, cos), the same as the cars (`car_fwd` in src/rules.c), so the
+  letter's yaw of create_text equals the car's yaw: the letters keep a fixed orientation (no billboard).
+- `object3d_animate_all` 0x458690 (frame++ of type-2 instances and the +0x91 callback) has no direct caller; the
+  letters' callback is only run by font3d_draw, so they do not cycle frames.
+- Port: the effects run once per game tick (RACE_HZ) instead of per drawn frame, with dt = 1/RACE_HZ (frames =
+  sec * RACE_HZ, +0.001 against 23.999), and are drawn interpolated between the last two ticks.
