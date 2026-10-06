@@ -12,6 +12,7 @@
 
 int film_play(const char *name, int fullscreen)
 {
+    if (getenv("A2_NO_FILMS")) return 0;               /* tests: as if skipped */
     char path[1024];
     res_path(path, sizeof path, name);
     FILE *f = plat_fopen(path, "rb");

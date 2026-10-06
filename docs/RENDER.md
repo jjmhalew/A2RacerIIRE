@@ -322,7 +322,10 @@ are frame based. Billboards copy the camera orientation matrix.
 
 ### Tyre smoke "clouds" (gfx_wolk.cpp; "wolk" = cloud, but these are smoke puffs, not sky clouds)
 - `0x4201a0` init (needs g_hw3d, SRCALPHA and ONE blend caps, alpha_blending). Emitter `0x425a90`: slip >= 4, at
-  most every 100 ms, 2 puffs at the rear wheels (+-9 lateral), velocity 0.6 * car velocity. 70 puffs (`0x4d3a18`).
+  most every 100 ms, one `cloud_emit` `0x41fff0` per rear wheel (+-9 lateral, 3 up), velocity 0.6 * car velocity.
+  cloud_emit (Game.ini clouds; nothing below 12 fps, 1/dt < 12) spawns **2 puffs** (`ebx < 2` loop), each in the
+  first free slot, so an emission is **4 puffs**, two per wheel at the same point (spawn randomises their speed).
+  70 puffs (`0x4d3a18`). (The port's fx_smoke spawned one per wheel until this was checked; now two, as fx_cloud.)
 - Spawn `0x41fd80`: life 4 s, size 7x7, vel.xz = (0.75 + rnd*0.25) * v, vel.y = (rand%35 + 9)/life.
   Update `0x41fae0`: vel *= 0.9, pos += vel, size += 29/life (ends at ~36), centre alpha -= 0x50/life;
   animation frame ping-pongs 0,1,2,1,0 (3 frames stacked vertically in S_SFX, u 0..0.3954).
@@ -354,12 +357,87 @@ are frame based. Billboards copy the camera orientation matrix.
 - Draw `0x4326e0`: 2 LVERTEX per particle (current and previous position), ZENABLE off,
   DrawPrimitive(LINELIST), ZENABLE on: depth-less streaks.
 
-### Finish flag and 3D font
-- `0x41aee0` finish flag (Game.ini finish_flag): TRIANGLESTRIP LVERTEX, SRCALPHA/INVSRCALPHA, ZENABLE off.
-- gfx_3dft.cpp is the **3D font** (not 3dfx): "FONT3D_ANIM" objects per character, letter spacing 12.5
-  (`0x417140`, `0x417720`), drawn with ZENABLE off (`0x417870`). Details in the next section.
+### Finish flag (gfx_flag.cpp)
+Port: src/flag.c (names in docs/names/spel_render.txt). A waving chequered flag, a half transparent grid in front of
+the camera that covers the whole picture, behind the results panel. Started by `finish_update` 0x4155d0 (GAMEFLOW.md
+"Finish"): 1500 ms after the finish, if g_hw_accel and not yet done (`g_finish_flag_started` 0x4a70ec),
+`flag_start(1)`, in the same call that draws the results panel. Nothing ever calls flag_start(0) and `flag_init`
+(from init_game) is the only other writer of the active flag, so once started it stays until the race program ends
+(the continue key -> state 4). The panel is drawn by the game logic after EndScene (2D on the back buffer), so the
+flag (a 3D pass in render_game, after the particles, before the 3D font) is always under it; the first frame of
+the panel has no flag yet.
+
+State: strips `0x4a7dd0` (10 x 34 D3DLVERTEX, 0x440 bytes each), `g_flag_period` 0x4aa850, `g_flag_frame`
+0x4aa854, `g_flag_active` 0x4aa858, texture index 0x4a7d88, world matrix 0x4a7d90.
+```c
+void flag_init(void)                                      // 0x41aea0, from init_game
+{
+    flag_build_mesh();
+    period = ftol(2.0 / timer_frame_dt());                // frames in 2 s
+    frame = 0; active = 0;
+    tex = load_texture("S_SFX.PCX");                      // the .tga in the 16-bit mode (128 x 128)
+}
+void flag_build_mesh(void)                                // 0x41ad40: 11 x 17 vertices as 10 strips
+{
+    for (s = 0; s < 10; s++) for (c = 0; c < 17; c++)     // strip s: rows s and s+1, A = 2c, B = 2c+1
+        for (r = s; r <= s + 1; r++) V[s][2c + r-s] = {
+            x = 12.5*c - 100, y = 15*r - 75, z = 100,     // 200 x 150 units, 100 ahead (camera space)
+            color = 0xffffffff, specular = 0,
+            tu = 0.445313 + c * 0.06249997 * 0.0625,      // 114/256 .. 130/256
+            tv = 0.046875 - 0.046875 * r * 0.1 };         // 12/256 (bottom row) .. 0 (top row)
+}
+void flag_start(int on)                                   // 0x41abc0
+{
+    period = ftol(2.0 / timer_frame_dt());
+    if (frame >= period) frame = 0;
+    active = on;
+}
+void flag_animate(void)                                   // 0x41ac00
+{
+    step = 0x1000 / period;                               // int; 4096 units per turn (run-time sin table)
+    for each strip s, column c, row r in {s, s+1}:
+        a = (step * frame + 0x40 * r + 0x80 * c) & 4095;
+        w = sin_table[a] * 10;
+        g = clamp(256 - ftol((w + 10) * 6.4), 0x80, 0xff); // near (w = -10) white .. far (w = +10) half grey
+        V.z = w + 100;                                    // 90 .. 110
+        V.color = 0x64000000 | g << 16 | g << 8 | g;      // alpha 100/255
+}
+void flag_draw(void)                                      // 0x41aee0, from render_game
+{
+    if (!g_opt_finish_flag || !active) return;           // Game.ini [GFX OPTIONS] finish_flag (CD: 1)
+    default material texture = tex; SetRenderState(TEXTUREHANDLE, tex);
+    if (!g_8bit) ALPHABLENDENABLE = 1, SRCBLEND = SRCALPHA, DESTBLEND = INVSRCALPHA;
+    if (FILTER == 2 && g_hw_accel) TEXTUREMAG = TEXTUREMIN = NEAREST;   // the flag is always point sampled
+    ZENABLE = 0;
+    cam = g_cameras[g_cam_slot[g_active_cam_slot]];
+    world = cam.orientation (+0x14, rows right/up/forward); world.row3 = cam.position (+0x08);
+    flag_animate();
+    if (++frame >= period) frame = 0;
+    SetTransform(WORLD, world);
+    for (s = 0; s < 10; s++) DrawPrimitive(TRIANGLESTRIP, D3DVT_LVERTEX, V[s], 34, D3DDP_WAIT);
+    ALPHABLENDENABLE = 0 (not 8-bit); filter back to LINEAR (FILTER == 2 and hw); ZENABLE = 1;
+}
+```
+What it looks like: the texels are an 8 x 6 chequer of white and very dark red (0x3c0000) at (57, 0) of the 128 x 128
+S_SFX (the keyed pixels next to it are only reached at the flag's edges, which are off screen), point sampled, so 8 x 6
+big squares. With the 81 deg horizontal FOV the visible half width at depth z is 0.854 z and the half height 0.640 z
+(4:3): even at z = 110 that is 94 x 70 against the flag's 100 x 75, so the flag always covers the whole screen. No depth
+test or write, so the world and the cars show through it at 39% opacity, multiplied by a grey 128..255 that is
+brightest where the cloth is nearest. The wave: one turn per 2 s (step * period ~ 4096; the small rest makes a jump of
+a few units at the wrap), 0x80 per column = half a wavelength over the 16 columns, 0x40 per row = 10/64 turn over the
+height; the phase grows with time, so the crests run from right to left (and a little downwards). The original counts
+drawn frames, with the period measured from the frame time at flag_start.
+
+Port (src/flag.c): the frame counts game ticks (period = 2 s * RACE_HZ, from rules_tick) and the drawn phase is
+interpolated between ticks; the texture is a separate NEAREST copy of S_SFX (keyed, gamma as the other textures);
+drawn from rules_draw_3d after the effects (fx_draw) and before the 3D letters, with the interpolated camera; in a window
+wider than 4:3 the grid is widened by aspect * 3/4 so it still covers the picture. Not reproduced: the 8-bit path
+without blending (this port always draws in true colour), and the one frame without flag (here it starts in the tick
+that first shows the panel).
 
 ### 3D font (gfx_3dft.cpp): the countdown letters
+gfx_3dft.cpp is the **3D font** (not 3dfx): "FONT3D_ANIM" objects per character, letter spacing 12.5
+(`0x417140`, `0x417720`), drawn with ZENABLE off (`0x417870`).
 Port: src/font3d.c (names in docs/names/spel_font3d.txt). The only user is the race-start countdown
 (`countdown_update` 0x416bd0, GAMEFLOW.md 4): every 1000 ms `font3d_create_text(rec.text, a, b, rec.serie)` with
 the records at `0x4869d8` `{char text[10]; int sample; int effect_serie;}` = "3"/42/1, "2"/42/1, "1"/42/1,

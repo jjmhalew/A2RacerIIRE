@@ -847,11 +847,11 @@ static void race_draw(float alpha)
         wheels_draw(R, o, &m, alpha);
     }
     gfx_set_model(NULL);
-    rules_draw_3d(R);                                   /* the countdown letters */
     {   /* the effects' billboards copy the camera's orientation */
         Vec3 f = v3_norm(v3_sub(tgt, eye)), rt = v3_norm(v3_cross(v3(0, 1, 0), f)), up = v3_cross(f, rt);
         fx_draw(eye, rt, up);
     }
+    rules_draw_3d(R);                                   /* after the effects as in render_game: flag, 3D letters */
     gfx_set_model(NULL);
     draw_hud();
 }

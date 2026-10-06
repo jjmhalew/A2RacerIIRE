@@ -130,8 +130,12 @@ void fx_smoke(const FxCar *c, int slip, float dt)
     /* 0.6 x the car's velocity, in world units per frame */
     Vec3 v = v3_scale(v3_add(v3_scale(c->right, c->vel.x), v3_scale(c->fwd, c->vel.z)), 0.6f * 10 * dt);
     float z = -10 * c->cg_rear;
-    puff_spawn(car_point(c, 9, 3, z), v, dt);
-    puff_spawn(car_point(c, -9, 3, z), v, dt);
+    /* tyre_smoke_emitter 0x425a90 calls cloud_emit 0x41fff0 once per rear wheel, and that spawns 2 puffs */
+    for (int w = 0; w < 2; w++) {
+        Vec3 p = car_point(c, w ? -9.0f : 9.0f, 3, z);
+        puff_spawn(p, v, dt);
+        puff_spawn(p, v, dt);
+    }
 }
 
 void fx_cloud(Vec3 pos, Vec3 vel, float dt)                   /* cloud_emit 0x41fff0: two puffs */

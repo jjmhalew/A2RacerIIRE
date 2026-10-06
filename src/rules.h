@@ -30,7 +30,7 @@ void rules_radar_bonus(Race *r);                          /* a speed-camera pole
 void rules_message(int text);                             /* flash a language.ini text for 2 s (0x4882c0) */
 /* the camera while the rules own it (start fly-in, finish, game over, police stop); 0 = the player's camera */
 int  rules_camera(Race *r, Vec3 *eye, Vec3 *target);
-void rules_draw_3d(Race *r);                              /* the countdown letters (gfx_3dft.cpp) */
+void rules_draw_3d(Race *r);                              /* finish flag (gfx_flag.cpp), countdown letters (gfx_3dft.cpp) */
 void rules_draw_hud(Race *r);                             /* the rules' part of the overlay (HUD.md 4) */
 int  rules_hud_on(void);                                  /* the dashboard is drawn (states 0 and 1) */
 int  rules_paused(void);                                  /* the pause / quit dialog is open: no game ticks */

@@ -46,7 +46,8 @@ int game_run(void)
     int first = 1;
     for (;;) {
         if (!first) menu_take_race_results();
-        int code = menu_run(first);                    /* a2_II.exe: spawnv(menu.dat, "\FIRST" the first time) */
+        const char *script = getenv("A2_TEST_MENU");   /* tests: every menu gets these scripted events */
+        int code = script ? menu_script(script, first) : menu_run(first);   /* a2_II.exe: menu.dat "\FIRST" */
         first = 0;
         if (code != 0x28) return 0;                    /* 0xFF = quit (exit.smk was played by the menu) */
         if (!game_race()) return 0;                    /* the window was closed */

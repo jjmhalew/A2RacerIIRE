@@ -4,6 +4,7 @@
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "rules.h"
 #include "effects.h"
+#include "flag.h"
 #include "font3d.h"
 #include "gfx.h"
 #include "hud.h"
@@ -62,6 +63,7 @@ static struct {
     /* the end events */
     int ev_ticks;               /* game ticks (= the original's frames) since the state was entered */
     Vec3 fin_cam;               /* ev_finish_cam_init 0x4154d0: the still finish camera */
+    int flag_started;           /* g_finish_flag_started 0x4a70ec: flag_start(1) done */
     int fin_key;                /* finish_update: a continue key went down; it ends when all are up again */
     Sweep sweep[2];             /* the game-over texts: reason (40..42) at H/4, "RACE OVER" (43) at H/2 */
     int smoke_at;               /* 0x4a75c4: the wreck smoke's 200 ms clock */
@@ -158,6 +160,7 @@ void rules_init(Race *r, const RulesHooks *hooks)
         snprintf(k, sizeof k, "TIME_CHECK_E%d_C%d", r->etappe, i);
         G.rec_checks[i] = ini_int(g, "BEST TIMES", k, 0);
     }
+    flag_init(ini_int(g, "GFX OPTIONS", "finish_flag", 1), 1.0f / RACE_HZ);     /* init_game: flag_init 0x41aea0 */
     ini_free(g);
     G.speed_limit = -1;
     G.message = G.message_new = -1;
@@ -184,7 +187,7 @@ void rules_init(Race *r, const RulesHooks *hooks)
     set_state(r, GS_START);
 }
 
-void rules_free(void) { font3d_free(); }
+void rules_free(void) { font3d_free(); flag_free(); }
 
 /* ---- triggers ---------------------------------------------------------------------------------------------------- */
 static int moving_forward(int prev, int cur, int n)
@@ -450,6 +453,7 @@ void rules_tick(Race *r)
         /* the results panel after 1500 ms (rules_draw_hud); then Esc / Enter / Space, and the event ends when all
          * three are released again (it waits for that in a loop); A2_TEST_FINISH: 3 s after the finish */
         if (in_state >= 1500) {
+            if (!G.flag_started) { flag_start(1); G.flag_started = 1; }   /* the waving flag (hw accel only) */
             if (continue_key_down()) G.fin_key = 1;
             else if (G.fin_key || (getenv("A2_TEST_FINISH") && in_state >= 3000)) {
                 int prize = prize_money(r);
@@ -484,6 +488,7 @@ void rules_tick(Race *r)
     }
     G.ev_ticks++;
     font3d_tick(player(r)->pos);                     /* the 3D letters (run by font3d_draw 0x417870 per frame) */
+    flag_tick();                                     /* the flag's wave (flag_draw 0x41aee0 counts the frames) */
 }
 
 void rules_keys(Race *r)                             /* check_game_keys 0x424ee0 */
@@ -553,10 +558,16 @@ int rules_camera(Race *r, Vec3 *eye, Vec3 *target)
     }
 }
 
-/* ---- 3D countdown letters (gfx_3dft.cpp, src/font3d.c; started by the countdown in rules_tick) ------------------ */
+/* ---- the last passes of render_game: the finish flag (gfx_flag.cpp, src/flag.c; started by the finish in
+ * rules_tick), then the 3D countdown letters (gfx_3dft.cpp, src/font3d.c; started by the countdown) ------------- */
 void rules_draw_3d(Race *r)
 {
-    font3d_draw((float)(r->accum * RACE_HZ));        /* the same interpolation as race_draw */
+    float a = (float)(r->accum * RACE_HZ);           /* the same interpolation as race_draw */
+    int w, h;
+    plat_size(&w, &h);
+    flag_draw(v3_lerp(r->cam_draw0, r->cam_draw1, a), v3_lerp(r->tgt_draw0, r->tgt_draw1, a),
+              h > 0 ? (float)w / h : 4.0f / 3.0f, a);
+    font3d_draw(a);
 }
 
 /* ---- overlay ----------------------------------------------------------------------------------------------------- */
