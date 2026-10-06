@@ -278,6 +278,7 @@ static void apply_state(const GfxState *s)
         glEnable(GL_BLEND);
         if (s->blend == BLEND_ALPHA) glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         else if (s->blend == BLEND_ADD) glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        else if (s->blend == BLEND_INVALPHA) glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA);
         else glBlendFunc(GL_DST_COLOR, GL_ZERO);
     }
     if (s->depth_test) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);

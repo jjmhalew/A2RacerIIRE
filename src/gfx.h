@@ -14,7 +14,8 @@ typedef struct {
     uint8_t r, g, b, a;
 } GfxVertex;
 
-enum GfxBlend { BLEND_NONE, BLEND_ALPHA, BLEND_ADD, BLEND_MUL };
+enum GfxBlend { BLEND_NONE, BLEND_ALPHA, BLEND_ADD, BLEND_MUL,
+                BLEND_INVALPHA };   /* src * (1 - a) + dst * a: skid marks, alpha 255 = invisible (gfx_skid.cpp) */
 enum GfxTexFlags { TEX_CLAMP = 1, TEX_NEAREST = 2, TEX_MIPMAP = 4 };
 
 typedef struct {
