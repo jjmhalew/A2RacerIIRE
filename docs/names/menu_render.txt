@@ -1,0 +1,22 @@
+0x40eec0 ascii_load_img_font ; .img font: u8 present[256]; s16 w,h,c,key; 256 cells of w*h 8-bit pixels (see FORMAT_IMAGES.md)
+0x40ed40 ascii_lock_glyph ; lock the surface of one glyph
+0x40ee00 ascii_unlock_glyph
+0x40ece0 ascii_get_font
+0x40ecf0 ascii_set_font
+0x412cd0 ascii_blit_glyph ; Clipblit.cpp, colour-keyed glyph blit (same code as spel 0x4693e0)
+0x40f580 ascii_draw_string
+0x413850 rcpcx_read_palette_keyed ; = spel 0x46af40
+0x4139c0 rcpcx_draw_to_surface ; = spel 0x46b0b0 (menu screens hoofd.pcx etc.)
+0x413e10 pcx_put_byte ; PCX writer helpers (screenshot)
+0x413e30 pcx_encode_run
+0x413ed0 pcx_write_rows
+0x413fb0 pcx_write_file
+0x414030 save_pcx_file ; screenshot, 8-bit only
+0x414600 sprite_load_bank ; = spel 0x46c1c0 (img, ind, id list)
+0x414af0 sprite_load_all ; = spel 0x46c6b0, loads every image of menurc.img
+0x418450 pformat_rgb24_to_pixel ; = spel 0x468230
+0x4185a0 pformat_convert ; = spel 0x468380
+0x418750 pformat_index_to_rgb24 ; = spel 0x468530
+0x418a70 pal_init ; Pal.cpp: allocates the 256-entry palette (0x44f648)
+0x418b40 pal_create_ddpalette ; per focus (screen)
+0x418c60 pal_set_entries ; called by rcpcx_draw_to_surface after a menu screen is drawn

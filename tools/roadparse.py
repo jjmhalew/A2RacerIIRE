@@ -11,7 +11,7 @@ Layouts (all little endian, no padding; see docs/FORMAT_ROAD.md for the full spe
                                      u32 nleft,  nleft  x i32 waypoint,      (.dmp indices, side 0, <= 12)
                                      u32 nright, nright x i32 waypoint }     (.dmp indices, side 1, <= 12)
   .cmp  guard rails      u32 n, n x { f32 px, py, pz, f32 dx, dy, dz }       (24 B: start point + vector to end)
-  .dmp  driver map       u32 n, n x { i32 flags, i32 flags2, f32 x, y, z, i32 back, back_lane_a, back_lane_b, ahead }
+  .dmp  driver map       u32 n, n x { i32 flags, i32 flags2, f32 x, y, z, i32 next, next_inner, next_outer, prev }
 
 usage: python tools/roadparse.py test                 self-test over etappe0..6 (full consumption + consistency)
        python tools/roadparse.py stats  [N]           statistics for one or all tracks
@@ -260,7 +260,9 @@ def selftest(verbose=True):
             assert all(0 <= i < len(T.verts[g]) for i in T.index[g])
         for w in T.wps:
             assert all(-1 <= l < nd for l in w['links'])
-        _, rmp = parse_rmp(t)
+        total, rmp = parse_rmp(t)
+        # .rmp header dword 0 (never used by the loader) = number of planes whose triangles are not (0,1,2,0,2,3)
+        assert total == sum(1 for ch in rmp for g in GROUPS for pl in ch[g] if pl['tri'] != [0, 1, 2, 0, 2, 3])
         for ch in rmp:
             for g in GROUPS:
                 for pl in ch[g]:

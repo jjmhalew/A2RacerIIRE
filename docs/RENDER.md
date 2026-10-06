@@ -18,7 +18,7 @@ formats are documented elsewhere. Addresses are spel.dat virtual addresses; name
 
 `g_hw3d` (the "accelerated" path, TGA textures) switches on: the textured sky backdrop, MODULATE texture blending,
 bilinear filtering, Gouraud shade mode, fog, clouds/lights/skid marks (alpha caps permitting). The 8-bit modes are
-the old software renderer path (2D sky blit, MODULATEALPHA, nearest filtering). A reimplementation should simply
+the old software renderer path (2D sky blit, TEXTUREMAPBLEND COPY, nearest filtering). A reimplementation should simply
 implement the `g_hw3d = 1` path.
 
 Device creation, d3dlib.cpp / d3dev.cpp:
@@ -55,7 +55,7 @@ Device object layout (offsets from `0x4ea5a0`):
 | +0x29c | 0x4ea83c | RS 7 ZENABLE | 1 |
 | +0x2a0 | | RS 41 COLORKEYENABLE | 1 |
 | +0x2a4 | 0x4ea844 | RS 21 TEXTUREMAPBLEND | 1 (DECAL) |
-| +0x2b4 | 0x4ea854 | RS 16/17 TEXTUREMAG/MIN | 0 |
+| +0x2b4 | 0x4ea854 | RS 17/18 TEXTUREMAG/MIN | 0 |
 | +0x2c0 | 0x4ea860 | RS 9 SHADEMODE | 2 |
 | +0x2c4 | 0x4ea864 | RS 8 FILLMODE | 3 (SOLID) |
 
@@ -82,6 +82,7 @@ Device object layout (offsets from `0x4ea5a0`):
 
 ## 3. Render states
 
+State numbers are the DX5 D3DRENDERSTATETYPE values (16 LASTPIXEL, 17 TEXTUREMAG, 18 TEXTUREMIN, 47 ZBIAS).
 Only these states are ever set (all SetRenderState call sites enumerated). Everything else stays at the D3D
 (DX5) defaults: CULLMODE = CCW (cull counter-clockwise -> front faces are clockwise in D3D's left-handed
 space), ZFUNC = LESSEQUAL, ZWRITEENABLE = TRUE, DITHERENABLE = FALSE, ALPHATESTENABLE = FALSE,
@@ -93,9 +94,9 @@ Global state, set at init:
 |---|---|---|
 | 4 TEXTUREPERSPECTIVE | TRUE | `0x45fac0` |
 | 7 ZENABLE | TRUE (Z-buffer always on; only turned off locally, see effects) | `0x45fac0` |
-| 41 COLORKEYENABLE | TRUE (source colour key on all textures; key colour 0x7f00ff -> magenta, `0x464d30`) | `0x45fac0` |
-| 21 TEXTUREMAPBLEND | g_hw3d: 2 MODULATE; software: 7 MODULATEALPHA | `0x423d20` / `0x424440` |
-| 16/17 TEXTUREMAG/MIN | `Game.ini [OPTIONS] FILTER=2` and g_hw3d: 2 LINEAR, else 1 NEAREST | `0x41b250` |
+| 41 COLORKEYENABLE | TRUE (source colour key on all textures; key colour 0x7f00ff = RGB(255,0,127), PCX palette index 254, `0x464d30`; see FORMAT_IMAGES.md) | `0x45fac0` |
+| 21 TEXTUREMAPBLEND | g_hw3d: 2 MODULATE; software: 7 COPY | `0x423d20` / `0x424440` |
+| 17/18 TEXTUREMAG/MIN | `Game.ini [OPTIONS] FILTER=2` and g_hw3d: 2 LINEAR, else 1 NEAREST | `0x41b250` |
 | 9 SHADEMODE | 2 GOURAUD (g_hw3d) | `0x4243f0` |
 | 28/34 + LS 4..7 fog | off by default, see 5. | `0x429e30` |
 | LS 1 MATERIAL | default material `0x49b008` | `0x44e990` |
@@ -108,6 +109,7 @@ TEXTUREHANDLE. D3DBLEND: 2 ONE, 5 SRCALPHA, 6 INVSRCALPHA.
 |---|---|---|---|---|
 | `0x41b720` | object lights (brake lights) | 1 -> 0 | SRCALPHA / INVSRCALPHA | |
 | `0x41d360` | radar (HUD, 3D quad) | 1 -> 0 | SRCALPHA / INVSRCALPHA | TL fan |
+| `0x41f420` | sparks | - | - | no blend (opaque), LVERTEX TRIANGLELIST |
 | `0x41e3a0` | skid marks | 1 -> 0 | **INVSRCALPHA / SRCALPHA** (vertex alpha = transparency) | LVERTEX strips |
 | `0x4203d0` | clouds | 1 -> 0 | SRCALPHA / **ONE** (additive) | LVERTEX fans |
 | `0x41aee0` | finish flag | 1 -> 0 | SRCALPHA / INVSRCALPHA | ZENABLE 0 then 1, own filter |
@@ -232,7 +234,7 @@ racing (`g_game_event 0x4d9a7c == 0`); not configurable, no cycle key. `3` is mo
 ## 7. Sky
 
 ### Accelerated path: the backdrop quad (gfx_bkg.cpp)
-- Image: `0x4234e0` picks **one of back1.pcx..back7.pcx at random** (`rand() % 7`, table `0x48a790`), loaded as a
+- Image: `0x4234e0` picks **one of back1.pcx..back7.pcx at random** (all 128x128 8-bit sky photos) (`rand() % 7`, table `0x48a790`), loaded as a
   texture without gamma and set as the viewport background material (`0x45ce90`; texture index `0x49b028`,
   material `0x49b02c`). `Raser.ini [MAPS]` scrl_lo/scrl_hi are only used by the software path.
 - Geometry (`0x418ab0`, at `0x4a7c68`): 8 TLVERTEX = 2 triangle fans of 4 vertices covering the screen
@@ -246,8 +248,8 @@ racing (`g_game_event 0x4d9a7c == 0`); not configurable, no cycle key. `3` is mo
   the visible track and is Z-tested against the world, filling only empty pixels.
 - Per frame (`0x4190d0` draw_bkg, `0x418f00` bkg_update_colors):
   - u0 = 1 - (int(heading) & 1023) / 1024, heading = the float at object +0x78 of the player car's object
-    (an angle in 1024 units per turn) -> the sky scrolls with the car heading (not the camera, so look-back shows
-    the same sky (?)). No vertical movement (pitch is ignored).
+    (an angle in 1024 units per turn) -> linear: one texture width per 360 deg (needs GL_REPEAT). It follows the
+    car heading, not the camera (look-back shows the same sky (?)). No vertical movement (pitch is ignored).
   - A "time of day" factor runs along the track: dt = |player_chunk (`0x4d9e44`) - start_chunk (`0x4a7c58`)| * 2,
     t = (dt mod 2N) / N with N = number of chunks of the track (`[road 0x4e6670]+8`), t in [0,2).
     a = |sin(t*pi/2)|, b = |sin(t*pi)|, c = |sin(t*pi/4)|.
@@ -261,18 +263,23 @@ racing (`g_game_event 0x4d9a7c == 0`); not configurable, no cycle key. `3` is mo
   blend states (no alpha blending), MODULATE with the vertex colours.
 
 ### Software path (gfx_sky.cpp)
-Used when `g_hw3d = 0` (8-bit modes). `0x41e740` init_moving_sky loads the `Raser.ini [MAPS]` arg 6/7 image
-(`scrl_lo` at 320x200, `scrl_hi` at 640x480); `0x41e850` blits it into the back buffer each frame before the 3D
-scene (this replaces the colour clear). `0x41eac0` gfx_sky_set_heading(v), called by the camera code with
-v = cos_tab[(heading - pi/2) * 1024/(2 pi) & 1023] (i.e. about sin(heading)): scroll offset
-`[0x4cc01c] = -(v + 1) * w/2`, wrapped into [0, w) with w = `[0x4cc028]` (image width (?)), then `0x41e9d0`
-recomputes the blit. So the 2D sky scrolls horizontally with the sine of the camera heading (not linearly) and
-does not move vertically. (? exact blit rectangle and image width; the gfx_sky details were not fully traced)
+Only when `g_hw3d = 0` and `Game.ini [OPTIONS] BACKGROUND` (`0x4d9a80`) is 0.
+- `0x41e740` sky_init_moving_sky loads the `Raser.ini [MAPS]` arg 6/7 image into a DirectDraw surface:
+  SCRL_LO.pcx 480x200 (screen 320x200), SCRL_HI.pcx 960x320 (screen 640x480), i.e. 1.5x the screen width.
+  (Scroll.pcx 800x200 is not referenced.)
+- `0x41e850` sky_blit, per frame before BeginScene: a plain DirectDraw `Blt(DDBLT_WAIT)` into the back/buffer
+  screen, destination (0, 0, screenW, H - H/3) = the top 2/3 of the screen (134 rows lores, 320 rows hires = the
+  image height). Source y is always 0: **no vertical movement with pitch**. If the source window passes the right
+  edge the blit is split in two (`0x41e9d0`, horizontal wrap).
+- `0x41eac0` sky_set_scroll(c): `x = round(-(c + 1) * W/2)`, wrapped into [0, W), W = image width (`0x4cc028`).
+  Callers pass `c = cos_table[yaw & 1023]` (camera heading from atan2 in `0x4144b0`, or the car heading at
+  `0x4261d7`). So the offset is W*(1 - cos(yaw))/2: it sweeps the image once over a 180 deg turn and back - not
+  linear in yaw (probably an original quirk).
 
 ## 8. Fog
 - `Game.ini [OPTIONS] fog` (`0x4d9abc`, default 0, "conflicts with alpha blending"). Only in the accelerated path,
   and only in half of the races: `0x418da0` init_bkg enables it if `fog != 0 && (rand() & 1)`.
-  If fog == 1 (not 2) it also switches TEXTUREMAPBLEND to MODULATEALPHA and re-applies the FILTER setting.
+  If fog == 1 (not 2) it also switches TEXTUREMAPBLEND to 7 (COPY) and re-applies the FILTER setting.
 - `0x429e30` fog_enable: FOGENABLE = 1, fog mode LINEAR (D3DLIGHTSTATE fog = vertex fog done by the D3D lighting
   module, not table fog), colour 0xb4b4c8 (R=180,G=180,B=200), start 3.5, end 1000; the base colour of `0x418830`
   becomes (220, 125, 100). After that `0x418830` recomputes colour/start/end every frame from the track progress
@@ -283,21 +290,63 @@ does not move vertically. (? exact blit rectangle and image width; the gfx_sky d
 - OpenGL: linear fog on eye-space depth with the values above; D3D vertex fog on TL vertices uses the specular
   alpha as fog factor (sky quad).
 
-## 9. Effects (alpha-blended passes)
-Only the D3D side was traced here (call sites of SetRenderState/DrawPrimitive); counts, sizes and lifetimes of the
-individual effects are not in this document yet (?). Ini switches: `Game.ini [GFX OPTIONS]` clouds, skidmarks,
-fade_skmarks, particles (module off by default), part_rain, object_lights, alpha_blending (master switch, also
-forced off by `0x4234e0` when the device reports no source/destination blend caps).
+## 9. Effects
+Ini switches: `Game.ini [GFX OPTIONS]` clouds, skidmarks, fade_skmarks, particles, part_rain, object_lights,
+alpha_blending (master switch; also forced off by `0x4234e0` when the device lacks source/destination blend caps,
+saved in `0x4d9b04`/`0x4d9b08`). All effect textures are regions of **S_SFX.PCX** (128x128). Lifetimes in seconds
+are converted to frame counts with the frame time at creation (`0x441cd0`, dt clamped to 0.1 s), so the effects
+are frame based. Billboards copy the camera orientation matrix.
 
-| Module | Init | Update | Draw | Primitive | Blend |
-|---|---|---|---|---|---|
-| object lights (gfx_lght.cpp, brake lights) | `0x41b330` | | `0x41b720` | mesh-based light objects | SRCALPHA / INVSRCALPHA |
-| sparks (gfx_sprk.cpp) | `0x41f300` | | `0x41f420` | TRIANGLELIST, LVERTEX | (no blend state set; colour-keyed texture) (?) |
-| skid marks (gfx_skid.cpp) | `0x41e130` | `0x41dd00` (per frame, before render) | `0x41e3a0` | TRIANGLESTRIP, LVERTEX | INVSRCALPHA / SRCALPHA (vertex alpha 255 = invisible), fade per `fade_skmarks` |
-| clouds (gfx_wolk.cpp) | `0x4201a0` | | `0x4203d0` | TRIANGLEFAN, LVERTEX | SRCALPHA / ONE (additive) |
-| particles / rain (prt_main.cpp) | `0x431f20` | | `0x431f60` -> `0x4325b0` | LINELIST, LVERTEX | Z test toggled |
-| finish flag (gfx_flag.cpp) | `0x41aea0` | | `0x41aee0` | TRIANGLESTRIP, LVERTEX | SRCALPHA / INVSRCALPHA, ZENABLE off, own world matrix |
-| 3D font (gfx_3dft.cpp) | `0x417720` | | `0x417870` | | ZENABLE off while drawing |
+### Skid marks (gfx_skid.cpp)
+- `0x41e130` init, `0x41dd00` skid_update(player car, slip) every frame (player car only), `0x41e3a0` draw.
+- 20 records (`0x4acad0`, stride 0x1910), each two triangle strips (left/right rear wheel) of max 100 LVERTEX.
+- A mark starts when slip >= 4 and the previous slip was < 4; while it lasts, 2 vertices are appended per strip
+  **every frame** (no distance threshold) until the strip is full.
+- Points (`0x41d880`): car-local x = +-7, y = +1.0 (height offset; no ZBIAS), z = -10*h (h per car type,
+  1.01..1.46, table `0x484b3e` + 238*type), offset +-2 perpendicular to the car-local velocity (mark width 4),
+  transformed by the car matrix.
+- Colour 0x404040, alpha = clamp(200 - 16*(slip - 4), 0, 255); uv u 0.453125 / 0.5390625, v 0.15625.
+- Lifetime 20 s. `fade_skmarks=1`: each frame alpha += max(1, (255 - alpha)/(life - age)), reaching 255 at the
+  end; otherwise the mark simply disappears when its life expires.
+- Draw: ALPHABLEND on, SRCBLEND = INVSRCALPHA, DESTBLEND = SRCALPHA (so **alpha 255 = invisible**), world =
+  identity, DrawPrimitive(TRIANGLESTRIP, LVERTEX, n) per strip with n > 2; not in 8-bit modes.
+  OpenGL: `glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA)`.
 
-Each effect sets its world matrix with SetTransform(WORLD) (`0x4ea7bc`), binds its texture through the
-TEXTUREHANDLE cache and resets ALPHABLENDENABLE to 0 afterwards.
+### Tyre smoke "clouds" (gfx_wolk.cpp; "wolk" = cloud, but these are smoke puffs, not sky clouds)
+- `0x4201a0` init (needs g_hw3d, SRCALPHA and ONE blend caps, alpha_blending). Emitter `0x425a90`: slip >= 4, at
+  most every 100 ms, 2 puffs at the rear wheels (+-9 lateral), velocity 0.6 * car velocity. 70 puffs (`0x4d3a18`).
+- Spawn `0x41fd80`: life 4 s, size 7x7, vel.xz = (0.75 + rnd*0.25) * v, vel.y = (rand%35 + 9)/life.
+  Update `0x41fae0`: vel *= 0.9, pos += vel, size += 29/life (ends at ~36), centre alpha -= 0x50/life;
+  animation frame ping-pongs 0,1,2,1,0 (3 frames stacked vertically in S_SFX, u 0..0.3954).
+- Geometry: TRIANGLEFAN of 6 LVERTEX, centre ARGB 0x508484A4, 4 corners 0x00646464 (alpha 0), billboard.
+- Draw `0x4203d0`: if fps < 10 all puffs are killed; sorted far to near; ALPHABLEND on, SRCALPHA / **ONE**
+  (additive); per puff SetTransform(WORLD) + DrawPrimitive(TRIANGLEFAN, LVERTEX, 6).
+
+### Sparks (gfx_sprk.cpp)
+- `0x41f300` init; emitted on player collisions (`0x4281f0` -> `0x41f150`), count = min(speed/10 + 5, 25);
+  100 sparks (`0x4cc088`).
+- Spawn `0x41ed30`: position jitter +-2.5, life 2.5 s, horizontal velocity (rnd + 0.5) * dir * speed*3 / life,
+  bob amplitude clamp((rand%50 + speed - 25)*0.02 + 1.5, 1.5, 2.3). Update `0x41eb60`: pos += vel,
+  y += cos_table[(2048/life*age + 300) & 1023] * amp (a bounce, no real gravity); billboard.
+- One white triangle (+-0.225) front and back (6 LVERTEX), S_SFX uv (0.807,0.185), (0.807,0), (0.992,0).
+- Draw `0x41f420`: **no blending** (opaque, colour key); per spark SetTransform(WORLD) + TRIANGLELIST.
+
+### Object lights / brake lights (gfx_lght.cpp)
+- `0x41b330` init (needs object_lights, g_hw3d, SRCALPHA/INVSRCALPHA caps, alpha_blending), 20 slots (`0x4aa860`).
+- `0x425500` creates 2 lights for the player car from mesh "OBJ_LIGHT01_ANIM" (positions per car type at
+  `0x485c28`/`0x485c34`; ARGB 0xFF960000 types 0-1, 0xFFFF0000 types 2-4, 0xA4FF0000 types 5-6).
+- `0x41b400` rewrites the mesh vertex colours as a radial glow: alpha = A - A*|v|/max|v|, RGB = light colour.
+- Switched on while braking (`0x41b560`). Draw `0x41b720`: SRCALPHA / INVSRCALPHA, world = local * car matrix.
+
+### Particles / rain (prt_main.cpp)
+- The whole module is gated by `particles` (0 in the shipped Game.ini, so off); the emitter by `part_rain`.
+- Pool 4000 (`0x431fb0`), one emitter. Rain (`0x4328b0`): max 200, 10+-5 new per frame, life 50+-15 frames,
+  random yaw, speed 2.0, gravity (0, -0.1, 0) per frame, grey 0.5+-0.1; the emitter follows the camera position
+  + (0, 20, 0) (`0x432990`).
+- Draw `0x4326e0`: 2 LVERTEX per particle (current and previous position), ZENABLE off,
+  DrawPrimitive(LINELIST), ZENABLE on: depth-less streaks.
+
+### Finish flag and 3D font
+- `0x41aee0` finish flag (Game.ini finish_flag): TRIANGLESTRIP LVERTEX, SRCALPHA/INVSRCALPHA, ZENABLE off.
+- gfx_3dft.cpp is the **3D font** (not 3dfx): "FONT3D_ANIM" objects per character, letter spacing 12.5
+  (`0x417140`, `0x417720`), drawn with ZENABLE off (`0x417870`).

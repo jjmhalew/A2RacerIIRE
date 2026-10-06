@@ -39,6 +39,8 @@ A player named **COPLAND** gets `Game.ini [PLAYER] COPLAND=1` (cop mode in the r
   bar (0,0)-(640,47) has a per-screen animated header (`init_animated_header` 0x40c320: 0 player, 1 main, 2 garage,
   3 showroom, 5 options, 6 standings).
 - Sounds: `klik.wav` on a button, `click3.wav` on focus moves, `fout.wav` error, `glow.wav` item highlight,
+  `slide.wav` when the animated buttons slide in (`init_animated_buttons` 0x40c430), `print.wav` per frame of the
+  typewriter text (`next_animated_text_frame` 0x40c110),
   `motor.wav` on Start. The help button **H** at (562,14) plays a spoken guided tour (`play_help` 0x40fcb0): each
   step highlights a form element and plays a `help_NN.wav`; any key stops it; music is turned down to -2000 during
   the tour. Help_05/06/07/53.wav exist but are not used.
@@ -208,5 +210,5 @@ uses DirectSound for its audio track.
 
 ## Menu music
 `start_music` 0x407500 plays `g_music_per_etappe[etappe % 7]` looped at the music volume: etappe 0 speed.wav,
-1 energy.wav, 2 jammin.wav, 3 moody.wav, 4 disco.wav, 5 speed2.wav, 6 moody.wav. `ALGINTRO.WAV`, `rock.wav`, `print.wav`,
-`slide.wav`, `flash.wav` in Mrcs are not referenced by name in menu.dat.
+1 energy.wav, 2 jammin.wav, 3 moody.wav, 4 disco.wav, 5 speed2.wav, 6 moody.wav. `ALGINTRO.WAV`, `rock.wav`, `flash.wav`,
+`CLICK1.WAV`, `CLICK2.WAV` in Mrcs are not referenced by name in menu.dat.

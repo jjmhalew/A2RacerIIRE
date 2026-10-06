@@ -331,6 +331,18 @@ void gfx_mesh_draw_range(const GfxMesh *m, int i)
     glDrawElements(GL_TRIANGLES, r->count, m->itype, (void *)((size_t)r->first * (size_t)m->isize));
 }
 
+void gfx_mesh_draw_sub(const GfxMesh *m, int i, int first, int count)
+{
+    if (!m || i < 0 || i >= m->nr || count <= 0) return;
+    const GfxRange *r = &m->ranges[i];
+    glBindBuffer(GL_ARRAY_BUFFER, m->vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->ibo);
+    set_pointers();
+    apply_state(&r->state);
+    glBindTexture(GL_TEXTURE_2D, r->tex ? r->tex : g_white);
+    glDrawElements(GL_TRIANGLES, count, m->itype, (void *)((size_t)first * (size_t)m->isize));
+}
+
 void gfx_mesh_draw(const GfxMesh *m)
 {
     if (!m) return;

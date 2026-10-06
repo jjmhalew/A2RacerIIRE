@@ -51,6 +51,8 @@ GfxMesh *gfx_mesh_create(const GfxVertex *v, int nv, const uint16_t *idx, int ni
 GfxMesh *gfx_mesh_create32(const GfxVertex *v, int nv, const uint32_t *idx, int ni, const GfxRange *ranges, int nr);
 void gfx_mesh_draw(const GfxMesh *m);
 void gfx_mesh_draw_range(const GfxMesh *m, int range);
+/* part of a range: `count` indices from index `first` (absolute), with that range's texture and state */
+void gfx_mesh_draw_sub(const GfxMesh *m, int range, int first, int count);
 void gfx_mesh_free(GfxMesh *m);
 
 /* immediate triangles (skid marks, particles, the sky): drawn at once with the given texture and state */

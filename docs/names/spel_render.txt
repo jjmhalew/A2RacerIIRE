@@ -20,3 +20,311 @@
 0x418290 gfx_asci_check_font_index ; asserts 0 <= font < 17
 0x4182c0 gfx_asci_check_res_index ; asserts 0 <= res < 2
 0x486d08 g_font_table ; [2][17] font records of 0x94 bytes: char name[0x64], +0x64 nchars(256), +0x68 glyph array (256 x 12 bytes {surface, w, h}), +0x70..+0x7c the 4 header shorts, +0x80/+0x84 w/h of the largest glyph, +0x90 = 0x457 when loaded
+0x423d20 init_game ; gm_init.cpp: set_game_display (RESOLUTION -> g_hw3d), init_3d_library, set_game_render_states, projection 10/12500/81deg, all gfx inits
+0x4234e0 init_3d_library ; textures, random back1-7.pcx sky backdrop (gamma off), alpha blend caps check
+0x4243f0 d3ddev_set_shademode ; RS 9, cache device+0x2c0
+0x424440 d3ddev_set_texturemapblend ; RS 21, cache device+0x2a4 (2 MODULATE hw, 7 COPY sw)
+0x41b250 d3ddev_set_filter ; RS 16/17 = 2 LINEAR if arg else 1 NEAREST, cache device+0x2b4
+0x424a70 handle_game ; per frame: timer, objects, cameras, skid update, render_game, keys, 2D display, flip; fps<10 -> visiblechunks--
+0x425090 render_game ; WAITVBL, sw sky blit, clear Z, BeginScene, road, objects, effects, EndScene
+0x418da0 init_bkg ; gfx_bkg.cpp: backdrop quads, random fog enable (Game.ini fog)
+0x418ab0 bkg_init_quads ; 8 TLVERTEX at 0x4a7c68 (2 fans: top->horizon at H/3, horizon->bottom)
+0x418760 bkg_set_depth ; sz = 1-1/d, rhw = 1/d
+0x418f00 bkg_update_colors ; track-progress 'time of day': horizon colour, fog factors
+0x418830 bkg_set_fog_params ; fog colour/start/end from progress, also background material colour
+0x4190d0 draw_bkg ; TEXTUREHANDLE + 2x DrawPrimitive(TRIANGLEFAN, TLVERTEX)
+0x429e30 fog_enable ; FOGENABLE 1, LINEAR, colour 0xb4b4c8, start 3.5, end 1000
+0x429ad0 trigger_fog_fade_start ; trigger vtable 0x48c4c0 (?)
+0x429b20 trigger_fog_fade_end ; fog off, colour 0xc8c8ff
+0x4157e0 ev_fog_fade_update ; fog colour fade step (+5,+2,-5)
+0x44c750 d3dlib_force_rgb_device ; RESOLUTION 5
+0x44c760 d3dlib_get_d3d2 ; QueryInterface IID_IDirect3D2 -> 0x4ea9cc
+0x44c7b0 d3dlib_init ; z-buffer, device, palette, texture format, lights, materials, viewport, clear
+0x44c930 d3dlib_create_zbuffer ; 16-bit Z
+0x44cab0 d3dlib_clear_all ; viewport Clear TARGET|ZBUFFER
+0x44cb70 d3dlib_clear ; viewport Clear (flags | ZBUFFER); render_game passes 0
+0x44cc80 d3dlib_exit ; release lights, materials, viewport, zbuffer, device
+0x45f710 d3ddev_create_auto_thunk
+0x45f720 d3ddev_create_type_thunk
+0x45f740 d3ddev_release_thunk
+0x45f750 d3ddev_ctor ; render state defaults (fog LINEAR 3.25..50, ZENABLE, COLORKEY, PERSPECTIVE, DECAL)
+0x45fac0 d3ddev_restore_states ; re-applies matrices and cached render/fog states
+0x45ff70 d3ddev_create_from_guid
+0x4601e0 d3ddev_create_auto ; bpp>8: HAL then RGB; 8bpp: RAMP
+0x460340 d3ddev_create_type ; 1 HAL, 3 RGB, 4 RAMP
+0x460520 d3d_error_string
+0x45d860 d3du_projection_matrix ; (out, near, far, fov) DX5 SDK ProjectionMatrix
+0x45d910 d3du_view_matrix ; (out, from, at, up, roll) D3DUTILS.CPP
+0x45c870 viewport_array_init
+0x45c9c0 viewport_array_free
+0x45ca30 viewport_array_get_new
+0x45cae0 viewport_add
+0x45cbe0 viewport_set_current ; SetCurrentViewport
+0x45ccc0 viewport_get_current
+0x45ccf0 viewport_set_rect
+0x45ce90 viewport_set_background_image ; loads image as texture + material, viewport SetBackground
+0x45cef0 viewport_set_background_texture
+0x45d1f0 viewport_ctor ; D3DVIEWPORT2 clip -1..1 x -h/w..h/w, Z 0..1
+0x45d330 viewport_release
+0x45d340 viewport_clear_target
+0x45d3a0 viewport_clear ; IDirect3DViewport2::Clear(flags)
+0x44d5b0 light_array_init
+0x44d6b0 light_array_exit
+0x44e620 c_light_ctor ; D3DLIGHT2, range sqrt(FLT_MAX)
+0x44e6f0 c_light_point_ctor ; never used by the game
+0x44e740 c_light_spot_ctor ; never used
+0x44e7b0 c_light_directional_ctor ; never used
+0x44e800 c_light_parallelpoint_ctor ; never used
+0x44e990 material_init ; default material 0x49b008, LIGHTSTATE_MATERIAL
+0x44faf0 material_ctor_texname
+0x44fcc0 material_ctor_texindex
+0x455700 mesh_draw ; DrawIndexedPrimitive TRIANGLELIST, VERTEX/LVERTEX, fill-mode debug
+0x4ea5a0 g_d3ddev ; device object, see RENDER.md table
+0x4ea7fc g_d3ddevice2 ; IDirect3DDevice2* (g_d3ddev+0x25c)
+0x4ea73c g_proj_matrix
+0x4ea77c g_view_matrix
+0x4ea7bc g_world_matrix
+0x4ea81c g_fog_enable
+0x4ea820 g_fog_color
+0x4ea824 g_fog_mode
+0x4ea828 g_fog_density
+0x4ea82c g_fog_start
+0x4ea830 g_fog_end
+0x4ea834 g_cur_texture_handle ; TEXTUREHANDLE cache
+0x4ea83c g_zenable
+0x4ea844 g_texturemapblend
+0x4ea854 g_filter_state
+0x4ea9cc g_d3d2 ; IDirect3D2*
+0x4ea9c8 g_viewports
+0x4eabb0 g_cur_viewport
+0x4eab74 g_have_zbuffer
+0x4eab78 g_force_rgb_device
+0x4eaa28 g_textures ; 0x48 bytes per entry, +0 D3DTEXTUREHANDLE
+0x4ea980 g_materials
+0x49b008 g_default_material
+0x49b00c g_bkg_color_material
+0x49b028 g_bkg_texture
+0x49b02c g_bkg_material
+0x4a7c68 g_bkg_verts ; 8 D3DTLVERTEX
+0x4a7c58 g_bkg_start_chunk
+0x4a7d68 g_bkg_texture_idx
+0x4d9a6c g_res_index ; 0 = 320x200, 1 = 640x480
+0x4d9a70 g_8bit
+0x4d9abc g_opt_fog ; Game.ini [OPTIONS] fog
+0x4d9ac0 g_opt_waitvbl
+0x4d9adc g_opt_filter
+0x413ed0 init_game_cameras
+0x4142b0 change_active_camera
+0x4144b0 handle_game_cameras ; keys 0-9, camera update, view matrix, sky heading
+0x4147f0 init_player_camera ; lock (0,20,-150), target (0,10,0), damping 0.245
+0x414b70 set_player_cam_mode ; 11 modes, offsets in RENDER.md
+0x4149b0 set_camera_car ; tweak key M
+0x416ce0 ev_stcam_init ; start camera (-120,100,200)
+0x416e00 ev_stcam_update ; 2 s fly-in to (0,20,-60)
+0x4154d0 ev_finish_cam_init
+0x416060 ev_gameover_init ; orbit camera
+0x4162e0 ev_gameover_update
+0x446d80 cam_init_cameras
+0x446e30 cam_add_camera
+0x446fa0 c_camera_ctor ; 0x160 bytes
+0x4474f0 c_camera_set_position
+0x4475a0 c_camera_enable_dampening
+0x4476d0 c_camera_disable_dampening
+0x4476f0 c_camera_set_position_lock
+0x447770 c_camera_set_position_lock_offset
+0x4477c0 c_camera_release_position_lock
+0x4477f0 c_camera_set_target_lock
+0x4478c0 c_camera_release_target_lock
+0x447ab0 c_camera_update ; lerp factor per frame, rigid z distance, rebuild orientation
+0x41eac0 gfx_sky_set_heading ; sw sky scroll offset = -(v+1)*w/2 wrapped
+0x4e66a0 g_cameras
+0x4a7078 g_cam_slot ; [10] game slot -> camera index
+0x4a70c8 g_active_cam_slot
+0x486640 g_player_cam_mode
+0x4d9b24 g_tweak_mode ; Raser.ini TWEAK_MODE
+0x4d9a7c g_game_event
+0x41bd10 gfx_get_focus_surface ; focus 0/1/2 -> DirectDraw surface [0x4eabd8]/[0x4eabdc]/[0x4eabc0] (gfx_main.cpp)
+0x41bd50 hud_load_anims ; loads rc.img HUD sprite anims: 8-bit list 0x496118 or 16-bit list 0x496150
+0x41bda0 hud_free_anims
+0x41bdd0 hud_draw_2d_display ; draw_2d_display() -> hud_draw_dashboard (skipped when disable_overlay)
+0x41bde0 gfx_draw_wait_screen ; (focus, etappe) wait screen [wait_lo] pcx (8-bit) / [wait_hi] as .tga (16-bit)
+0x41bf70 anim_get_sprite_id ; (file, line, anim, frame) -> sprite id from g_anim_table with assert
+0x41bfc0 hud_draw_text ; (focus, item, fontrec, center, fmt, ...) text at g_hud_layout[item]; center: -w/2, -h('A')/2
+0x41c0f0 hud_draw_item ; (focus, item, frame, anchor, dx, dy) sprite of g_hud_layout[item]; anchor 1 = hotspot, 0 = top-left
+0x41b860 hud_layout_init_hires ; CRT static init: fills g_hud_layout row 1 items 34..83 (640x480)
+0x419300 hud_draw_pause_quit ; PAUZE / EINDE dialog (items 34-37), [0x4d9ab4] 1/2
+0x4194e0 hud_draw_results_city ; result panel city (items 62-71)
+0x419870 hud_draw_results_highway ; result panel highway (items 72, 63, 64, 78-82)
+0x419ad0 hud_draw_results ; picks city/highway result panel
+0x419b10 hud_draw_highway_info ; RACE TIJD / RACE RECORD / POSITIE panel (detail>=3)
+0x419e00 hud_draw_city_info ; RACE TIJD / RONDE INFO / POSITIE / RONDE panel (detail>=3)
+0x41a410 hud_draw_speed_panel ; TURBO bar, SNELHEID %03d, SCHADE + damage bar (detail>=2)
+0x41a5f0 hud_draw_checkpoint ; highway: CHECKPOINT box, timer 11 countdown, EXTRA TIJD (detail>=3)
+0x41a780 hud_draw_split_time ; city: +/-SS.d split at time checks for 2 s
+0x41a8a0 hud_draw_dashboard ; draw_dashboard(): U-turn sign, panels, message [0x4882c0], pause dialog, tweak chunk
+0x41aa90 hud_draw_damage_bar ; item 3 bar (+ '%2d@' in 16-bit), blinks when damage >= 80
+0x41ab90 flag_init_strips ; static init of the 10 finish-flag vertex strips
+0x41abc0 flag_start ; start the 3D finish flag animation
+0x41ac00 flag_animate ; wave shading of the flag vertices
+0x41ad40 flag_build_mesh ; 10 x 34 lit vertices
+0x41aea0 flag_init ; init_finish_flag(): mesh + texture S_SFX.PCX
+0x41aee0 flag_draw ; 3D waving chequered flag (gfx_flag.cpp), Game.ini finish_flag
+0x41c1f0 pbar_init ; loading progress bar: reads Raser.ini [progress]
+0x41c2b0 pbar_finish ; with calculate=1 writes measured percents back to Raser.ini
+0x41c410 pbar_step ; one loading step: record time or draw bar
+0x41c4c0 pbar_draw ; wait screen + left pct% of item 14 colour ramp
+0x41c5a0 radar_init_quad ; screen quad of the radar: rect 0x489040, size 0.7 * 64/128
+0x41c790 radar_chunk_to_map ; chunk world pos -> radar map pixel (/60), clamped
+0x41c880 radar_blit_dot ; dot sprite (anim of item 15, frame 0 racer/1 player/2 cop) into the radar texture
+0x41c9a0 radar_draw_road_map ; draw_road_in_radar_surface
+0x41cc90 radar_get_road_bbox
+0x41cda0 radar_create ; create_radar: map surface bbox/60
+0x41cf20 radar_init ; init_radar: texture LORADAR/HIRADAR by resolution
+0x41cf90 radar_calc_window ; 64x64 / 128x128 map window around the player
+0x41d040 radar_update_texture ; copy map window + dots into the radar texture
+0x41d280 radar_rotate_quad ; rotate radar quad by camera heading
+0x41d360 radar_draw ; DrawPrimitive of the radar quad (listing continues with gfx_shdw code)
+0x410a10 car_heading_matches_track ; 0 = driving against track direction (HUD U-turn sign)
+0x415c50 ev_sweep_text_init ; render game-over text to off-screen surface
+0x415e80 ev_sweep_text_draw ; scanline slide-in of the text
+0x4155d0 ev_finish_results_cb ; finish event: after 1.5 s draw result panel until Esc/Enter/Space
+0x424ee0 game_check_keys ; check_game_keys(): D detail, P pause, Esc quit, T horn, cheats
+0x4248d0 game_pause_loop ; blocking pause / quit-confirm (J/Y/N/Esc) loop
+0x431900 anims_init ; Menuanim.cpp: init_anims (rc.img)
+0x431970 anims_load_hud_8bit
+0x431a10 anims_free_hud_8bit
+0x431a60 anims_load_hud_16bit
+0x431b00 anims_free_hud_16bit
+0x431b50 anims_load_tex_8bit ; texture-copy anims list 0x496188
+0x431bf0 anims_free_tex
+0x431d30 lan_check_text_index ; returns index (texts at 0x4dcc5c + i*256)
+0x431d60 lan_load_texts ; LANGUAGE.INI [SETTINGS] language 0 NEDERLANDS/1 ENGELS/2 DUITS, text_count <= 56
+0x469fb0 ascii_set_font
+0x469f70 ascii_set_spacing ; current font +0x88 x spacing, +0x8c y spacing
+0x46a180 ascii_draw_string ; glyph top-left, '\n' newline, '\t'
+0x46a270 ascii_printf ; (focus, x, y, fmt, ...)
+0x46a900 ascii_text_width
+0x468db0 clipblit_sprite ; (focus, sprite id, x, y, flags) flag 1 = clip, flag 2 = no hotspot (else x-hotx, y-hoty)
+0x46c1c0 sprite_load_bank ; (img, ind, id list) sprite id N = ind entry N-1
+0x46fb90 anims_collect_sprites ; build sprite id list from anim list
+0x488510 g_hud_layout ; [2][84] {anim, x, y}: row 0 8-bit 320x200, row 1 16-bit 640x480
+0x4961e8 g_anim_table ; 45 x {count, ?, frames*}, frame = {u32 delay, u32 sprite id}
+0x496118 g_anims_hud_8bit
+0x496150 g_anims_hud_16bit
+0x496188 g_anims_tex_8bit
+0x4dcc5c g_lang_texts ; 56 x char[256]
+0x4882c0 g_hud_message ; language text id to flash for 2 s (-1 = none)
+0x4a7c50 g_font_row ; 0 = 8-bit lo_* fonts, 1 = 16-bit hi_*/olfnt fonts
+0x4d9ab4 g_pause_mode ; 1 pause, 2 quit dialog
+0x4d9aa0 g_event_running ; finish/game-over sequence active: HUD hidden
+0x4d9aa4 g_radar_enabled ; texture copy works
+0x4d9e30 g_player_damage ; 0..100
+0x4d9e34 g_player_speed_kmh ; car speed * 3.6
+0x4d9e3c g_player_turbo ; 0..100
+0x4d9e44 g_player_chunk
+0x4d9e60 g_player_position ; 0..3
+0x41e740 sky_init_moving_sky ; gfx_sky.cpp, software only: scrl_lo/scrl_hi into a DDraw surface
+0x41e830 sky_release
+0x41e850 sky_blit ; per frame before BeginScene, top 2/3 of screen, wraps horizontally
+0x41e9d0 sky_build_rects
+0x4cc018 g_sky_surface ; 0x4cc028 image w, 0x4cc01c x offset
+0x41d810 skid_register
+0x41d850 skid_check_index ; 0..19
+0x41d880 skid_wheel_point ; car-local (+-7, 1.0, -10*h) +-2 across velocity
+0x41d9b0 skid_make_points
+0x41da70 skid_set_alpha ; alpha = clamp(200-16*(slip-4)), rgb 0x404040
+0x41dad0 skid_set_uv
+0x41db50 skid_append ; 2 verts per strip per frame
+0x41dd00 skid_update ; per frame, player car
+0x41e0a0 skid_free
+0x41e130 skid_init ; S_SFX.PCX
+0x41e1e0 skid_fade
+0x41e3a0 skid_draw ; INVSRCALPHA/SRCALPHA strips
+0x4acad0 g_skid ; [20] stride 0x1910
+0x41eb30 spark_ctor
+0x41eb60 spark_update
+0x41ed30 spark_spawn
+0x41f150 spark_emit ; from player collision
+0x41f220 spark_template
+0x41f300 spark_init
+0x41f420 spark_draw ; opaque TRIANGLELIST
+0x4cc088 g_spark ; [100] stride 0x134
+0x41f670 cloud_ctor
+0x41f6a0 cloud_check_index
+0x41f6d0 cloud_check_vertex
+0x41f700 cloud_anim_uv
+0x41f810 cloud_grow
+0x41fae0 cloud_update
+0x41fd80 cloud_spawn
+0x41fff0 cloud_emit
+0x4200c0 cloud_template
+0x4201a0 cloud_init ; tyre smoke puffs
+0x420300 cloud_cmp_dist ; qsort far first
+0x4203d0 cloud_draw ; additive SRCALPHA/ONE
+0x4d3a18 g_cloud ; [70] stride 0x12c
+0x425a90 tyre_smoke_emitter ; slip >= 4, every 100 ms
+0x41b230 material_apply_if_dirty
+0x41e710 material_set_texture
+0x41b330 light_init ; object lights, 20 slots
+0x41b400 light_set_vertex_alpha ; radial glow
+0x41b560 light_set_on
+0x41b5a0 light_create
+0x41b720 light_draw ; SRCALPHA/INVSRCALPHA
+0x4aa860 g_light ; [20] stride 0x10
+0x425500 create_brake_lights ; OBJ_LIGHT01_ANIM
+0x417140 font3d_create_text ; gfx_3dft = 3D font
+0x417720 font3d_init
+0x417810 font3d_free
+0x417870 font3d_draw ; ZENABLE off
+0x431f20 prt_init
+0x431f60 prt_frame
+0x431fb0 prt_alloc_pool ; 4000
+0x432150 prt_spawn
+0x4325b0 prt_build_lines
+0x4326e0 prt_draw ; LINELIST, ZENABLE off
+0x4328b0 prt_rain_setup
+0x432990 prt_rain_follow_cam
+0x4d9a80 g_opt_background ; Game.ini [OPTIONS] BACKGROUND (disables sw sky)
+0x4d9b04 g_srcblendcaps
+0x4d9b08 g_destblendcaps
+0x46ae60 rcpcx_load_palette ; (pcx name, apply) last 768 bytes of a PCX -> current palette [0x4eace0], apply = SetEntries 0..255 (Pallow/Palhigh)
+0x46af40 rcpcx_read_palette_keyed ; (fp, buf) PCX palette -> current palette; index [0x4a0be0]=254 replaced by the colour key RGB, other entries equal to the key nudged (+1 red)
+0x46b0b0 rcpcx_draw_to_surface ; (gfx_draw_wait_screen) decode a PCX straight onto a surface (wait screens); 8-bit: also SetEntries
+0x46b500 rcpcx_load_surface ; (sky_init_moving_sky) PCX -> new offscreen surface in the screen pixel format
+0x46b930 rcpcx_load_texture_surface ; (texture_load_file) PCX -> texture surface (system memory, caps 0x1800)
+0x469b20 pal_init ; creates the DirectDraw palette (8-bit modes)
+0x469d10 pal_set_entries ; (PALETTEENTRY *, first, count) IDirectDrawPalette::SetEntries
+0x469dd0 pal_get_entries ; (PALETTEENTRY *, first, count) IDirectDrawPalette::GetEntries
+0x469e90 pal_set_flags_and_entries ; (pal, first, count, peFlags 0|0x40|0x80, apply)
+0x4eace0 g_cur_palette ; PALETTEENTRY[256] used by every 8-bit -> 16/24-bit conversion
+0x4eacdc g_ddpalette ; IDirectDrawPalette*
+0x4a0be0 g_pcx_key_index ; = 254: PCX palette index that becomes the colour key (textures)
+0x49e8b0 g_sprite_key_index ; = 255: transparent index of fonts and sprites
+0x4eac14 g_colorkey_rgb24 ; colour key as 0xBBGGRR (0x7f00ff = RGB 255,0,127 in 16-bit mode), set by sub_464d30
+0x4eff70 g_colorkey_r ; colour key components in surface units (+4 g, +8 b)
+0x464d30 set_colorkey_rgb ; [0x4eac14] = arg
+0x4eacbc g_pformat_mode ; font/sprite pixel conversion mode, see pformat_set_mode
+0x4eacc0 g_pformat_gamma ; gamma flag, see pformat_set_gamma
+0x468850 pformat_dump ; prints ' RGB: %d:%d:%d' of a DDPIXELFORMAT
+0x420900 load_game_palette ; RESOLUTION 0/1/2/5 -> Pallow.pcx slot (track 8-bit palette), 3/4 -> Palhigh.pcx slot (e02_pl16); then SetEntries 0..255 with peFlags 0x40
+0x4209b0 skelet2d_read_ini ; Raser.ini: etappe, [PROGRAM] RESOLUTION/NAME/FOCUS, [PALET] ETAPPEn -> Pallow.pcx/Palhigh.pcx name buffers, Resource.ind/img
+0x489601 g_pal_low_name ; 'Pallow.pcx' buffer, overwritten by Raser.ini [PALET] ETAPPEn first column
+0x489611 g_pal_high_name ; 'Palhigh.pcx' buffer, second column (e02_pl16.pcx)
+0x4895b0 g_ini_resolution ; Raser.ini [PROGRAM] RESOLUTION (0 320x200x8, 1 640x480x8, 3 640x480x16)
+0x4636d0 tga_load_surface ; tga.cpp: type 2, 24/32 bpp, bottom-up unless desc bit 5; BGR -> 16-bit via pformat_convert(rgb,24); alpha byte skipped
+0x4619c0 txformat_enum_texture_formats ; TXFORMAT.CPP: EnumTextureFormats into m_txf_drv_info
+0x459cf0 texture_set_source_type ; [0x4eaba8] 0 = .pcx, 1 = .tga
+0x459d30 texture_set_resize ; [0x4eaba4] = resizetexture (make textures square)
+0x459d50 texture_set_partition ; [0x49b020] = 8.0 in 8-bit modes: init.pcx (2048x2048) is the 'main accumulator texture' split 8x8 into 256x256 slots
+0x459db0 texture_init_accumulator ; loads init.pcx as texture 0 (8-bit/RAMP path)
+0x45ae00 texture_load_file ; (name, ...) strips the extension, appends .pcx or .tga per source type, loads
+0x45af20 c_texture_load ; load + optional square resize to 2^((log2 w + log2 h)/2) + QueryInterface IDirect3DTexture2
+0x45be50 texture_colorkey_from_index ; palette index -> colour key ('Invalid texture colorkey index')
+0x45bae0 texture_reload ; re-uploads a texture after a texture-copy (radar, signs, brake lights)
+0x46c6b0 sprite_load_all ; loads every sprite of an .img bank (memory images)
+0x415750 ev_flash_update ; speed-camera flash: 8-bit = all 256 entries (235,235,235) for 2 frames; 16-bit = fill screen with palette colour 15
+0x4156d0 ev_flash_init ; 8-bit: save palette (0x4a70f0)
+0x415710 ev_flash_exit ; 8-bit: restore palette
+0x42a2e0 ev_flash_trigger ; plays sound 11 and registers the flash game action
+0x46d8e0 file_open ; opens a file, or seeks into the resource archive (case-insensitive name, first match)
+0x46d780 file_seek ; fseek inside an archive entry

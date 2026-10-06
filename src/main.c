@@ -1,10 +1,13 @@
 /* main.c - A2RacerRE: start-up, command line and the top-level loop.
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+#include "audio.h"
+#include "film.h"
 #include "gfx.h"
 #include "image.h"
 #include "plat.h"
 #include "res.h"
+#include "track.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,6 +86,58 @@ static int view_image(const char *name, const char *archive)
     return 0;
 }
 
+/* the original's coordinates are Direct3D left-handed (y up, z forward); GL wants right-handed: mirror z */
+static Mat4 view_lh(Vec3 eye, Vec3 target)
+{
+    Mat4 flip = m4_scale(v3(1, 1, -1));
+    Mat4 v = m4_look_at(v3(eye.x, eye.y, -eye.z), v3(target.x, target.y, -target.z), v3(0, 1, 0));
+    return m4_mul(v, flip);
+}
+
+/* --track N [--chunk C]: drive the camera along the centre line (Up/Down: speed, Left/Right: look, PgUp/PgDn: height) */
+static int view_track(int etappe, int chunk)
+{
+    Track t;
+    if (!track_load(&t, etappe)) { fprintf(stderr, "cannot load etappe%d\n", etappe); return 1; }
+    printf("etappe%d: %s, %d chunks, %d waypoints, %d rails, %s\n", etappe, t.name, t.nchunks, t.nwaypoints, t.nrails,
+           t.city ? "city" : "highway");
+    float s = (float)(chunk % t.nchunks), speed = g_shot ? 0 : 0.5f, height = 12, look = 0;
+    double last = plat_time();
+    while (plat_poll() && !plat_key_pressed(VK_ESCAPE)) {
+        double now = plat_time();
+        float dt = (float)(now - last);
+        last = now;
+        if (plat_key(VK_UP)) speed += dt * 2;
+        if (plat_key(VK_DOWN)) speed -= dt * 2;
+        if (plat_key(VK_LEFT)) look -= dt * 1.5f;
+        if (plat_key(VK_RIGHT)) look += dt * 1.5f;
+        if (plat_key(VK_PRIOR)) height += dt * 20;
+        if (plat_key(VK_NEXT)) height -= dt * 20;
+        s += speed * dt * 10;
+        while (s >= t.nchunks) s -= t.nchunks;
+        while (s < 0) s += t.nchunks;
+        int c = (int)s;
+        float f = s - c;
+        const Chunk *a = &t.chunks[c], *b = &t.chunks[(c + 1) % t.nchunks];
+        Vec3 p = v3_lerp(a->pos, b->pos, c + 1 < t.nchunks ? f : 0);
+        Vec3 fwd = v3_norm(v3_lerp(a->fwd, b->fwd, f));
+        Vec3 right = v3_norm(v3(fwd.z, 0, -fwd.x));
+        Vec3 dir = v3_add(v3_scale(fwd, cosf(look)), v3_scale(right, sinf(look)));
+        Vec3 eye = v3(p.x, p.y + height, p.z), target = v3_add(eye, v3_add(dir, v3(0, -0.12f, 0)));
+        int w, h;
+        plat_size(&w, &h);
+        gfx_begin(w, h, 0.55f, 0.7f, 0.9f);
+        Mat4 proj = m4_perspective(60 * PI_F / 180, (float)w / h, 2, 8000), view = view_lh(eye, target);
+        gfx_set_matrices(&proj, &view);
+        int start = track_visible_start(&t, c, dir, 2, 30);
+        track_draw(&t, start, 30, 0);
+        if (shot_frame()) break;
+        plat_swap();
+    }
+    track_free(&t);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     res_set_dir(find_data(argc, argv));
@@ -91,6 +146,14 @@ int main(int argc, char **argv)
     if (!gfx_init()) { plat_message("OpenGL 2.1 / OpenGL ES 2.0 shaders are not available.", 1); return 1; }
     int rc = 0;
     g_shot = arg_value(argc, argv, "--shot");
+    audio_init();
+    const char *film = arg_value(argc, argv, "--film");
+    if (film) printf("film: %d\n", film_play(film, 1));
+    const char *trk = arg_value(argc, argv, "--track");
+    if (trk) {
+        const char *ch = arg_value(argc, argv, "--chunk");
+        rc = view_track(atoi(trk), ch ? atoi(ch) : 0);
+    }
     const char *img = arg_value(argc, argv, "--image");
     if (img) rc = view_image(img, arg_value(argc, argv, "--archive"));
     plat_shutdown();
