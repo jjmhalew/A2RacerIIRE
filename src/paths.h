@@ -12,6 +12,6 @@ void paths_free(void);
 /* once per game tick (pth_check_triggers 0x434460 + pth_update_all 0x434380): lap = laps done (0-based) */
 void paths_update(int player_chunk, int lap, float dt);
 void paths_draw(void);
-/* the moving path objects, for collisions: returns the count, positions/yaw (1024 units) in out arrays */
+/* the moving path objects, for collisions: returns the count, positions/yaw (ANGLE_UNITS) in out arrays */
 int  paths_objects(Vec3 *pos, float *yaw, int *anim, int max);
 #endif

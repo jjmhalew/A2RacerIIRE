@@ -4,6 +4,7 @@
 #include "paths.h"
 #include "model.h"
 #include "res.h"
+#include "track.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +23,7 @@ typedef struct {
     int path;
     int anim, anim2, anim3;     /* the object, and the helicopter's two rotors */
     Vec3 pos;
-    float yaw;                  /* 1024 units, the original's object angle */
+    float yaw;                  /* ANGLE_UNITS per turn, the original's object angle */
     float rotor;
 } Active;
 
@@ -132,10 +133,10 @@ void paths_update(int player_chunk, int lap, float dt)
         if (a->frame < a->frames - 2) {                     /* e.g. pth_boat_update 0x4348f0 */
             Vec3 p = path_position(t, a->frames, a->frame, a->k), q = path_position(t, a->frames, a->frame + 1, a->k);
             a->frame++;
-            a->yaw = (atan2f(q.z - p.z, q.x - p.x) - 3.14159f * 0.5f) * 1024.0f / 6.28319f;
+            a->yaw = (atan2f(q.z - p.z, q.x - p.x) - 3.14159f * 0.5f) * ANGLE_UNITS / 6.28319f;
             a->pos = p;
         } else if (!t->end_chunk) a->active = 0;            /* ran to its end */
-        a->rotor += dt * 1024 * 3;
+        a->rotor += dt * ANGLE_UNITS * 3;
         if (t->end_chunk && t->end_chunk == player_chunk) a->active = 0;
     }
 }
@@ -145,9 +146,9 @@ void paths_draw(void)
     for (int i = 0; i < 10; i++) {
         const Active *a = &g_act[i];
         if (!a->active) continue;
-        float yaw = -a->yaw * 6.28319f / 1024.0f;        /* object angle -> model_place's yaw */
+        float yaw = -a->yaw * 6.28319f / ANGLE_UNITS;        /* object angle -> model_place's yaw */
         model_draw(anim_model(a->anim, 0), a->pos, yaw);
-        if (a->anim2 >= 0) model_draw(anim_model(a->anim2, 0), a->pos, yaw + a->rotor * 6.28319f / 1024.0f);
+        if (a->anim2 >= 0) model_draw(anim_model(a->anim2, 0), a->pos, yaw + a->rotor * 6.28319f / ANGLE_UNITS);
         if (a->anim3 >= 0) model_draw(anim_model(a->anim3, 0), a->pos, yaw);
     }
     gfx_set_model(NULL);

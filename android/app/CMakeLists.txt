@@ -16,7 +16,7 @@ FetchContent_MakeAvailable(SDL2)
 set(S ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
 add_library(main SHARED
     ${S}/main.c ${S}/plat_sdl.c ${S}/gfx_gl.c ${S}/res.c ${S}/image.c ${S}/ini.c ${S}/audio.c ${S}/smk.c ${S}/film.c
-    ${S}/texture.c ${S}/track.c ${S}/datasetup.c ${S}/exetab.c ${S}/model.c ${S}/objects.c ${S}/race.c ${S}/hud.c ${S}/paths.c ${S}/effects.c)
+    ${S}/texture.c ${S}/track.c ${S}/datasetup.c ${S}/exetab.c ${S}/model.c ${S}/objects.c ${S}/race.c ${S}/hud.c ${S}/paths.c ${S}/effects.c ${S}/sfx.c ${S}/rules.c)
 target_include_directories(main PRIVATE ${S})
 target_compile_definitions(main PRIVATE A2_GUI)
 # char is unsigned on ARM; the engine is written for x86, where it is signed

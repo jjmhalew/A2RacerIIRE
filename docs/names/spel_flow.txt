@@ -1,0 +1,122 @@
+# spel.dat: game flow, race rules, sound. See docs/GAMEFLOW.md and docs/SOUND.md.
+# Addresses already named in other docs/names/spel_*.txt files are left out here (those names win).
+# Format: 0xADDR name ; comment
+0x431710 game_winmain ; main.cpp: init_main, start_game, loop handle_game/framecount/win msgs; always returns 0
+0x431610 init_main ; main.cpp: raser.ini, language, finished=0, gfx options, xvga lib (CD check), progress bar, init_game
+0x431540 my_handle_win_msg ; main.cpp: PeekMessage loop, 1 on WM_QUIT
+0x420fe0 init_xvga_lib ; gm_body.cpp, CD check \DATA\intro.smk (text 32)
+0x4211c0 exit_2d_skelet ; gm_body.cpp
+0x420730 skelet2d_get_resolution
+0x420740 skelet2d_get_sfx_volume ; SFXVOLUME (attenuation, 0 = no sound)
+0x420750 skelet2d_get_debug
+0x420760 skelet2d_get_renderfocus
+0x421260 timer_start ; gm_clock.cpp
+0x421300 timer_pause
+0x4213a0 timer_resume
+0x4214d0 timer_get ; countdown: max(dur-elapsed,0), else min(elapsed,dur); 0 if not started
+0x421680 timer_set_duration ; restarts if started
+0x421770 timer_init ; (idx, ms, countdown)
+0x421870 timer_expired
+0x421af0 exit_game ; ini_save_all + cleanup
+0x421b40 ini_reset_finished ; [PLAYER] finished=0 at start-up
+0x421b70 ini_load_all ; [ETAPPE] ETAPPE/DIRECTION, [OPTIONS], [PLAYER] upgrades
+0x4220e0 load_wait_screen_names ; [wait_lo]/[wait_hi]
+0x422220 load_best_times ; [BEST TIMES] LAP_RECORD_E%d, RACE_RECORD_E%d, TIME_CHECK_*
+0x422360 load_racer_info ; [RACERS] COUNT, n, DAMn, VALn
+0x4228b0 load_player_info ; [PLAYER] money, CAR, copland, position, damage, DAMAGE_MESH/VALUE
+0x422b20 load_music_info ; [MUSIC] (never used)
+0x422c10 write_best_times
+0x422d30 ini_save_all ; player, racers, best times; only finished=0 when not finished
+0x422d40 write_racer_info
+0x422ec0 write_player_info ; finished, money, damage, tracktime, position, DAMAGE_MESH/VALUE
+0x424e30 start_game
+0x425450 start_framecount_timing
+0x425470 handle_framecount_timing
+0x425480 exit_main
+0x4283d0 start_player_race_timer ; timer 3
+0x4283e0 stop_player_race_timer ; tracktime = timer 3
+0x4164c0 init_game_actions ; ev_main.cpp, 13 slots {init,update,done,free}
+0x416590 exit_game_actions
+0x416b00 countdown_init ; ev_start.cpp
+0x416bd0 countdown_update ; 3,2,1 (getset.wav), GO (go.wav), 1000 ms each
+0x416cb0 countdown_done ; state 0, COP MODE text if copland
+0x416fe0 start_camera_done ; starts countdown
+0x415690 finish_done ; money += prize + 2000*radar poles; finished=1; state 4
+0x416440 gameover_done ; state 4, finished stays 0
+0x428de0 disable_speed_cameras_ahead ; 20 chunks
+0x429860 finish_lap ; Tr_finis.cpp, lap record, LAATSTE RONDE
+0x429950 trigger_finish ; id 14
+0x429a10 trigger_arm_finish ; id 15
+0x42a340 trigger_speed_limit_50 ; id 4
+0x42a370 trigger_speed_limit_70 ; id 5
+0x42a3a0 trigger_speed_limit_100 ; id 6
+0x42a3d0 trigger_speed_limit_120 ; id 8
+0x42a420 trigger_race_start ; id 13: timers 0, 11, 3, racers
+0x42a460 find_start_chunk ; chunk before trigger 13
+0x42a4d0 trigger_quick_service ; id 2: damage 0, turbo refill, repair.wav
+0x42a530 trigger_time_check ; id 45, tr_tchk.cpp
+0x42a640 trigger_sign_hw_0 ; tr_vbord.cpp ids 22..30
+0x42aa30 trigger_sign_city_0 ; tr_vbord.cpp ids 31..39
+0x42b100 set_brake_light_texture ; txt_reml.cpp
+0x42b190 set_speed_sign_texture ; txt_vbrd.cpp
+0x464e50 fatal_error ; MessageBox Fout + exit(0)
+0x428590 sndfx_init ; dist/pan tables, 20 slots, preload
+0x4286a0 sndfx_play_sample ; 2D one-shot, vol -500-SFX
+0x428700 sndfx_play_sample_loop
+0x428760 sndfx_stop_buffer
+0x428780 sndfx_slot_start
+0x428920 sndfx_slot_update
+0x428a70 sndfx_stop_object_sample
+0x428ac0 sndfx_object_sample ; 0 playing, 1 done
+0x427cc0 plr_snd_collision ; crash / scrape
+0x4669f0 snd_dserr_string
+0x466b40 snd_alloc_driver_list
+0x466bc0 snd_enum_callback ; prefers SB16.VXD
+0x466ce0 snd_enumerate_drivers
+0x466d00 snd_create_primary
+0x466e40 snd_create_buffer ; DSBCAPS 0xE0
+0x466f10 snd_create_3d_buffer ; unused
+0x467010 snd_duplicate_buffer
+0x467050 snd_is_playing
+0x4670f0 snd_stop
+0x467200 snd_stop_all
+0x467250 snd_release_all
+0x4672e0 snd_find_buffer
+0x467350 snd_find_free_buffer
+0x4673b0 snd_evict_lru
+0x467480 snd_exit
+0x4674d0 snd_init ; mode 9 -> 2 -> 12
+0x467560 snd_init_mode
+0x467800 snd_set_frequency ; 100..100000
+0x4678c0 snd_get_frequency
+0x467950 snd_set_volume ; -10000..-100
+0x467a10 snd_set_pan
+0x467af0 snd_read_wav_data
+0x467c30 snd_load_wav ; 44-byte header
+0x467dc0 snd_play ; flags 1 loop, 4 lock
+0x467fe0 snd_play_vol
+0x46aa30 write_ini_string
+0x46aa70 write_ini_int
+0x46aad0 read_ini_int
+0x46ab10 read_ini_string
+0x4d9a78 g_game_running
+0x4dc964 g_radar_bonus_count ; x2000 at finish
+0x4d9e5c g_tracktime
+0x4d9e54 g_finished
+0x4d8d58 g_timers ; 12 x 20 bytes
+0x4dcaa4 g_hw_time_limit
+0x4d9ad4 g_lap
+0x4dc970 g_lap_times
+0x4d9ad0 g_last_lap_time
+0x4d9ac8 g_lap_record
+0x4d9acc g_race_record
+0x4dc9c8 g_check_splits
+0x4dc9f0 g_record_splits
+0x48c88c g_time_check_count
+0x4dc998 g_finish_armed
+0x48c480 g_speed_limit
+0x48baf0 g_sndfx_table ; [86] {char name[15]; int preload}
+0x4da254 g_snd_dist_volume
+0x4d9ed8 g_snd_pan_table
+0x4da1b0 g_snd_obj_slots
+0x4d9a94 g_opt_3dsound
