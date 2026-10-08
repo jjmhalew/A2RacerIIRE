@@ -20,7 +20,8 @@ add_library(main SHARED
     ${S}/menu.c ${S}/menu_ui.c ${S}/menu_screens.c ${S}/game.c ${S}/txcopy.c ${S}/radar.c)
 target_include_directories(main PRIVATE ${S})
 target_compile_definitions(main PRIVATE A2_GUI)
-# char is unsigned on ARM; the engine is written for x86, where it is signed
-target_compile_options(main PRIVATE -std=gnu99 -O2 -fsigned-char)
+# char is unsigned on ARM; the engine is written for x86, where it is signed. No fused multiply-adds (ARM has them, the
+# x86-64 baseline not), so the physics rounds the same on every platform
+target_compile_options(main PRIVATE -std=gnu99 -O2 -fsigned-char -ffp-contract=off)
 set_source_files_properties(${S}/main.c PROPERTIES COMPILE_DEFINITIONS main=SDL_main)   # SDLActivity calls SDL_main
 target_link_libraries(main PRIVATE SDL2::SDL2 GLESv2 log android m)

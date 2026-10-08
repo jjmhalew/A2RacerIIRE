@@ -86,6 +86,7 @@ typedef struct Race {
     float dt;
     unsigned tick;
     int detail;                     /* overlay detail 0..3 (D) */
+    int overlay_off;                /* Game.ini [GFX OPTIONS] disable_overlay (0x4d9afc): no dashboard, no radar */
     int input_keys[8];              /* Game.ini [INPUT] LEFT RIGHT UP DOWN EXTRA1 EXTRA2 */
     int input_device;               /* Game.ini [INPUT] DEVICE 1..4 (the old model's traction quirk) */
     int stuur_model;                /* Game.ini [OPTIONS] stuur_model: 0 new, 1 old (car_old.c) */

@@ -10,8 +10,6 @@
 #include "ai.h"
 #include "gfx.h"
 #include "hud.h"
-#include "ini.h"
-#include "res.h"
 #include "txcopy.h"
 #include <math.h>
 #include <stdlib.h>
@@ -22,7 +20,6 @@ enum { MAP_EMPTY = 0xfe, MAP_ROAD = 13, MAP_EDGE = 0, DOT_ANIM = 44 };   /* anim
 static const int RECT[4] = { 30, 361, 158, 489 };   /* 0x489040 row 1: the 128 x 128 window; the quad's corner */
 
 static int g_init;                                  /* 0x4acab0 */
-static int g_overlay_off;                           /* Game.ini [GFX OPTIONS] disable_overlay (0x4d9afc) */
 static int g_bbox[4];                               /* 0x4acab8: min x, min z, max x, max z */
 static uint8_t *g_map;                              /* 0x4ac994, g_map_w 0x4ac990 x g_map_h 0x4aca28 */
 static int g_map_w, g_map_h;
@@ -113,11 +110,6 @@ void radar_init(const Race *r)
 {
     radar_free();
     if (!txcopy_enabled()) return;                  /* init_game 0x424252: only with g_radar_enabled */
-    char p[1024];
-    res_user_path(p, sizeof p, "Game.ini");
-    Ini *g = ini_load(p);
-    g_overlay_off = ini_int(g, "GFX OPTIONS", "disable_overlay", 0);
-    ini_free(g);
     init_quad();
     /* create_radar 0x41cda0 */
     road_bbox(&r->track);
@@ -210,7 +202,7 @@ static void update_texture(const Race *r)
 
 void radar_draw(const Race *r, Vec3 view)
 {
-    if (!g_init || r->event_running || !txcopy_enabled() || g_overlay_off || r->detail <= 0) return;
+    if (!g_init || r->event_running || !txcopy_enabled() || r->overlay_off || r->detail <= 0) return;
     update_texture(r);
     /* radar_rotate_quad 0x41d280: v = normalize(-dx, 0, dz) of the camera's view; each corner turns around the centre:
      * x' = x*v.z - y*v.x, y' = x*v.x + y*v.z, so the direction the camera looks in points up */

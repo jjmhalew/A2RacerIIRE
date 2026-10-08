@@ -580,6 +580,7 @@ static void read_ini(Race *r)
     r->upg_turbo = ini_int(g, "PLAYER", "TURBO", 0);
     r->upg_gearbox = ini_int(g, "PLAYER", "VERSNELLINGSBAK", 0);
     r->detail = ini_int(g, "GFX OPTIONS", "overlay_detail", 3) & 3;
+    r->overlay_off = ini_int(g, "GFX OPTIONS", "disable_overlay", 0) != 0;
     r->collision_off = ini_int(g, "OPTIONS", "collisionoff", 0);
     r->stuur_model = ini_int(g, "OPTIONS", "stuur_model", 0);
     r->input_device = ini_int(g, "INPUT", "DEVICE", 1);
@@ -786,7 +787,9 @@ static void draw_hud(void)
 {
     char b[64], pos[8];
     gfx_2d_begin(640, 480);
-    if (rules_hud_on() && !R->event_running) {
+    /* handle_game 0x424c22: draw_2d_display (the whole dashboard, the pause / quit dialog too) only without
+     * disable_overlay; the results and the game-over texts are game actions and stay */
+    if (rules_hud_on() && !R->event_running && !R->overlay_off) {
         int D = R->detail;
         char race[16];
         fmt_time(race, sizeof race, rules_race_ms());

@@ -614,7 +614,8 @@ void rules_draw_hud(Race *r)
     char b[96];
     int D = r->detail;
     if (G.flash) gfx_2d_rect(0, 0, 640, 480, 0xebebebffu);          /* speed-camera flash (palette colour 15) */
-    if (!r->event_running) {                         /* draw_dashboard 0x41a8a0: nothing of it during an event */
+    /* draw_dashboard 0x41a8a0: nothing of it during an event, nor with disable_overlay (handle_game 0x424c22) */
+    if (!r->event_running && !r->overlay_off) {
         if (!r->track.city && D >= 3 && G.t[11].start >= 0) {      /* 4.4 checkpoint box and the time left */
             hud_item(73, 0);
             hud_item_text(74, 10, 1, "CHECKPOINT");
@@ -666,7 +667,7 @@ void rules_draw_hud(Race *r)
         sweep_draw(&G.sweep[0], alpha);
         sweep_draw(&G.sweep[1], alpha);
     }
-    if (G.pause) {                                   /* 4.6 pause / quit dialog */
+    if (G.pause && !r->overlay_off) {                /* 4.6 pause / quit dialog (part of the dashboard) */
         hud_item(34, 0);
         int base = G.pause == 1 ? 24 : 27;
         hud_item_text(35, 10, 1, hud_text(base));
