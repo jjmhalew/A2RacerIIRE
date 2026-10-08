@@ -1,4 +1,5 @@
-"""mkicon.py - draws res/a2racerre.ico: a red Dutch motorway number sign "A2" with a white border (no game art).
+"""mkicon.py - draws res/a2racerre.ico: a red Dutch motorway number sign "A2" with a white border (no game art), and
+res/switch_icon.jpg, the same sign on the dark grey of the road for the Switch's Homebrew Menu (256 x 256, no alpha).
 python tools/mkicon.py [out.ico] [preview.png]"""
 import sys
 from PIL import Image, ImageDraw, ImageFont
@@ -32,3 +33,8 @@ big.save(out, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128
 if len(sys.argv) > 2:
     big.save(sys.argv[2])
 print('wrote', out)
+if len(sys.argv) == 1:
+    jpg = Image.new('RGB', (256, 256), (48, 48, 52))
+    jpg.paste(big, (0, 0), big)
+    jpg.save('res/switch_icon.jpg', quality=92)
+    print('wrote res/switch_icon.jpg')

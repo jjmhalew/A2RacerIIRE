@@ -300,6 +300,8 @@ static int find_cd(char *data, size_t cap)
             if (is_cd_root(d, data, cap)) return 1;
         }
     }
+#elif defined __SWITCH__
+    (void)data; (void)cap;                     /* no CD drive: an ISO image in the folder of the .nro (data_find) */
 #else
     const char *roots[] = { "/media", "/run/media", "/mnt", "/media/cdrom", "/Volumes" };
     const char *user = getenv("USER");
@@ -370,6 +372,28 @@ const char *data_find(const char *arg)
     int ok = 0;
     const char *iso = arg && *arg ? arg : NULL;
     if (iso && plat_exists(iso) && !is_data_dir(iso)) ok = data_copy_iso(iso, dest);
+#ifdef __SWITCH__
+    /* no CD drive and no file picker: an ISO image of the CD in sdmc:/switch/a2racerre is unpacked into data/ (once;
+     * the ISO can be deleted afterwards) */
+    if (!ok) {
+        DIR *d = opendir(plat_user_dir());
+        struct dirent *e;
+        while (d && !ok && (e = readdir(d))) {
+            size_t n = strlen(e->d_name);
+            if (n < 5 || _stricmp(e->d_name + n - 4, ".iso")) continue;
+            snprintf(src, sizeof src, "%s%s", plat_user_dir(), e->d_name);
+            printf("unpacking %s\n", src);
+            ok = data_copy_iso(src, dest);
+        }
+        if (d) closedir(d);
+    }
+    if (!ok) {
+        plat_message("A2RacerRE needs the files of your A2 Racer II CD (they are not included).\n\nPut an ISO image of "
+                     "the CD into /switch/a2racerre/ on the SD card, or copy the CD's data folder to "
+                     "/switch/a2racerre/data, and start A2RacerRE again.", 1);
+        return NULL;
+    }
+#endif
     while (!ok) {
         if (find_cd(src, sizeof src)) {
             int r = plat_ask("A2RacerRE needs the files of your A2 Racer II CD. Copy them from the CD now (about 115 MB)?",

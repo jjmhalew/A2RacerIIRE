@@ -122,12 +122,26 @@ static void set_key(int vk, int down)
 }
 
 /* ---- window ---------------------------------------------------------------------------------------------------- */
+#ifdef __SWITCH__
+#include <switch/applets/error.h>       /* not all of switch.h: its names clash with SDL's and the engine's */
+/* SDL has no message box on the Switch: the system's error dialog shows the text with one button */
+void plat_message(const char *text, int warn)
+{
+    (void)warn;
+    printf("%s\n", text);
+    fflush(stdout);
+    ErrorApplicationConfig c;
+    errorApplicationCreate(&c, text, NULL);
+    errorApplicationShow(&c);
+}
+#else
 void plat_message(const char *text, int warn)
 {
     fprintf(stderr, "%s\n", text);
     if (getenv("A2_HIDDEN")) return;                          /* tests: no window */
     SDL_ShowSimpleMessageBox(warn ? SDL_MESSAGEBOX_WARNING : SDL_MESSAGEBOX_INFORMATION, "A2RacerRE", text, g_win);
 }
+#endif
 
 int plat_init(const PlatConfig *cfg)
 {
@@ -163,7 +177,7 @@ int plat_init(const PlatConfig *cfg)
     test_pad_init();
     test_touch_init();
     g_t0 = SDL_GetPerformanceCounter();
-#ifdef __ANDROID__
+#if defined __ANDROID__ || defined __SWITCH__
     g_gles = 1;
 #endif
     if (g_gles) {
@@ -184,6 +198,10 @@ int plat_init(const PlatConfig *cfg)
     }
 #ifdef __ANDROID__
     flags |= SDL_WINDOW_FULLSCREEN;
+#elif defined __SWITCH__
+    flags |= SDL_WINDOW_FULLSCREEN;      /* the whole screen; SDL follows docked (1080p) and handheld (720p) */
+    w = 1280;
+    h = 720;
 #else
     if (getenv("A2_HIDDEN")) flags |= SDL_WINDOW_HIDDEN;      /* tests and screenshots without a window on screen */
     else if (cfg->fullscreen) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
@@ -203,8 +221,10 @@ int plat_init(const PlatConfig *cfg)
     g_vsync = cfg->vsync ? 1 : 0;
     SDL_GL_SetSwapInterval(g_vsync);
     g_test_glreset = getenv("A2_TEST_GLRESET") ? atof(getenv("A2_TEST_GLRESET")) : 0;
-#ifdef __ANDROID__
-    SDL_StopTextInput();             /* no soft keyboard over the game: only while a name is typed (plat_text_mode) */
+#if defined __ANDROID__ || defined __SWITCH__
+    /* no soft keyboard over the game: on Android only while a name is typed (plat_text_mode); the Switch's is an
+     * applet that stops the game, so there the name is entered with the pad (the menu's pad name entry) */
+    SDL_StopTextInput();
 #else
     SDL_StartTextInput();
 #endif
@@ -297,7 +317,7 @@ void *plat_gl_proc(const char *name) { return SDL_GL_GetProcAddress(name); }
 
 void plat_toggle_fullscreen(void)
 {
-#ifndef __ANDROID__
+#if !defined __ANDROID__ && !defined __SWITCH__
     int fs = (SDL_GetWindowFlags(g_win) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
     SDL_SetWindowFullscreen(g_win, fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
 #endif
@@ -318,6 +338,10 @@ static int has_word(const char *s, const char *w)
 /* how a pad's buttons are labelled: SDL's controller type, else its name (Steam Input and virtual pads) */
 static int pad_kind(SDL_GameController *c, const char *name)
 {
+#ifdef __SWITCH__
+    (void)c; (void)name;
+    return PADKIND_SWITCH;                                            /* the Joy-Cons, handheld, a Pro Controller */
+#endif
     switch (SDL_GameControllerGetType(c)) {
     case SDL_CONTROLLER_TYPE_XBOX360: case SDL_CONTROLLER_TYPE_XBOXONE:
         if (has_word(name, "steam")) return PADKIND_STEAM;            /* Steam Input's virtual gamepad */
@@ -624,13 +648,13 @@ int plat_last_device(void)
     return -1;
 }
 
-static Uint16 u16(float v) { return (Uint16)(v <= 0 ? 0 : v >= 1 ? 65535 : v * 65535); }
+static Uint16 rumble16(float v) { return (Uint16)(v <= 0 ? 0 : v >= 1 ? 65535 : v * 65535); }
 
 void plat_device_rumble(int i, float low, float high, int ms)
 {
     if (i < 0 || i >= PLAT_MAX_DEVICES || !g_dev[i].used) return;
     Dev *v = &g_dev[i];
-    if (SDL_JoystickHasRumble(v->joy)) SDL_JoystickRumble(v->joy, u16(low), u16(high), (Uint32)ms);
+    if (SDL_JoystickHasRumble(v->joy)) SDL_JoystickRumble(v->joy, rumble16(low), rumble16(high), (Uint32)ms);
     else if (v->haptic_rumble) {
         float s = low > high ? low : high;
         if (s > 0) SDL_HapticRumblePlay(v->haptic, s > 1 ? 1 : s, (Uint32)ms);
@@ -1003,6 +1027,13 @@ const char *plat_user_dir(void)
     static char *dir;
     if (g_user_override[0]) return g_user_override;
     if (!dir) {
+#ifdef __SWITCH__
+        /* sdmc:/switch/a2racerre on the SD card, next to a2racerre.nro: the game files in data/ (or an ISO image of the
+         * CD to unpack there), the settings, the saves and mods/ */
+        mkdir("sdmc:/switch", 0755);
+        mkdir("sdmc:/switch/a2racerre", 0755);
+        dir = SDL_strdup("sdmc:/switch/a2racerre/");
+#endif
 #ifdef __ANDROID__
         /* Android/data/<app>/files: reachable over USB, so the game files can also be copied there by hand */
         const char *ext = SDL_AndroidGetExternalStoragePath();
@@ -1026,7 +1057,11 @@ const char *plat_base_dir(void)
 {
     static char *base;
     if (!base) {
+#ifdef __SWITCH__
+        base = SDL_strdup(plat_user_dir());
+#else
         base = SDL_GetBasePath();
+#endif
         if (!base) base = SDL_strdup("./");
     }
     return base;
@@ -1110,6 +1145,13 @@ int plat_pick_data(char *out, size_t cap, int *fd, const char *dest)
     if (res < 0) return PICK_NONE;
     if (r == 1) { *fd = res; return PICK_FD; }
     return PICK_COPIED;
+}
+#elif defined __SWITCH__
+/* no file picker: datasetup.c looks for an ISO image in the folder of the .nro instead */
+int plat_pick_data(char *out, size_t cap, int *fd, const char *dest)
+{
+    (void)out; (void)cap; (void)fd; (void)dest;
+    return PICK_NONE;
 }
 #else
 /* Linux: zenity (GNOME, SteamOS desktop) or kdialog (KDE) when there; else the path typed in a terminal is not

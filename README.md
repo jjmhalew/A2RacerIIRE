@@ -3,8 +3,8 @@
 A reimplementation of the engine of *A2 Racer II* (Davilex Games, 1998), rebuilt by reverse engineering the original.
 It runs the original game data from **your own CD**: no game files are included in this repository or its releases.
 
-Race over the Dutch motorways and through Amsterdam, Den Haag and Rotterdam, natively on Windows, Linux, the Steam Deck
-and Android, at any resolution and frame rate.
+Race over the Dutch motorways and through Amsterdam, Den Haag and Rotterdam, natively on Windows, Linux, the Steam Deck,
+Android and (homebrew) Nintendo Switch, at any resolution and frame rate.
 
 > Unofficial fan project for preservation. Not affiliated with or endorsed by Davilex or any other rights holder.
 > A2 Racer and related names are trademarks of their owners. You need your own copy of the original game to play.
@@ -42,6 +42,15 @@ a non-Steam game.
 an ISO image of the CD, or a folder with a copy of it, in Android's file picker. You can also copy the CD's `data` folder
 to `Android/data/io.github.jjmhalew.a2racerre/files/data` with a USB cable. The menus are played by tapping; the races
 have touch controls (below), or plug in or pair a controller. The back button pauses the race and asks to quit.
+
+**Nintendo Switch** (experimental; needs a Switch that runs homebrew, i.e. custom firmware such as Atmosphère): put
+`a2racerre.nro` from the Releases page (the `-switch.zip` unpacks onto the SD card as it is) or from `./build_switch.sh`
+into `/switch/a2racerre/` on the SD card, and an ISO image of the CD into the same folder. The first start unpacks the
+ISO into `/switch/a2racerre/data` (once; the ISO can be deleted then). Or copy the CD's `data` folder to
+`/switch/a2racerre/data` yourself. Start it from the Homebrew Menu (preferably by holding R while opening a game, which
+gives homebrew the full memory). `Game.ini`, the saves and `mods/` live in `/switch/a2racerre`. The Joy-Cons (attached,
+or one in each hand) and a Pro Controller work as any controller does (below), with their own button names in the
+menu; the name of a new player is entered with the pad. In handheld mode the touch screen has the touch controls.
 
 ### Touch controls
 On a phone, tablet or Windows touch screen the race shows on-screen controls from the first touch on, and hides them
@@ -128,12 +137,21 @@ used when present, otherwise `build.bat` downloads Zig 0.16.0 into `tools\zig` o
 (zlib license) is downloaded into `tools\sdl` the same way and linked statically, so the exe is a single file.
 `build.bat dev` builds the developer build `out\a2racer.exe` with a console.
 
+`make_standalone.bat` packs `A2RacerRE.exe` and **your** game files (the copy A2RacerRE.exe made at its first start)
+into a single `A2RacerRE-standalone.exe` that unpacks itself to `%LOCALAPPDATA%\A2RacerRE` at its first start and runs
+from there; settings and saves stay in `%APPDATA%\A2RacerRE`, shared with A2RacerRE.exe. It contains the game's files, so
+it is for your own use only: never share or upload it.
+
 - Linux: `./build.sh` builds `a2racerre` with the system's C compiler and SDL2 (Debian / Ubuntu:
   `sudo apt install build-essential libsdl2-dev`). `sh tests/run.sh` runs the tests that need no game data.
 - Android: `cd android` then `gradlew assembleRelease` builds the APK in `android/app/build/outputs/apk/`. It needs the
   Android SDK with NDK 27.2 and CMake 3.22 (Android Studio's SDK Manager installs both). The build downloads SDL 2.32.10
   and checks its SHA-256. Without your own signing key (`-Pa2Keystore=... -Pa2KeyAlias=... -Pa2KeyPassword=...`) the
   release APK is signed with the debug key.
+- Nintendo Switch: `./build_switch.sh` builds `a2racerre.nro` with devkitPro's devkitA64, libnx, switch-sdl2 and
+  switch-mesa. Without `$DEVKITPRO` set it builds in the official `devkitpro/devkita64` Docker image instead. The same
+  SDL code as on Linux and Android, on OpenGL ES 2.0; the `__SWITCH__` parts are the folder on the SD card, the ISO
+  unpacked from there, the system's error dialog for messages and the Nintendo button names.
 
 The engine is plain C99 on SDL2 and OpenGL 2.1 / OpenGL ES 2.0 with one code path for every platform.
 
