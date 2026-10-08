@@ -20,6 +20,8 @@
 static SDL_Window *g_win;
 static SDL_GLContext g_gl;
 static int g_gles;
+static int g_vsync, g_gl_lost;
+static double g_test_glreset;    /* A2_TEST_GLRESET=T: the context is lost T seconds after the start (tests) */
 static unsigned char g_keys[256], g_down[256];
 static char g_text[64];
 static PlatPad g_pad;
@@ -198,7 +200,9 @@ int plat_init(const PlatConfig *cfg)
         plat_message(msg, 1);
         return 0;
     }
-    SDL_GL_SetSwapInterval(cfg->vsync ? 1 : 0);
+    g_vsync = cfg->vsync ? 1 : 0;
+    SDL_GL_SetSwapInterval(g_vsync);
+    g_test_glreset = getenv("A2_TEST_GLRESET") ? atof(getenv("A2_TEST_GLRESET")) : 0;
 #ifdef __ANDROID__
     SDL_StopTextInput();             /* no soft keyboard over the game: only while a name is typed (plat_text_mode) */
 #else
@@ -255,6 +259,40 @@ void plat_shutdown(void)
 void plat_swap(void) { SDL_GL_SwapWindow(g_win); }
 void plat_size(int *w, int *h) { SDL_GL_GetDrawableSize(g_win, w, h); }
 int plat_is_gles(void) { return g_gles; }
+int plat_gl_can_lose(void) { return g_gles || g_test_glreset > 0; }
+
+int plat_gl_lost(void)
+{
+    int l = g_gl_lost;
+    g_gl_lost = 0;
+    return l;
+}
+
+/* SDL_RENDER_DEVICE_RESET: Android's SDL found the context gone on resume and made the window a new one
+ * (android_egl_context_restore), which is current now */
+static void gl_reset(void)
+{
+    g_gl = SDL_GL_GetCurrentContext();
+    SDL_GL_SetSwapInterval(g_vsync);
+    g_gl_lost = 1;
+    printf("the GL context was lost: rebuilt\n");
+}
+
+/* A2_TEST_GLRESET: what Android does, on the desktop: a new context that shares nothing, the old one deleted */
+static void test_gl_reset_step(void)
+{
+    if (g_test_glreset <= 0 || plat_time() < g_test_glreset) return;
+    g_test_glreset = -1;                     /* once (what is made from here on keeps no copy) */
+    SDL_GLContext n = SDL_GL_CreateContext(g_win);
+    if (!n) return;
+    SDL_GL_MakeCurrent(g_win, n);
+    SDL_GL_DeleteContext(g_gl);
+    SDL_Event e;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_RENDER_DEVICE_RESET;
+    SDL_PushEvent(&e);
+}
+
 void *plat_gl_proc(const char *name) { return SDL_GL_GetProcAddress(name); }
 
 void plat_toggle_fullscreen(void)
@@ -510,9 +548,11 @@ int plat_poll(void)
     }
     test_pad_step();
     test_touch_step();
+    test_gl_reset_step();
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_QUIT: alive = 0; break;
+        case SDL_RENDER_DEVICE_RESET: gl_reset(); break;
         case SDL_KEYDOWN: {
             int vk = sc_to_vk(e.key.keysym.scancode);
             if (!e.key.repeat) set_key(vk, 1);

@@ -24,6 +24,11 @@ void plat_size(int *w, int *h);             /* drawable size in pixels */
 void plat_toggle_fullscreen(void);
 int  plat_is_gles(void);                    /* 1 = OpenGL ES 2.0 (Android), 0 = desktop OpenGL 2.1 */
 void *plat_gl_proc(const char *name);
+/* Android may drop the GL context while the app is in the background; SDL then makes a new, empty one on resume.
+ * plat_gl_lost: 1 once after that (gfx_gl.c then rebuilds its textures, buffers and shader). plat_gl_can_lose: the
+ * renderer must keep what it needs for that (OpenGL ES, or the test A2_TEST_GLRESET) */
+int  plat_gl_lost(void);
+int  plat_gl_can_lose(void);
 void plat_message(const char *text, int warn);
 
 /* ---- input ----------------------------------------------------------------------------------------------------- */

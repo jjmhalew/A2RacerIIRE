@@ -1,5 +1,7 @@
 /* gfx_gl.c - gfx.h on OpenGL 2.1 / OpenGL ES 2.0. All GL entry points are loaded at run time through plat_gl_proc,
  * so no GL headers or import libraries are needed beyond the system's GL library (opengl32 / libGL / libGLESv2).
+ * Textures are handles into a table of GL names, so that when Android loses the context (plat_gl_lost) everything can
+ * be made again under the same handles: on OpenGL ES each texture and mesh keeps a copy of what was uploaded.
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "gfx.h"
@@ -74,7 +76,7 @@ typedef ptrdiff_t GLsizeiptr, GLintptr;
     X(void, GenTextures, (GLsizei, GLuint *)) X(void, DeleteTextures, (GLsizei, const GLuint *)) \
     X(void, BindTexture, (GLenum, GLuint)) X(void, TexParameteri, (GLenum, GLenum, GLint)) \
     X(void, TexParameterf, (GLenum, GLenum, GLfloat)) X(const GLubyte *, GetString, (GLenum)) \
-    X(void, GetFloatv, (GLenum, GLfloat *)) X(void, GetTexParameteriv, (GLenum, GLenum, GLint *)) \
+    X(void, GetFloatv, (GLenum, GLfloat *)) \
     X(void, TexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)) \
     X(void, TexSubImage2D, (GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, const void *)) \
     X(void, PixelStorei, (GLenum, GLint)) X(void, ReadPixels, (GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *)) \
@@ -102,7 +104,21 @@ struct GfxMesh {
     int isize;
     int nr;
     GfxRange *ranges;
+    /* plat_gl_can_lose: the uploaded data, and the list of meshes, for a lost context */
+    void *keep_v, *keep_i;
+    size_t nv_bytes, ni_bytes;
+    GfxMesh *prev, *next;
 };
+
+typedef struct {
+    GLuint name;            /* 0 = a free slot, NOT_KEPT = lost with the context and not kept */
+    int w, h, mip, wrap, filter;
+    uint8_t *keep;          /* plat_gl_can_lose: the pixels as uploaded (level 0), else NULL */
+} Tex;
+#define NOT_KEPT ((GLuint)-1)
+static Tex *g_tex;          /* handle n = g_tex[n - 1] */
+static int g_ntex, g_captex;
+static GfxMesh *g_meshes;
 
 static GLuint g_prog, g_white, g_stream_vbo;
 static GLint u_mvp, u_tex, u_alpha_test, u_fog, u_fogcol, u_fogrange, u_tint, u_mv, u_decal;
@@ -154,21 +170,9 @@ static GLuint compile(GLenum type, const char *src)
     return s;
 }
 
-int gfx_init(void)
+/* the shader, the stream buffer and the fixed states: at the start and again in a new context */
+static int setup(void)
 {
-#define X(ret, name, args) gl##name = (ret (GLAPI *) args)plat_gl_proc("gl" #name); \
-    if (!gl##name && strcmp(#name, "GenerateMipmap")) { fprintf(stderr, "missing gl%s\n", #name); return 0; }
-    GLFUNCS
-#undef X
-    g_has_mipmap = glGenerateMipmap != NULL;
-    {   /* the original's bilinear filtering blurs the road into the distance; 8x anisotropic keeps it sharp */
-        const char *ext = (const char *)glGetString(GL_EXTENSIONS);
-        if (ext && (strstr(ext, "_texture_filter_anisotropic"))) {
-            float mx = 0;
-            glGetFloatv(0x84FF, &mx);                   /* GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT */
-            g_aniso = mx > 8 ? 8 : mx;
-        }
-    }
     GLuint vs = compile(GL_VERTEX_SHADER, VS), fs = compile(GL_FRAGMENT_SHADER, FS);
     if (!vs || !fs) return 0;
     g_prog = glCreateProgram();
@@ -198,21 +202,95 @@ int gfx_init(void)
     glEnableVertexAttribArray(1);
     glEnableVertexAttribArray(2);
     glGenBuffers(1, &g_stream_vbo);
-    uint8_t white[4] = { 255, 255, 255, 255 };
-    g_white = gfx_texture(white, 1, 1, TEX_NEAREST);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glDepthFunc(GL_LEQUAL);
     glFrontFace(GL_CW);      /* the original's faces are visible when clockwise on screen (D3DCULL_CCW) */
     glCullFace(GL_BACK);
+    return 1;
+}
+
+int gfx_init(void)
+{
+#define X(ret, name, args) gl##name = (ret (GLAPI *) args)plat_gl_proc("gl" #name); \
+    if (!gl##name && strcmp(#name, "GenerateMipmap")) { fprintf(stderr, "missing gl%s\n", #name); return 0; }
+    GLFUNCS
+#undef X
+    g_has_mipmap = glGenerateMipmap != NULL;
+    {   /* the original's bilinear filtering blurs the road into the distance; 8x anisotropic keeps it sharp */
+        const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+        if (ext && (strstr(ext, "_texture_filter_anisotropic"))) {
+            float mx = 0;
+            glGetFloatv(0x84FF, &mx);                   /* GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT */
+            g_aniso = mx > 8 ? 8 : mx;
+        }
+    }
+    /* Android can run SDL_main again in the same process: the table of a previous run names nothing now */
+    for (int i = 0; i < g_ntex; i++) free(g_tex[i].keep);
+    free(g_tex);
+    g_tex = NULL;
+    g_ntex = g_captex = 0;
+    g_meshes = NULL;
+    if (!setup()) return 0;
+    uint8_t white[4] = { 255, 255, 255, 255 };
+    g_white = gfx_texture(white, 1, 1, TEX_NEAREST);
     g_proj = g_view = g_model = m4_identity();
     return 1;
+}
+
+static void upload(Tex *t, const uint8_t *rgba)
+{
+    glGenTextures(1, &t->name);
+    glBindTexture(GL_TEXTURE_2D, t->name);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t->w, t->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    if (t->mip) glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, t->filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, t->mip ? GL_LINEAR_MIPMAP_LINEAR : t->filter);
+    if (t->mip && g_aniso > 1) glTexParameterf(GL_TEXTURE_2D, 0x84FE, g_aniso);   /* GL_TEXTURE_MAX_ANISOTROPY_EXT */
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, t->wrap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, t->wrap);
+}
+
+static void mesh_upload(GfxMesh *m, const void *v, const void *idx)
+{
+    glGenBuffers(1, &m->vbo);
+    glGenBuffers(1, &m->ibo);
+    glBindBuffer(GL_ARRAY_BUFFER, m->vbo);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)m->nv_bytes, v, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)m->ni_bytes, idx, GL_STATIC_DRAW);
+}
+
+/* plat_gl_lost: the new context has none of the old objects; make them again under the same handles */
+static void check_lost(void)
+{
+    if (!plat_gl_lost()) return;
+    setup();
+    glUniform4f(u_tint, g_tint[0], g_tint[1], g_tint[2], g_tint[3]);
+    gfx_set_fog(g_fog[0], g_fog[1], g_fog[2], g_fog[3], g_fog[4]);
+    int n = 0;
+    for (int i = 0; i < g_ntex; i++) {
+        Tex *t = &g_tex[i];
+        if (!t->name) continue;
+        if (t->keep) { upload(t, t->keep); n++; }
+        else t->name = NOT_KEPT;            /* drawn with the white texture */
+    }
+    for (GfxMesh *m = g_meshes; m; m = m->next)
+        if (m->keep_v) mesh_upload(m, m->keep_v, m->keep_i);
+    fprintf(stderr, "gfx: %d textures made again\n", n);
+}
+
+static GLuint gl_tex(unsigned h)
+{
+    if (!h || h > (unsigned)g_ntex || g_tex[h - 1].name == NOT_KEPT) h = g_white;
+    return h && h <= (unsigned)g_ntex ? g_tex[h - 1].name : 0;
 }
 
 unsigned gfx_white(void) { return g_white; }
 
 void gfx_begin(int width, int height, float r, float g, float b)
 {
+    check_lost();
     g_w = width;
     g_h = height;
     g_fog_on = g_decal = 0;
@@ -260,9 +338,19 @@ static uint8_t *resample(const uint8_t *src, int w, int h, int nw, int nh)
 
 unsigned gfx_texture(const uint8_t *rgba, int w, int h, int flags)
 {
-    GLuint t = 0;
-    glGenTextures(1, &t);
-    glBindTexture(GL_TEXTURE_2D, t);
+    check_lost();
+    int slot = 0;
+    while (slot < g_ntex && g_tex[slot].name) slot++;
+    if (slot == g_ntex) {
+        if (g_ntex == g_captex) {
+            int cap = g_captex ? g_captex * 2 : 256;
+            Tex *nt = realloc(g_tex, sizeof *nt * (size_t)cap);
+            if (!nt) return 0;
+            g_tex = nt;
+            g_captex = cap;
+        }
+        g_ntex++;
+    }
     int pot = !(w & (w - 1)) && !(h & (h - 1));
     uint8_t *scaled = NULL;
     if (!pot && plat_is_gles() && !(flags & TEX_CLAMP)) {
@@ -270,31 +358,42 @@ unsigned gfx_texture(const uint8_t *rgba, int w, int h, int flags)
         int nw = next_pot(w), nh = next_pot(h);
         if ((scaled = resample(rgba, w, h, nw, nh))) { rgba = scaled; w = nw; h = nh; pot = 1; }
     }
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-    free(scaled);
-    int mip = (flags & TEX_MIPMAP) && g_has_mipmap && (pot || !plat_is_gles());
-    if (mip) glGenerateMipmap(GL_TEXTURE_2D);
-    GLint mag = (flags & TEX_NEAREST) ? GL_NEAREST : GL_LINEAR;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mip ? GL_LINEAR_MIPMAP_LINEAR : mag);
-    if (mip && g_aniso > 1) glTexParameterf(GL_TEXTURE_2D, 0x84FE, g_aniso);   /* GL_TEXTURE_MAX_ANISOTROPY_EXT */
+    Tex *t = &g_tex[slot];
+    memset(t, 0, sizeof *t);
+    t->w = w;
+    t->h = h;
+    t->mip = (flags & TEX_MIPMAP) && g_has_mipmap && (pot || !plat_is_gles());
+    t->filter = (flags & TEX_NEAREST) ? GL_NEAREST : GL_LINEAR;
     /* GLES 2.0 only repeats power-of-two textures */
-    GLint wrap = ((flags & TEX_CLAMP) || (!pot && plat_is_gles())) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
-    return t;
+    t->wrap = ((flags & TEX_CLAMP) || (!pot && plat_is_gles())) ? GL_CLAMP_TO_EDGE : GL_REPEAT;
+    if (plat_gl_can_lose() && (t->keep = malloc((size_t)w * h * 4))) memcpy(t->keep, rgba, (size_t)w * h * 4);
+    upload(t, rgba);
+    free(scaled);
+    return (unsigned)slot + 1;
 }
 
 void gfx_texture_update(unsigned tex, const uint8_t *rgba, int w, int h)
 {
-    glBindTexture(GL_TEXTURE_2D, tex);
+    check_lost();
+    if (!tex || tex > (unsigned)g_ntex || !g_tex[tex - 1].name || g_tex[tex - 1].name == NOT_KEPT) return;
+    Tex *t = &g_tex[tex - 1];
+    if (w > t->w) w = t->w;
+    if (h > t->h) h = t->h;
+    if (t->keep)
+        for (int y = 0; y < h; y++) memcpy(t->keep + (size_t)y * t->w * 4, rgba + (size_t)y * w * 4, (size_t)w * 4);
+    glBindTexture(GL_TEXTURE_2D, t->name);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-    GLint min = 0;           /* a mipmapped texture (the texture copies of txcopy.c): rebuild the smaller levels */
-    glGetTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, &min);
-    if (min == GL_LINEAR_MIPMAP_LINEAR && g_has_mipmap) glGenerateMipmap(GL_TEXTURE_2D);
+    if (t->mip) glGenerateMipmap(GL_TEXTURE_2D);    /* the texture copies of txcopy.c: rebuild the smaller levels */
 }
 
-void gfx_texture_free(unsigned tex) { if (tex) glDeleteTextures(1, &tex); }
+void gfx_texture_free(unsigned tex)
+{
+    if (!tex || tex > (unsigned)g_ntex || !g_tex[tex - 1].name) return;
+    Tex *t = &g_tex[tex - 1];
+    if (t->name != NOT_KEPT) glDeleteTextures(1, &t->name);
+    free(t->keep);
+    memset(t, 0, sizeof *t);
+}
 
 static void upload_mvp(void)
 {
@@ -368,14 +467,23 @@ static void set_pointers(void)
 
 static GfxMesh *mesh_create(const GfxVertex *v, int nv, const void *idx, int ni, int isize, const GfxRange *r, int nr)
 {
+    check_lost();
     GfxMesh *m = calloc(1, sizeof *m);
     if (!m) return NULL;
-    glGenBuffers(1, &m->vbo);
-    glGenBuffers(1, &m->ibo);
-    glBindBuffer(GL_ARRAY_BUFFER, m->vbo);
-    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)nv * sizeof *v, v, GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)ni * isize, idx, GL_STATIC_DRAW);
+    m->nv_bytes = (size_t)nv * sizeof *v;
+    m->ni_bytes = (size_t)ni * (size_t)isize;
+    mesh_upload(m, v, idx);
+    if (plat_gl_can_lose()) {
+        m->keep_v = malloc(m->nv_bytes + 1);
+        m->keep_i = malloc(m->ni_bytes + 1);
+        if (m->keep_v && m->keep_i) {
+            memcpy(m->keep_v, v, m->nv_bytes);
+            memcpy(m->keep_i, idx, m->ni_bytes);
+        } else { free(m->keep_v); free(m->keep_i); m->keep_v = m->keep_i = NULL; }
+    }
+    m->next = g_meshes;
+    if (g_meshes) g_meshes->prev = m;
+    g_meshes = m;
     m->itype = isize == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
     m->isize = isize;
     m->nr = nr;
@@ -401,7 +509,7 @@ void gfx_mesh_draw_range(const GfxMesh *m, int i)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->ibo);
     set_pointers();
     apply_state(&r->state);
-    glBindTexture(GL_TEXTURE_2D, r->tex ? r->tex : g_white);
+    glBindTexture(GL_TEXTURE_2D, gl_tex(r->tex));
     glDrawElements(GL_TRIANGLES, r->count, m->itype, (void *)((size_t)r->first * (size_t)m->isize));
 }
 
@@ -413,7 +521,7 @@ void gfx_mesh_draw_sub(const GfxMesh *m, int i, int first, int count)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->ibo);
     set_pointers();
     apply_state(&r->state);
-    glBindTexture(GL_TEXTURE_2D, r->tex ? r->tex : g_white);
+    glBindTexture(GL_TEXTURE_2D, gl_tex(r->tex));
     glDrawElements(GL_TRIANGLES, count, m->itype, (void *)((size_t)first * (size_t)m->isize));
 }
 
@@ -428,6 +536,10 @@ void gfx_mesh_free(GfxMesh *m)
     if (!m) return;
     glDeleteBuffers(1, &m->vbo);
     glDeleteBuffers(1, &m->ibo);
+    if (m->prev) m->prev->next = m->next; else g_meshes = m->next;
+    if (m->next) m->next->prev = m->prev;
+    free(m->keep_v);
+    free(m->keep_i);
     free(m->ranges);
     free(m);
 }
@@ -435,12 +547,13 @@ void gfx_mesh_free(GfxMesh *m)
 void gfx_draw_tris(const GfxVertex *v, int nv, unsigned tex, const GfxState *st)
 {
     if (nv <= 0) return;
+    check_lost();
     glBindBuffer(GL_ARRAY_BUFFER, g_stream_vbo);
     glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)nv * sizeof *v, v, GL_STREAM_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     set_pointers();
     apply_state(st);
-    glBindTexture(GL_TEXTURE_2D, tex ? tex : g_white);
+    glBindTexture(GL_TEXTURE_2D, gl_tex(tex));
     glDrawArrays(GL_TRIANGLES, 0, nv);
 }
 

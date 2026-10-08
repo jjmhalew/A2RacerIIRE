@@ -195,4 +195,6 @@ joystick (`axis0=-1..1 button3=1 hat0=down`); rumble reaching them is printed (n
 press, which hides the touch controls), e.g. `"0.5:down 1 0.93 0.85; 7:down 2 0.2 0.85; 7.5:up 2"`;
 `A2_TEST_WINDOW=WxH` sets the window size (e.g. `1600x720`, a phone's 20:9), `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
 `A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state,
-`A2_TEST_BRAKE=1` keeps the player car's brake lights lit (the texture copies of docs/RENDER.md 11).
+`A2_TEST_BRAKE=1` keeps the player car's brake lights lit (the texture copies of docs/RENDER.md 11),
+`A2_TEST_GLRESET=T` throws the OpenGL context away T seconds after the start, as Android can do while the app is in the
+background (the textures, buffers and shader are then made again from the copies the renderer keeps on Android).
