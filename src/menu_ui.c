@@ -670,16 +670,20 @@ static void build_forms(const PeFile *pe)
 }
 
 /* draw_button 0x41b3c0: anim frame 0 normal, 1 pressed, 2 disabled (laid over the text), 3 focused; the caption in
- * the control's .img font centred in the window (sub_411280) */
+ * the control's .img font centred in the window (sub_411280), which puts the current font back afterwards
+ * (ascii_get_font 0x411318 / ascii_set_font 0x41147e): text printed after a button redraw keeps its own font (the
+ * key help of the controls screen right after mui_focus would otherwise come out in butfnt) */
 enum { BS_NORMAL, BS_FOCUS, BS_PRESSED, BS_DISABLED };
 static void draw_button(const MuiCtrl *c, int st)
 {
     int frame = st == BS_PRESSED ? 1 : st == BS_FOCUS ? 3 : st == BS_DISABLED && c->font < 0 ? 2 : 0;
     mui_blit(0, mui_anim_frame(c->anim, frame), c->x + c->w / 2, c->y + c->h / 2, 0);
     if (c->font >= 0 && c->text[0]) {
+        int keep = g_cur_font;
         mui_set_font(c->font);
         int tw = (int)strlen(c->text) * mui_font_w();
         mui_print(0, c->x + (c->w + 1) / 2 - tw / 2, c->y + (c->h + 1) / 2 - mui_font_h() / 2, "%s", c->text);
+        g_cur_font = keep;
         if (st == BS_DISABLED) mui_blit(0, mui_anim_frame(c->anim, 2), c->x + c->w / 2, c->y + c->h / 2, 0);
     }
 }
