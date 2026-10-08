@@ -425,7 +425,7 @@ Port: src/lights.c.
   stack constants of the function. Indices in `0x48b458` / `0x48b45c`.
 - handle_player_car 0x425f0b, before the driving code (so with the previous frame's value): on when
   g_plr_brake_light == 1 (or g_plr_gas_hold, never set); only a change (`0x4d9e10`) is passed on: with object lights
-  light_set_on `0x41b560` for both, otherwise set_brake_light_texture `0x42b100` (the texture copy, not ported).
+  light_set_on `0x41b560` for both, otherwise set_brake_light_texture `0x42b100` (the texture copy, section 11).
 - `0x41b720` light_draw (render_game, after the objects and the radar, before the sparks): ALPHABLENDENABLE 1,
   SRCALPHA / INVSRCALPHA; per used and lit light: inst_build_matrix(light), M = light.M * object.M (mat_mul), draw;
   ALPHABLENDENABLE 0. Z test and write stay on. It does not check whether the object is drawn.
@@ -779,5 +779,8 @@ target texture keeps a copy of the pixels tex_get uploaded (texture.c `tex_pixel
 it and replaces the GL texture (`gfx_texture_update` rebuilds the mipmaps). The textures are put back to the CD's
 state at every race start (the original loads them anew per race). The copy rectangles are in the CD image's
 coordinates (`tex_orig_size`) and are scaled when a texture pack's image has another size. Repeating the frame a
-copy already shows is skipped (the copies do not overlap). The object lights are not ported, so the brake lights
-always use the texture copy (the original's object_lights=0 path). `A2_TEST_BRAKE=1` keeps them lit (tests).
+copy already shows is skipped (the copies do not overlap). The brake lights are the object lights (src/lights.c) when
+Game.ini object_lights and alpha_blending are on (the CD's settings), else this texture copy, as in the original
+(`lights_on`). `A2_TEST_BRAKE=1` keeps them lit (tests). Copy 15, the ADAC beacon, is in the table but never runs:
+adac_beacon_update `0x40c4a0` (blink every 150 ms while g_adac_beacon_on `0x4a5cd0`) has no caller, and nothing
+writes the flag either, so the port leaves it out.

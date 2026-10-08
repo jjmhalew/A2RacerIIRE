@@ -124,7 +124,7 @@
 0x40c3a0 waypoint_get_obstacles ; (wp, int *out) -1 terminated, returns count
 0x40c400 chunk_get_lane_counts ; (chunk, *left, *right)
 0x40c440 chunk_find_lane_of_waypoint ; (chunk, wp) lane index (left then right, both from 0) or -1
-0x40c4a0 adac_beacon_update ; toggles texture-copy 15 every 150 ms if g_adac_beacon_on (never set)
+0x40c4a0 adac_beacon_update ; toggles texture-copy 15 every 150 ms if g_adac_beacon_on (never set); no caller
 0x40c4f0 init_adac_car ; 'Initing adac-car.' car type 8, behaviour 15, chunk 0
 0x40c5f0 turn_off_adac ; 'turn_off_adac() has been called.'
 0x40c640 cop_siren ; (obj, on) SNDFX_POLITIE_SIRENE(40) swap with ai_old_sample, siren count, g_active_cops
