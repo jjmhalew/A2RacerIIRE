@@ -95,7 +95,7 @@ State numbers are the DX5 D3DRENDERSTATETYPE values (16 LASTPIXEL, 17 TEXTUREMAG
 Only these states are ever set (all SetRenderState call sites enumerated). Everything else stays at the D3D
 (DX5) defaults: CULLMODE = CCW (cull counter-clockwise -> front faces are clockwise in D3D's left-handed
 space), ZFUNC = LESSEQUAL, ZWRITEENABLE = TRUE, DITHERENABLE = FALSE, ALPHATESTENABLE = FALSE,
-SPECULARENABLE = TRUE(?), SUBPIXEL etc. default.
+TEXTUREADDRESS = WRAP, SPECULARENABLE = TRUE(?), SUBPIXEL etc. default.
 
 Global state, set at init:
 
@@ -110,6 +110,15 @@ Global state, set at init:
 | 28/34 + LS 4..7 fog | off by default, see 5. | `0x429e30` |
 | LS 1 MATERIAL | default material `0x49b008` | `0x44e990` |
 | 8 FILLMODE | per mesh debug switch (POINT / WIREFRAME), restored to SOLID | `0x455700` |
+
+Wrapping plus bilinear filtering: a vertex on a texture's edge takes up to half of the texel row or column on the
+opposite edge. The meshes share texture pages, so that row can be another drawing: MPOLIZEI's front centre line
+(windscreen, bonnet, bumper) lies at v = 0.0002 of CARS01, whose bottom rows 244..255 are the magenta (255,0,255)
+background of other drawings - not the colour key, so it is drawn - and the bilinear sample there is 44% magenta.
+The original does the same, but at 640x480 the tinted strip is under a pixel wide (a faint pink dotted line at
+most); at today's resolutions (and with mipmaps) it is a clear pink line. Port (model.c `load_mesh`, gfx_gl.c
+`range_bind`): a mesh whose UVs stay inside 0..1 (+-0.01) samples its texture clamped to the edges; meshes that tile
+their texture (R_ASTRA's v reaches 214, the city buildings' 1..2) and the road keep wrapping.
 
 Per effect (set before, reset after drawing): ALPHABLENDENABLE (27) + SRCBLEND (19) / DESTBLEND (20), ZENABLE,
 TEXTUREHANDLE. D3DBLEND: 2 ONE, 5 SRCALPHA, 6 INVSRCALPHA.

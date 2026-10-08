@@ -32,6 +32,7 @@ typedef struct {
     unsigned tex;
     int first, count;       /* index range */
     GfxState state;
+    int clamp;              /* 1: the texture is sampled clamped to its edges for this range (UVs inside 0..1) */
 } GfxRange;
 typedef struct GfxMesh GfxMesh;
 

@@ -501,6 +501,27 @@ GfxMesh *gfx_mesh_create32(const GfxVertex *v, int nv, const uint32_t *idx, int 
     return mesh_create(v, nv, idx, ni, 4, r, nr);
 }
 
+/* binds the range's texture; a clamped range (GfxRange.clamp) switches the texture to clamp-to-edge for its draw and
+ * returns the wrap mode range_done puts back (0 = nothing to put back). The wrap mode is texture state, and other
+ * users of the same texture (track, effects, other meshes) repeat it. */
+static GLint range_bind(const GfxRange *r)
+{
+    glBindTexture(GL_TEXTURE_2D, gl_tex(r->tex));
+    if (!r->clamp || !r->tex || r->tex > (unsigned)g_ntex) return 0;
+    const Tex *t = &g_tex[r->tex - 1];
+    if (t->name == NOT_KEPT || t->wrap == GL_CLAMP_TO_EDGE) return 0;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    return t->wrap;
+}
+
+static void range_done(GLint wrap)
+{
+    if (!wrap) return;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
+}
+
 void gfx_mesh_draw_range(const GfxMesh *m, int i)
 {
     if (!m || i < 0 || i >= m->nr || m->ranges[i].count <= 0) return;
@@ -509,8 +530,9 @@ void gfx_mesh_draw_range(const GfxMesh *m, int i)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->ibo);
     set_pointers();
     apply_state(&r->state);
-    glBindTexture(GL_TEXTURE_2D, gl_tex(r->tex));
+    GLint wrap = range_bind(r);
     glDrawElements(GL_TRIANGLES, r->count, m->itype, (void *)((size_t)r->first * (size_t)m->isize));
+    range_done(wrap);
 }
 
 void gfx_mesh_draw_sub(const GfxMesh *m, int i, int first, int count)
@@ -521,8 +543,9 @@ void gfx_mesh_draw_sub(const GfxMesh *m, int i, int first, int count)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->ibo);
     set_pointers();
     apply_state(&r->state);
-    glBindTexture(GL_TEXTURE_2D, gl_tex(r->tex));
+    GLint wrap = range_bind(r);
     glDrawElements(GL_TRIANGLES, count, m->itype, (void *)((size_t)first * (size_t)m->isize));
+    range_done(wrap);
 }
 
 void gfx_mesh_draw(const GfxMesh *m)
