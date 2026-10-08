@@ -688,9 +688,12 @@ static void draw_button(const MuiCtrl *c, int st)
     }
 }
 
-/* the owner-drawn edit box (Ownedit.cpp): maxlen+1 cells with an opaque background, the cursor cell in its colours */
+/* the owner-drawn edit box (Ownedit.cpp): maxlen+1 cells with an opaque background, the cursor cell in its colours.
+ * Its draw (sub_4176d0) never selects a font (it prints in the current one, the midfont its screens set); here the
+ * control's font is set for it and the current one put back afterwards, so text printed after a redraw keeps its font */
 static void draw_edit(const MuiCtrl *c, int focused)
 {
+    int keep_font = g_cur_font;
     mui_set_font(c->font >= 0 ? c->font : F_MID);
     int keep = mui_get_colour();
     int cw = mui_font_w();
@@ -710,6 +713,7 @@ static void draw_edit(const MuiCtrl *c, int focused)
     }
     mui_set_key(255);
     mui_set_colour(keep);
+    g_cur_font = keep_font;
 }
 
 void mui_redraw_ctrl(int idx)
