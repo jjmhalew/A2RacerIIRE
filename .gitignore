@@ -5,6 +5,8 @@ game/
 *.iso
 # build output
 /A2RacerRE.exe
+/A2RacerRE-standalone.exe
+/a2racerre.nro
 *.pdb
 build/
 tools/zig/
