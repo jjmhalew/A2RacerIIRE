@@ -15,6 +15,8 @@
 #include "ini.h"
 #include "model.h"
 #include "res.h"
+#include "screen.h"
+#include "texture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +45,7 @@ static int g_nv, g_ni, g_anim = -1;
 static unsigned g_tex;
 static float g_pos[7][2][3];
 static int g_loaded;
+static int g_tex_bit8 = -1;         /* the mode g_tex was loaded in */
 
 /* light_set_vertex_alpha 0x41b400: a radial glow, alpha A at the centre (the origin) to 0 at the farthest vertex,
  * RGB = the light's colour, specular 0. 'Too many vertices in this mesh to make it a light object' above 1000. */
@@ -99,14 +102,16 @@ void lights_init(const Race *r)
     res_user_path(p, sizeof p, "Game.ini");
     Ini *g = ini_load(p);
     g_on = ini_int(g, "GFX OPTIONS", "object_lights", 1);
-    /* light_init 0x41b330: needs g_hw_accel (always here), the SRCALPHA / INVSRCALPHA blend caps and alpha_blending,
-     * else "Object lights disabled: Hardware doesn't support used alpha modes" and object_lights = 0 */
-    if (g_on && !ini_int(g, "GFX OPTIONS", "alpha_blending", 1)) g_on = 0;
+    /* light_init 0x41b330: needs g_hw_accel (not in the 8-bit modes, screen.h), the SRCALPHA / INVSRCALPHA blend caps
+     * and alpha_blending, else "Object lights disabled: Hardware doesn't support used alpha modes" and
+     * object_lights = 0 (the brake lights are then texture copies, txcopy.c) */
+    if (g_on && (!ini_int(g, "GFX OPTIONS", "alpha_blending", 1) || !scr_hw3d())) g_on = 0;
     ini_free(g);
     if (!g_loaded) {
         g_loaded = 1;
         g_anim = anim_find("OBJ_LIGHT01_ANIM");
         if (!anim_mesh_raw(g_anim, 0, &g_v, &g_nv, &g_idx, &g_ni, &g_tex, NULL)) g_anim = -1;
+        g_tex_bit8 = tex_8bit();
         PeFile pe;
         if (pe_open(&pe, "spel.dat")) {
             const uint8_t *q = pe_ptr(&pe, BRAKE_POS, sizeof g_pos);
@@ -114,6 +119,13 @@ void lights_init(const Race *r)
             else g_anim = -1;
             pe_close(&pe);
         } else g_anim = -1;
+    }
+    if (g_anim >= 0 && g_tex_bit8 != tex_8bit()) {   /* the glow's texture in the mode of this race (texture.h) */
+        GfxVertex *v;
+        uint16_t *ix;
+        int nv, ni;
+        if (anim_mesh_raw(g_anim, 0, &v, &nv, &ix, &ni, &g_tex, NULL)) { free(v); free(ix); }
+        g_tex_bit8 = tex_8bit();
     }
     if (g_anim < 0) g_on = 0;
     /* create_brake_lights 0x425500: the colour and pitch per car type are stack constants of the function */

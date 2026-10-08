@@ -15,6 +15,7 @@
 #include "ini.h"
 #include "model.h"
 #include "res.h"
+#include "texture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +24,7 @@ static GfxVertex g_v[4];            /* the shared mesh's vertices (mesh +0x80) *
 static uint16_t g_idx[6];
 static int g_ni;
 static unsigned g_tex;
-static int g_ok;
+static int g_ok, g_ok_bit8;
 static int g_alpha_blending;        /* g_opt_alpha_blending 0x4d9b18, tested per draw */
 
 void shadow_init(void)                                              /* init_car_shadow_object 0x410df0 */
@@ -33,7 +34,9 @@ void shadow_init(void)                                              /* init_car_
     Ini *g = ini_load(p);
     g_alpha_blending = ini_int(g, "GFX OPTIONS", "alpha_blending", 1);
     ini_free(g);
-    if (g_ok) return;                                               /* the mesh is the same for every race */
+    /* the mesh is the same for every race; the texture is the mode's (s_shadow.pcx in the 8-bit modes, texture.h) */
+    if (g_ok && g_ok_bit8 == tex_8bit()) return;
+    g_ok = 0;
     GfxVertex *v = NULL;
     uint16_t *idx = NULL;
     int nv = 0, ni = 0, tw = 0;
@@ -56,6 +59,7 @@ void shadow_init(void)                                              /* init_car_
     g_v[2].u = e;     g_v[2].v = 1 - e;                             /* +0x58 / +0x5c */
     g_v[3].u = 1 - e; g_v[3].v = 1 - e;                             /* +0x78 / +0x7c */
     g_ok = 1;
+    g_ok_bit8 = tex_8bit();
 }
 
 /* the shadow callback 0x41d460 (gfx_shdw.cpp) */

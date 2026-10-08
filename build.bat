@@ -15,7 +15,7 @@ set "ZIG_NAME=zig-x86_64-windows-%ZIG_VER%"
 set "SDL_VER=2.32.10"
 set "SDL_SHA=f15cff5fca62ec9381a016ef1d42a95c638cd72d2f226ba5781c76fe43dbd1ac"
 set "SDL=tools\sdl\SDL2-%SDL_VER%\x86_64-w64-mingw32"
-set "SRC=src\main.c src\plat_sdl.c src\pad.c src\touch.c src\gfx_gl.c src\res.c src\image.c src\ini.c src\audio.c src\smk.c src\film.c src\texture.c src\track.c src\datasetup.c src\exetab.c src\model.c src\objects.c src\race.c src\hud.c src\paths.c src\effects.c src\sfx.c src\rules.c src\font3d.c src\flag.c src\car_old.c src\wheels.c src\shadow.c src\lights.c src\fog.c src\ai.c src\collide.c src\menu.c src\menu_ui.c src\menu_screens.c src\game.c src\txcopy.c src\radar.c"
+set "SRC=src\main.c src\plat_sdl.c src\pad.c src\touch.c src\gfx_gl.c src\res.c src\image.c src\ini.c src\audio.c src\smk.c src\film.c src\texture.c src\track.c src\datasetup.c src\exetab.c src\model.c src\objects.c src\race.c src\hud.c src\paths.c src\effects.c src\sfx.c src\rules.c src\font3d.c src\flag.c src\car_old.c src\wheels.c src\shadow.c src\lights.c src\fog.c src\ai.c src\collide.c src\menu.c src\menu_ui.c src\menu_screens.c src\game.c src\txcopy.c src\radar.c src\screen.c"
 set "LIBS=%SDL%\lib\libSDL2.a -lopengl32 -lgdi32 -luser32 -lwinmm -limm32 -lole32 -loleaut32 -lversion -lsetupapi -lshell32 -ladvapi32 -lcfgmgr32 -lcomdlg32"
 rem zig cc compiles for the CPU of the build machine unless told otherwise; plain x86-64 runs everywhere.
 set "CPU=-target x86_64-windows-gnu -mcpu=baseline"

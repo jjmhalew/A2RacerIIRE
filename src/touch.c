@@ -6,6 +6,7 @@
 #include "hud.h"
 #include "pad.h"
 #include "plat.h"
+#include "screen.h"
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -33,13 +34,8 @@ static float g_op;                          /* opacity 0..1 */
 static int g_W, g_H;
 
 /* ---- layout ------------------------------------------------------------------------------------------------------ */
-/* a rectangle of the 640x480 overlay in window pixels (gfx_2d_begin(640, 480) letterboxes it keeping 4:3) */
-static void hud_to_screen(float x, float y, float *sx, float *sy)
-{
-    float s = (float)g_W / 640 < (float)g_H / 480 ? (float)g_W / 640 : (float)g_H / 480;
-    *sx = (g_W - 640 * s) * 0.5f + x * s;
-    *sy = (g_H - 480 * s) * 0.5f + y * s;
-}
+/* a point of the overlay (640x480, or 320x200 in that mode) in window pixels, as it is shown (screen.h) */
+static void hud_to_screen(float x, float y, float *sx, float *sy) { scr_to_window(x, y, sx, sy); }
 
 /* the speed panel of the overlay (docs/HUD.md 4.3: its frame, the turbo and damage bars, the labels and speed) */
 static int speed_panel_rect(float *x0, float *y0, float *x1, float *y1)

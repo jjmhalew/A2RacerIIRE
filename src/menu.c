@@ -212,6 +212,32 @@ void save_options(void)
 
 static void init_options(void);
 
+/* PORT: the resolution of options.ras counts only once the player has chosen one on the options screen (its OK after
+ * a click on one of the three radio buttons writes Raser.ini [PROGRAM] RESOLUTION_CHOSEN=1); until then the menu shows
+ * and starts the races in "3D Kaart" (RESOLUTION 3). init_options 0x408b00 creates options.ras with 320 x 200 (0),
+ * the safe choice of 1998 for a PC without a 3D card, so every options.ras this port has written so far holds 0 and
+ * would otherwise turn a race nobody configured into the 320x200 software look. */
+static int resolution_chosen(void)
+{
+    Ini *r = open_user_ini("Raser.ini");
+    int v = ini_int(r, "PROGRAM", "RESOLUTION_CHOSEN", 0);
+    ini_free(r);
+    return v != 0;
+}
+
+static void resolution_rule(void)
+{
+    if (!resolution_chosen()) g_options.resolution = 3;
+}
+
+void menu_resolution_chosen(void)
+{
+    Ini *r = open_user_ini("Raser.ini");
+    ini_set_int(r, "PROGRAM", "RESOLUTION_CHOSEN", 1);
+    save_user_ini(r, "Raser.ini");
+    ini_free(r);
+}
+
 void load_options(void)
 {
     char p[1024];
@@ -227,6 +253,7 @@ void load_options(void)
     g_options.music_vol = b[9];
     g_options.resolution = get32(b + 10);
     g_options.difficulty = get32(b + 14);
+    resolution_rule();
 }
 
 /* init_options 0x408b00: defaults sfx and music on at 80, resolution 0, difficulty 1, written when missing */
@@ -245,6 +272,7 @@ static void init_options(void)
     g_options.resolution = 0;
     g_options.difficulty = 1;
     save_options();
+    resolution_rule();
 }
 
 /* ---- ini_io.cpp ------------------------------------------------------------------------------------------------- */

@@ -15,6 +15,7 @@
 #include "lights.h"
 #include "plat.h"
 #include "res.h"
+#include "screen.h"
 #include "texture.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,9 +94,9 @@ void txcopy_init(const Race *r)
     Ini *g = ini_load(p);
     g_enabled = ini_int(g, "OPTIONS", "texturecopy", 1);     /* 0x421d41 */
     ini_free(g);
-    /* check_texture_copy 0x424032: a test blit into HIRADAR.PCX (the radar texture of the 640x480 modes); when it
-     * fails, texture copying and the radar are off */
-    if (g_enabled && !tex_get("HIRADAR")) g_enabled = 0;
+    /* check_texture_copy 0x424032: a test blit into the radar texture of g_res_index, LORADAR.PCX (320x200) or
+     * HIRADAR.PCX (640x480); when it fails, texture copying and the radar are off */
+    if (g_enabled && !tex_get(scr_res_index() ? "HIRADAR" : "LORADAR")) g_enabled = 0;
     g_brake_on = 0;
     g_test_brake = getenv("A2_TEST_BRAKE") && atoi(getenv("A2_TEST_BRAKE"));     /* tests: lit as when braking */
     /* sub_42b060: the textures of the copies of this track type (Raser.ini [MAPS] arg 0) or of both (2) */
@@ -117,8 +118,10 @@ void txcopy_blit(int index, int frame)
     const CopyDef *d = &g_def[index];
     Target *t = &g_tgt[g_of[index]];
     int sw = 0, sh = 0;
-    /* the 16-bit set of the anim (g_8bit 0); a frame outside the anim is a fatal error in the original (0x42af59) */
-    uint8_t *s = hud_sprite_rgba(d->anim16, frame, &sw, &sh);
+    /* txt_blit_anim 0x42af0d: the anim of g_8bit's set (the 8-bit sprites are painted in the textures' palette,
+     * hud.h shows them through the screen's); a frame outside the anim is a fatal error in the original (0x42af59).
+     * The 8-bit modes add the texture's slot in the accumulator texture to x, y (0x42aec6): the same place here */
+    uint8_t *s = hud_sprite_rgba(scr_8bit() ? d->anim8 : d->anim16, frame, &sw, &sh);
     if (!s) return;
     /* blt_surf_2_surf 0x4697c0 gets the exclusive rectangles (0,0)-(w-1,h-1) -> (x,y)-(x+w-1,y+h-1): the sprite's last
      * row and column are not copied; a rectangle outside the texture is a fatal error (0x42afe0) */

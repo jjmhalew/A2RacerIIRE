@@ -12,6 +12,8 @@ void fog_init(void);                    /* init_bkg 0x418da0, once per race */
 /* bkg_update_colors 0x418f00 / bkg_set_fog_params 0x418830: this frame's fog, from the sky's progress factor a
  * (|sin(t pi/2)|) and the lap clock. Call before the sky is drawn; it sets the device states for the frame. */
 void fog_frame(float a);
+/* only the device states (fog off, COPY) for the frame: the software modes, which have no backdrop (screen.h) */
+void fog_states(void);
 /* the vertex fog of the sky backdrop (TL vertices: the specular alpha is the fog factor), over the sky's triangles
  * as just drawn (tex v = 0: the top edge) */
 void fog_sky(const GfxVertex *v, int n, float a);

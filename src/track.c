@@ -62,6 +62,8 @@ static void read_map_info(Track *t, int etappe)
     static const int grp[4] = { G_ROAD, G_LAND, G_EXTRA, G_RAIL };
     for (int i = 0; i < 4; i++) snprintf(t->texname[grp[i]], sizeof t->texname[0], "%s", nf > 2 + i ? f[2 + i] : defs[i]);
     snprintf(t->name, sizeof t->name, "%s", nf > 8 ? f[8] : "");
+    snprintf(t->sky[0], sizeof t->sky[0], "%s", nf > 6 ? f[6] : "scrl_lo");
+    snprintf(t->sky[1], sizeof t->sky[1], "%s", nf > 7 ? f[7] : "scrl_hi");
     ini_free(ini);
 }
 

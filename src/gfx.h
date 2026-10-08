@@ -76,6 +76,13 @@ void gfx_2d_end(void);
 void gfx_2d_to_screen(float vx, float vy, float *sx, float *sy);   /* virtual -> window pixel */
 void gfx_screen_to_2d(int sx, int sy, float *vx, float *vy);       /* window pixel -> virtual */
 
+/* the offscreen target of the low-resolution modes (screen.h): gfx_target_begin is gfx_begin drawing into a w x h
+ * target (colour and a 16-bit depth buffer), 0 = framebuffer objects unavailable (then draw into the window);
+ * gfx_target_present clears the window to black and draws the target into its rectangle (x, y, w, h in window
+ * pixels, top left) with nearest filtering; after it the window is the drawing size again (touch controls, 2D) */
+int  gfx_target_begin(int w, int h, float r, float g, float b);
+void gfx_target_present(int win_w, int win_h, int x, int y, int w, int h);
+
 GfxState gfx_state_opaque(void);
 void gfx_read_pixels(int w, int h, uint8_t *rgb);                  /* the back buffer, bottom-up rows */
 #endif

@@ -21,6 +21,7 @@ Playable from start to end, still being polished. What runs today:
 - the race rules: start sequence, laps and records, checkpoints and the highway time limit, speed cameras, quick
   service, game over, pause and quit
 - the Smacker films, sound effects and engine sounds, the first-start copy from the CD or an ISO image
+- the original's three display modes: the 3D-card mode and the 8-bit 640 x 480 and 320 x 200 software looks (below)
 
 Linux and Android builds come from CI and have not been tried on a device yet.
 See [docs/](docs) for everything known about the original.
@@ -99,6 +100,19 @@ start. In the menu's controls screen (*Besturing*) choose the joypad or the whee
 joystick device the screen's *Gevoeligheid* slider shapes the analogue steering, as in the original. Buttons work like
 the keys (gas and steering build up); sticks, triggers, wheels and pedals are analogue.
 
+### Game options
+The menu's options screen (*Opties*) has the original's sound, difficulty and *GRAPHICS* settings. *3D Kaart* is the
+3D-card mode (640x480 in 16 bit, drawn at your screen's resolution and shape). *640 x 480* and *320 x 200* are the
+original's 8-bit software modes for PCs without a 3D card, and look like them: the race is drawn at that resolution
+and scaled up with big square-edged pixels into a 4:3 picture, with the 8-bit textures and palette, the scrolling
+painted sky, the small overlay (in 640 x 480 the original puts it in the upper right corner) and without fog, tyre
+smoke, brake-light glows, the waving finish flag and transparency.
+
+The original's menu starts with *320 x 200* selected; this port starts in *3D Kaart* until you choose a mode on the
+options screen and press *OK* (it then notes `RESOLUTION_CHOSEN=1` in `Raser.ini`). The race itself reads
+`Raser.ini [Program] RESOLUTION` (0 = 320 x 200, 1 = 640 x 480, 3 = 3D Kaart), which the menu writes at every start.
+Texture packs (below) also apply in the 8-bit modes.
+
 ### Files
 Everything the game writes lives in the user folder (`%APPDATA%\A2RacerRE` on Windows, `~/.local/share/A2RacerRE` on
 Linux), or next to `A2RacerRE.exe` when a `data` folder is there (portable). The original's own settings files are kept
@@ -116,7 +130,7 @@ A `mods` folder in the user folder (or next to the program) replaces the game's 
   films (`.smk`), track and object files.
 
 `A2RacerRE --dump-textures FOLDER` writes all 147 textures of the game as PNG with their names, the starting point of a
-pack. Textures are drawn with mipmaps and 8x anisotropic filtering where the graphics card has it.
+pack. In *3D Kaart* textures are drawn with mipmaps and 8x anisotropic filtering where the graphics card has it.
 
 ## Building from source
 Windows 10 or 11; nothing needs to be installed first:

@@ -22,9 +22,17 @@ There are only two HUD variants, selected by the **8-bit flag `[0x4d9a70]`, not 
 | sprite anims (rc.img) | list `0x496118` | list `0x496150` |
 | HUD layout x offset | +320 when 640x480x8 (`0x41bfc0`, `0x41c0f0`: `x += 0x140` if hi-res && 8-bit) | 0 |
 
-So 640x480x8 draws the 320x200 layout shifted 320 px right (no y change). It looks like a leftover; a reimplementation
-can treat mode 1 as "lo layout, x+320" or drop it [?]. The radar, wait screens and sky use `[0x4d9a6c]` (resolution)
-instead: radar `0x41cf20`/`0x41c5a0`/`0x41cf90`, wait screen `0x4220e0` (`[wait_lo]`/`[wait_hi]`).
+So 640x480x8 draws the 320x200 layout shifted 320 px right (no y change): the whole overlay sits in the upper right
+quarter (the speed panel half way down the right edge, the centred texts at x = 480). It looks like a leftover, but it
+is what the code does. The radar, wait screens and sky use `[0x4d9a6c]` (resolution) instead: radar
+`0x41cf20`/`0x41c5a0`/`0x41cf90`, wait screen `0x4220e0` (`[wait_lo]`/`[wait_hi]`); in 640x480x8 the radar is the
+640x480 one (HIRADAR, rect row 1, bottom left) with the 8-bit dots. The game-over texts use the screen size.
+
+Port (hud.c `hud_set_mode`, screen.h): both sets. In 640x480x8 the overlay is shifted as in the original (reproduced,
+not "fixed": the player chose that mode). Each set has its own sprite and font textures; in the 8-bit modes every
+sprite and glyph is shown through the etappe's 8-bit palette (`e0N_pal.pcx`, what the hardware palette showed), the
+16-bit set through e02_pl16 with Game.ini's gamma. The lo fonts painted in e02_pl16 indices (FORMAT_IMAGES.md) look
+right through e0N_pal in the HUD's slots (only lo_fnt1..9 are drawn).
 
 ## 2. Primitives
 
@@ -57,7 +65,9 @@ Font record = `0x486d08 + (res*17 + font)*0x94`. Font numbers used by the HUD (s
 | 16 | lo_fnt1 (0,0) | lo_fnt1 (0,0) | damage `%2d@` (16-bit only; `@` is presumably a % glyph [?]) |
 
 (spacing pairs come from `0x469f70(x, y)`; `0x4182f0(rec, a8, a16)` picks a8 in 8-bit and a16 in 16-bit mode.
-lo-res also calls `sub_468930(0)` = `[0x4a0268]=0`, a glyph-blit flag [?].)
+lo-res also calls `sub_468930(0)` = `[0x4a0268]=0`: the glyph blit `0x4693e0` puts a glyph at `x = x / 2 * 2` (C
+division: rounded to even toward zero) while the flag is 1, its initial value; so 640x480 (8- and 16-bit) has its
+glyphs at even x, 320x200 does not. Port: the same, hud.c `hud_print`.)
 
 ## 3. Layout table `0x488510` and the sprite anims
 
@@ -200,14 +210,16 @@ works, tested in `0x423d20` with LORADAR/HIRADAR), `disable_overlay`==0 and `ove
   heading every frame (map stays north-up in the texture, the quad turns). Drawn as a TL-vertex triangle fan
   (DrawPrimitive type 6).
 
-Details (port: src/radar.c, called from race_draw before the dashboard; the 640x480 row throughout):
+Details (port: src/radar.c, called from race_draw before the dashboard; by g_res_index LORADAR 64x64 with rect row 0
+or HIRADAR with row 1, by g_8bit the map branch and the dots of anim 43 or 44, colours from the screen's palette):
 - Bounding box `0x41cc90` over the chunks' start points (+0x24 x, +0x2c z, ftol): init min 0x7fff, max -0x7fff; a
   chunk lowers the minimum *or else* raises the maximum; then -0xf00 / +0xf00 (64 pixels of margin). Map size
   (max - min) / 60 (C division). Pixel of a chunk `0x41c790`: ((x - minx) / 60, (maxz - z) / 60), clamped.
 - Map `0x41c9a0`: surface and radar texture cleared to `pformat_convert(0xfe)` (index 254 = the textures' colour key;
   LORADAR/HIRADAR on the CD are pure key colour), so only road and dots show. Per chunk, 16-bit branch: road pixel
   (index 13), a 7x7 block of edge colour (index 0) where there is no road yet, then a 3x3 road block (8-bit branch:
-  a 4x4 edge at -2..1). Port: e02_pl16 colours 13 (218,218,218) and 0 (black), with the gamma of the HUD.
+  a 4x4 edge at -2..1). Port: e02_pl16 colours 13 (218,218,218) and 0 (black), with the gamma of the HUD; in the
+  8-bit modes colours 13 and 0 of the etappe's palette and the 4x4 edge.
 - Window `0x41cf90`: (mx - 64, my - 64) .. x0 + 127 (exclusive corner); at the left/top edge 0..127, at the
   right/bottom edge (map-1-128 .. map-1). Blitted stretched (no key) to (2,2)-(126,126) of the texture.
 - Dots `0x41c880` (anim of item 15: 44 in 16-bit = frames 0 racer red, 1 player yellow, 2 cop green, 8x8): at the
@@ -255,7 +267,7 @@ Game.ini `[GFX OPTIONS]`: `disable_overlay` (no 2D overlay and no radar; `D` has
 0..3, `finish_flag`. Game.ini `texturecopy` and the LORADAR/HIRADAR copy test gate the radar.
 
 ## Open questions
-- Exact meaning of mode 640x480x8 (lo layout +320 px) - bug or intended.
-- `@` glyph in lo_fnt1 for the 16-bit damage percentage; `[0x4a0268]` lo-res glyph flag.
+- Exact meaning of mode 640x480x8 (lo layout +320 px) - bug or intended (the port reproduces it).
+- `@` glyph in lo_fnt1 for the 16-bit damage percentage.
 - What exactly triggers RADAR BONUS (`0x428d30`).
 - Language texts 0-16, 18-23, 30 (GEFLITST, BOETE, GETANKT, POLITIE, ...) are not referenced by spel.dat's HUD code.

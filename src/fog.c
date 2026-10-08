@@ -17,6 +17,7 @@
 #include "ini.h"
 #include "res.h"
 #include "rules.h"
+#include "screen.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,9 @@ static int g_base[3];                   /* 0x48815c: the fog colour at the start
 static struct { int period, count, r, g, b; float start, end; } g_fade;
 
 static int ftol(float f) { return (int)f; }   /* MSVC _ftol: truncation toward zero */
+
+static void apply(void);
+void fog_states(void) { apply(); }
 
 static void apply(void)
 {
@@ -61,6 +65,9 @@ void fog_init(void)                                                 /* init_bkg 
     g_end = 50.0f;
     g_base[0] = 220; g_base[1] = 125; g_base[2] = 55;               /* 0x48815c .. 0x488164 */
     memset(&g_fade, 0, sizeof g_fade);
+    /* the software modes (screen.h): init_bkg returns at once, no fog, no coin; set_game_render_states 0x423e94 put
+     * the device in TEXTUREMAPBLEND COPY for the whole race */
+    if (!scr_hw3d()) { g_decal = 1; return; }
     /* A2_TEST_FOG (tests): the coin always says yes */
     if (fog && ((rand() & 1) || getenv("A2_TEST_FOG"))) {
         if (fog != 2) g_decal = 1;                                  /* TEXTUREMAPBLEND COPY */

@@ -1,6 +1,7 @@
 /* texture.h - textures by file name, loaded once from RCS. The original loads the .pcx (8-bit modes) or, in the
- * 640x480x16 mode, the .tga with the same name where the CD has one (docs/FORMAT_IMAGES.md); this port always draws
- * in true colour, so it takes the .tga when there is one.
+ * 640x480x16 mode, the .tga with the same name where the CD has one (docs/FORMAT_IMAGES.md). So does this port: in
+ * the 8-bit modes (tex_set_mode, screen.h) the .pcx shown through the etappe's palette, with nearest filtering; else
+ * the .tga, mipmapped. Each mode has its own textures (a name's texture id stays the same within a mode).
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_TEXTURE_H
@@ -23,6 +24,10 @@ int tex_pixels(const char *name, Image *out);
 /* the size of the CD's own image of name (the .tga, else the .pcx), whatever a texture pack puts in its place */
 int tex_orig_size(const char *name, int *w, int *h);
 void tex_free_all(void);
+/* 1: the 8-bit modes, whose 8-bit images are shown through pal (768 bytes RGB; a new palette recolours the 8-bit
+ * textures loaded so far in place); 0: the 16-bit mode */
+void tex_set_mode(int bit8, const uint8_t *pal);
+int  tex_8bit(void);
 /* every texture of the game (the .tga where there is one, else the .pcx) as DIR/NAME.png, the starting point of a
  * texture pack (mods/textures, res.h); the colour key (255,0,127) stays in. Returns the number written. */
 int tex_dump_all(const char *dir);
