@@ -839,3 +839,21 @@ Game.ini object_lights and alpha_blending are on (the CD's settings), else this 
 (`lights_on`). `A2_TEST_BRAKE=1` keeps them lit (tests). Copy 15, the ADAC beacon, is in the table but never runs:
 adac_beacon_update `0x40c4a0` (blink every 150 ms while g_adac_beacon_on `0x4a5cd0`) has no caller, and nothing
 writes the flag either, so the port leaves it out.
+
+## 12. Port extras: multisampling and ambient occlusion (graphics.ini)
+
+Not in the original; both off by default (`graphics.ini [graphics] msaa=0 ao=0`, `A2_MSAA` / `A2_AO` for tests), only
+in the 640x480x16 mode (the 8-bit modes keep their look). Port: src/gfx_gl.c (the scene target), src/screen.c (the
+file, `scr_frame_begin` / `scr_frame_end`), race.c (`gfx_scene_ao` after the cars).
+- With one of them on, the 3D picture is drawn into an own target of the window's size instead of the window:
+  multisampled colour and depth renderbuffers with MSAA, else a colour texture with a 24-bit depth buffer. The overlay
+  is drawn into it too; at the end the target is resolved (MSAA) into its colour texture, which is drawn 1:1 into the
+  window, and the touch controls come after that. Needs OpenGL 3 / OpenGL ES 3 (or ARB_framebuffer_object):
+  multisampled renderbuffers and glBlitFramebuffer; an OpenGL ES 2.0 context leaves both off.
+- Ambient occlusion: after the opaque world, the objects and the cars (with their shadows), before the object lights
+  and the blended effects. The target's depth is blitted into a depth texture (one sample per pixel under MSAA); a
+  full-screen pass computes ground-truth ambient occlusion (Jimenez et al. 2016, in Intel's XeGTAO form; the shader
+  of WoodyRE's gtao.c): the view-space position and normal from the depth, 3 slice directions (rotated by a 4x4 Bayer
+  tile) with 6 steps each way, the highest horizon within 1.8 m (18 units) with a falloff, the cosine-weighted
+  visible arc. A depth-aware 4x4 box blur of it, to the power 1.5, is multiplied into the picture.
+- A lost context (Android) forgets the targets and the shaders; they are made again at the next frame.

@@ -122,12 +122,18 @@ options screen and press *OK* (it then notes `RESOLUTION_CHOSEN=1` in `Raser.ini
 `Raser.ini [Program] RESOLUTION` (0 = 320 x 200, 1 = 640 x 480, 3 = 3D Kaart), which the menu writes at every start.
 Texture packs (below) also apply in the 8-bit modes.
 
+**Extras of the port** (off by default, so the picture stays the original's): `graphics.ini` in the user folder, written
+with comments at the first race, has `msaa=` (edge smoothing: 0, 2, 4 or 8 samples) and `ao=1` (ambient occlusion,
+GTAO: shading in the corners and at contact points, under the guardrails and the cars, at the foot of buildings and
+bridges). They apply to *3D Kaart* from the next race on and need OpenGL 3 or OpenGL ES 3 (nearly every PC, most
+phones from about 2015 on, the Switch); without it they stay off.
+
 ### Files
 Everything the game writes lives in the user folder (`%APPDATA%\A2RacerRE` on Windows, `~/.local/share/A2RacerRE` on
 Linux), or next to `A2RacerRE.exe` when a `data` folder is there (portable). The original's own settings files are kept
 there in their original formats, so they can be edited the same way: `Game.ini` and `Raser.ini` (commented), `SLOTS.RAS`
 (the nine save slots), `options.ras`. The port adds `controller.ini` (the controller mapping and the touch controls,
-see above).
+see above) and `graphics.ini` (the extras above).
 
 ### Texture packs and mods
 A `mods` folder in the user folder (or next to the program) replaces the game's files without touching them:
@@ -229,5 +235,5 @@ press, which hides the touch controls), e.g. `"0.5:down 1 0.93 0.85; 7:down 2 0.
 `A2_TEST_WINDOW=WxH` sets the window size (e.g. `1600x720`, a phone's 20:9), `A2_TEST_MENU="EVENTS"` feeds every menu the events of `--menu-script` (with
 `A2_TEST_FINISH` this plays a whole career unattended), `A2_TRACE=1` prints the car and AI state,
 `A2_TEST_BRAKE=1` keeps the player car's brake lights lit (the texture copies of docs/RENDER.md 11),
-`A2_TEST_GLRESET=T` throws the OpenGL context away T seconds after the start, as Android can do while the app is in the
+`A2_MSAA=N` and `A2_AO=1` override graphics.ini, `A2_TEST_GLRESET=T` throws the OpenGL context away T seconds after the start, as Android can do while the app is in the
 background (the textures, buffers and shader are then made again from the copies the renderer keeps on Android).

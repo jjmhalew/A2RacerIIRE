@@ -10,6 +10,7 @@
 #include "res.h"
 #include "texture.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int g_res = 3, g_res_index = 1, g_8bit, g_hw3d = 1;
@@ -17,6 +18,35 @@ static uint8_t g_pal[768];
 static int g_target;                 /* this frame is drawn into the offscreen target */
 static int g_no_target;              /* there is none (no framebuffer objects): the window instead */
 static int g_fw = 640, g_fh = 480;   /* the size of this frame's drawing */
+
+/* graphics.ini in the user folder: the port's picture options (PORT EXTRA), written with its comments when missing */
+static const char GRAPHICS_INI[] =
+    "; graphics.ini - A2RacerRE: picture options of the port that the original does not have. With all of them 0 the\r\n"
+    "; picture is the original's. They apply to the 3D card mode (\"3D Kaart\", Raser.ini RESOLUTION 3), from the next\r\n"
+    "; race on, and need OpenGL 3 or OpenGL ES 3 (without it they stay off).\r\n"
+    "[graphics]\r\n"
+    "; edge smoothing of the 3D picture (MSAA): 0 off, 2, 4 or 8 samples\r\n"
+    "msaa=0\r\n"
+    "; ambient occlusion (GTAO): 1 shades the corners and contact points (under the guardrails and the cars, the feet\r\n"
+    "; of buildings and bridges) by how much of the sky they see\r\n"
+    "ao=0\r\n";
+
+/* the options of graphics.ini; A2_MSAA / A2_AO override them (tests) */
+static void graphics_options(int *msaa, int *ao)
+{
+    char p[1024];
+    res_user_path(p, sizeof p, "graphics.ini");
+    if (!plat_exists(p)) {
+        FILE *f = fopen(p, "wb");
+        if (f) { fputs(GRAPHICS_INI, f); fclose(f); }
+    }
+    Ini *g = ini_load(p);
+    *msaa = ini_int(g, "graphics", "msaa", 0);
+    *ao = ini_int(g, "graphics", "ao", 0);
+    ini_free(g);
+    if (getenv("A2_MSAA")) *msaa = atoi(getenv("A2_MSAA"));
+    if (getenv("A2_AO")) *ao = atoi(getenv("A2_AO"));
+}
 
 /* load_game_palette 0x420900: Raser.ini [PALET] ETAPPEn = <8-bit>,<16-bit> (skelet2d_read_ini 0x4209b0 copies the
  * two names into g_pal_low_name 0x489601 / g_pal_high_name 0x489611); the 8-bit one for RESOLUTION 0 and 1 */
@@ -52,6 +82,11 @@ void scr_init(int etappe)
     else { g_res_index = 1; g_8bit = 0; g_hw3d = 1; }
     if (g_8bit) load_palette(r, etappe);
     ini_free(r);
+    {   /* the port's extras: only on the 16-bit picture (the 8-bit modes keep their period look) */
+        int msaa = 0, ao = 0;
+        if (!g_8bit) graphics_options(&msaa, &ao);
+        gfx_post_set(msaa, ao);
+    }
     tex_set_mode(g_8bit, g_pal);     /* texture_set_source_type(1) (.tga) only with g_hw_accel (init_3d_library 0x42359f) */
     hud_set_mode(g_8bit, g_res_index, g_pal);
 }
@@ -71,7 +106,7 @@ void scr_frame_begin(float r, float g, float b, int *w, int *h)
     if (g_target) { g_fw = scr_w(); g_fh = scr_h(); }
     else {
         plat_size(&g_fw, &g_fh);
-        gfx_begin(g_fw, g_fh, r, g, b);
+        gfx_scene_begin(g_fw, g_fh, r, g, b);     /* the window, or graphics.ini's scene target */
     }
     if (w) *w = g_fw;
     if (h) *h = g_fh;
@@ -97,7 +132,7 @@ static void box(int *x, int *y, int *w, int *h)
 
 void scr_frame_end(void)
 {
-    if (!g_target) return;
+    if (!g_target) { gfx_scene_end(); return; }
     int x, y, w, h, W, H;
     box(&x, &y, &w, &h);
     plat_size(&W, &H);

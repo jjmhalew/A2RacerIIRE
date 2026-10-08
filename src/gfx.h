@@ -84,6 +84,17 @@ void gfx_screen_to_2d(int sx, int sy, float *vx, float *vy);       /* window pix
 int  gfx_target_begin(int w, int h, float r, float g, float b);
 void gfx_target_present(int win_w, int win_h, int x, int y, int w, int h);
 
+/* PORT EXTRA (graphics.ini, docs/RENDER.md 12): the 3D picture of the 640x480x16 mode drawn into an own target of
+ * the window's size, multisampled (msaa = 2, 4, 8 samples; 0 off) and / or with ambient occlusion (ao 1). Both 0: the
+ * original's picture, drawn into the window as before. Needs OpenGL 3 / OpenGL ES 3, else they stay off. */
+void gfx_post_set(int msaa, int ao);
+/* gfx_begin, then (an option on) the target bound for the frame; 1 = drawing into it */
+int  gfx_scene_begin(int w, int h, float r, float g, float b);
+/* after the opaque world and cars, before anything blended: the occlusion multiplied into the picture */
+void gfx_scene_ao(const Mat4 *proj, float znear, float zfar);
+/* the target into the window (after the overlay; the touch controls are drawn into the window after this) */
+void gfx_scene_end(void);
+
 GfxState gfx_state_opaque(void);
 void gfx_read_pixels(int w, int h, uint8_t *rgb);                  /* the back buffer, bottom-up rows */
 #endif

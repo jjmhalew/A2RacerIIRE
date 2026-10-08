@@ -955,6 +955,7 @@ static void race_draw(float alpha)
         model_draw_matrix(anim_model(c->anim, c->frame), &m);
         wheels_draw(R, o, &m, alpha);
     }
+    gfx_scene_ao(&proj, 10, 12500);                     /* PORT EXTRA: graphics.ini ao, on the opaque picture */
     lights_draw();                                      /* render_game: object lights after the objects (lights.c) */
     gfx_set_model(NULL);
     {   /* the effects' billboards copy the camera's orientation */

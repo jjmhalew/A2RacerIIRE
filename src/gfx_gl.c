@@ -287,13 +287,15 @@ static void mesh_upload(GfxMesh *m, const void *v, const void *idx)
 }
 
 static void fbo_forget(void);
+static void post_forget(void);
 
 /* plat_gl_lost: the new context has none of the old objects; make them again under the same handles */
 static void check_lost(void)
 {
     if (!plat_gl_lost()) return;
     setup();
-    fbo_forget();                               /* the offscreen target is made again at its next use */
+    fbo_forget();                               /* the offscreen targets are made again at their next use */
+    post_forget();
     glUniform4f(u_tint, g_tint[0], g_tint[1], g_tint[2], g_tint[3]);
     gfx_set_fog(g_fog[0], g_fog[1], g_fog[2], g_fog[3], g_fog[4]);
     int n = 0;
@@ -749,6 +751,386 @@ void gfx_target_present(int win_w, int win_h, int x, int y, int w, int h)
     apply_state(&st);
     glBindTexture(GL_TEXTURE_2D, g_fb.tex);      /* nearest: the period's big pixels */
     glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+/* ---- the scene target: multisampling and ambient occlusion (PORT EXTRA, graphics.ini; docs/RENDER.md 12) -------- */
+/* The original draws without either. With one of them on (and OpenGL 3 / OpenGL ES 3, for the multisampled targets and
+ * the depth blit), the 3D picture of the 640x480x16 mode is drawn into an own target of the window's size instead of
+ * the window: multisampled with MSAA (colour and depth renderbuffers), else a colour texture with a depth buffer.
+ * gfx_scene_ao, after the opaque world and cars, blits its depth into a depth texture and runs the ground-truth
+ * ambient occlusion of Jimenez et al. 2016 (in XeGTAO's form, the shader of WoodyRE's gtao.c): the visibility per
+ * pixel into an RGBA8 texture, then a depth-aware 4x4 blur multiplied into the picture. gfx_scene_end resolves the
+ * target (MSAA) into its texture and draws that into the window; the overlay is drawn into the target before that,
+ * the touch controls into the window after it. */
+#define GL_READ_FRAMEBUFFER 0x8CA8
+#define GL_DRAW_FRAMEBUFFER 0x8CA9
+#define GL_RGBA8 0x8058
+#define GL_DEPTH_COMPONENT 0x1902
+#define GL_DEPTH_COMPONENT24 0x81A6
+#define GL_MAX_SAMPLES 0x8D57
+#define GL_VERSION 0x1F02
+#define GL_TEXTURE1 0x84C1
+#define GL_TEXTURE_COMPARE_MODE 0x884C
+#define GL_SRC_COLOR 0x0300
+#define AO_RADIUS 18.0f               /* world units (1/10 m): 1.8 m, about half a car */
+#define AO_POWER 1.5f                 /* visibility ^ POWER: a little more contrast than the raw integral */
+
+static void (GLAPI *glBlitFramebuffer)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
+static void (GLAPI *glRenderbufferStorageMultisample)(GLenum, GLsizei, GLenum, GLsizei, GLsizei);
+static void (GLAPI *glGetIntegerv)(GLenum, GLint *);
+static void (GLAPI *glUniform2f)(GLint, GLfloat, GLfloat);
+static void (GLAPI *glUniform3f)(GLint, GLfloat, GLfloat, GLfloat);
+
+static int g_msaa, g_ao;                    /* gfx_post_set */
+static int g_post_ok = -1;                  /* -1 = not checked yet, 0 = this GL cannot, 1 = can */
+static GLint g_max_samples;
+static struct {
+    GLuint fbo, color, depth;               /* what the 3D picture is drawn into (fbo = rfbo without MSAA) */
+    GLuint rfbo, tex;                       /* the colour texture the frame ends in */
+    GLuint dfbo, dtex, afbo, atex;          /* ambient occlusion: the depth copy, the visibility */
+    int w, h, samples, ao, valid;
+} g_sc;
+static GLuint g_prog_ao, g_prog_mix;
+static GLint ua_depth, ua_size, ua_z, ua_scale, ua_radius, um_ao, um_depth, um_size, um_z, um_power;
+static int g_ao_failed, g_scene;
+
+static const char *AO_VS =
+    "attribute vec3 a_pos;\n"
+    "void main() { gl_Position = vec4(a_pos.xy, 0.0, 1.0); }\n";
+static const char *AO_FS =
+    "#ifdef GL_ES\nprecision highp float;\n#endif\n"
+    "uniform sampler2D uDepth;\n"
+    "uniform vec2 uSize;\n"                   /* the target in pixels */
+    "uniform vec3 uZ;\n"                      /* zn * zf, zf - zn, zf */
+    "uniform vec2 uScale;\n"                  /* the projection's x / y scale */
+    "uniform float uRadius;\n"
+    "const float PI = 3.14159265, HALF_PI = 1.57079633;\n"
+    "const int SLICES = 3, STEPS = 6;\n"
+    "float lin(float d) { return uZ.x / (uZ.z - d * uZ.y); }\n"
+    "float dep(vec2 uv) { return texture2D(uDepth, uv).r; }\n"
+    "vec3 viewPos(vec2 uv, float d) { float L = lin(d); vec2 n = uv * 2.0 - 1.0; return vec3(n.x * L / uScale.x, n.y * L / uScale.y, -L); }\n"
+    "vec3 posAt(vec2 uv) { return viewPos(uv, dep(uv)); }\n"
+    "float fastAcos(float x) { float r = (-0.156583 * abs(x) + HALF_PI) * sqrt(1.0 - abs(x)); return x >= 0.0 ? r : PI - r; }\n"
+    "float bayer2(vec2 v) { return mod(2.0 * v.x + 3.0 * v.y, 4.0); }\n"
+    "void main() {\n"
+    "    vec2 inv = 1.0 / uSize, uv = gl_FragCoord.xy * inv;\n"
+    "    float d = dep(uv);\n"
+    "    if (d >= 1.0) { gl_FragColor = vec4(1.0); return; }\n"
+    "    vec3 P = viewPos(uv, d);\n"
+    /* the normal from the neighbour on the same surface per axis (the smaller depth step) */
+    "    vec3 l = posAt(uv - vec2(inv.x, 0.0)), r = posAt(uv + vec2(inv.x, 0.0)), b = posAt(uv - vec2(0.0, inv.y)), t = posAt(uv + vec2(0.0, inv.y));\n"
+    "    vec3 dx = abs(r.z - P.z) < abs(P.z - l.z) ? r - P : P - l;\n"
+    "    vec3 dy = abs(t.z - P.z) < abs(P.z - b.z) ? t - P : P - b;\n"
+    "    vec3 V = normalize(-P), N = normalize(cross(dx, dy));\n"
+    "    if (dot(N, V) < 0.0) N = -N;\n"
+    "    float rpx = min(uRadius * uScale.y * 0.5 * uSize.y / -P.z, 0.25 * uSize.y);\n"   /* the radius in pixels, capped */
+    "    if (rpx < 1.0) { gl_FragColor = vec4(1.0); return; }\n"
+    "    vec2 c = mod(floor(gl_FragCoord.xy), 4.0);\n"
+    "    float bay = 4.0 * bayer2(mod(c, 2.0)) + bayer2(floor(c * 0.5));\n"                /* 0..15, one 4x4 tile */
+    "    float nSlice = (bay + 0.5) / 16.0, nStep = (mod(bay * 5.0 + 3.0, 16.0) + 0.5) / 16.0;\n"
+    "    float fMul = -1.0 / (0.615 * uRadius), fAdd = (1.0 - 0.615) / 0.615 + 1.0;\n"    /* falloff over the outer 61.5 % */
+    "    float vis = 0.0;\n"
+    "    for (int s = 0; s < SLICES; s++) {\n"
+    "        float phi = (float(s) + nSlice) * (PI / float(SLICES));\n"
+    "        vec2 om = vec2(cos(phi), sin(phi));\n"
+    "        vec3 dir = vec3(om, 0.0), ortho = dir - dot(dir, V) * V, axis = normalize(cross(ortho, V));\n"
+    "        vec3 pN = N - axis * dot(N, axis); float pLen = length(pN);\n"
+    "        if (pLen < 1e-4) { vis += 1.0; continue; }\n"
+    "        float cosN = clamp(dot(pN, V) / pLen, 0.0, 1.0), n = sign(dot(ortho, pN)) * fastAcos(cosN);\n"
+    "        float low0 = cos(n + HALF_PI), low1 = cos(n - HALF_PI), h0 = low0, h1 = low1;\n"
+    "        for (int k = 0; k < STEPS; k++) {\n"
+    "            float st = (float(k) + nStep) / float(STEPS); st *= st;\n"
+    "            vec2 off = om * (st * rpx + 1.0) * inv;\n"
+    "            vec3 d0 = posAt(uv + off) - P, d1 = posAt(uv - off) - P;\n"
+    "            float l0 = length(d0), l1 = length(d1);\n"
+    "            h0 = max(h0, mix(low0, dot(d0, V) / l0, clamp(l0 * fMul + fAdd, 0.0, 1.0)));\n"
+    "            h1 = max(h1, mix(low1, dot(d1, V) / l1, clamp(l1 * fMul + fAdd, 0.0, 1.0)));\n"
+    "        }\n"
+    "        float a1 = n + clamp(fastAcos(h0) - n, -HALF_PI, HALF_PI), a0 = n + clamp(-fastAcos(h1) - n, -HALF_PI, HALF_PI), sn = sin(n);\n"
+    "        vis += pLen * ((cosN + 2.0 * a0 * sn - cos(2.0 * a0 - n)) + (cosN + 2.0 * a1 * sn - cos(2.0 * a1 - n))) * 0.25;\n"
+    "    }\n"
+    "    gl_FragColor = vec4(vec3(clamp(vis / float(SLICES), 0.0, 1.0)), 1.0);\n"
+    "}\n";
+static const char *MIX_FS =
+    "#ifdef GL_ES\nprecision highp float;\n#endif\n"
+    "uniform sampler2D uAO, uDepth;\n"
+    "uniform vec2 uSize;\n"
+    "uniform vec3 uZ;\n"
+    "uniform float uPower;\n"
+    "float lin(float d) { return uZ.x / (uZ.z - d * uZ.y); }\n"
+    "void main() {\n"
+    "    vec2 inv = 1.0 / uSize, uv = gl_FragCoord.xy * inv;\n"
+    "    float d = texture2D(uDepth, uv).r;\n"
+    "    if (d >= 1.0) { gl_FragColor = vec4(1.0); return; }\n"
+    "    float Lc = lin(d), sum = 0.0, wsum = 0.0;\n"
+    "    for (int j = -2; j < 2; j++) for (int i = -2; i < 2; i++) {\n"
+    "        vec2 q = uv + vec2(float(i), float(j)) * inv;\n"
+    "        float w = exp(-abs(lin(texture2D(uDepth, q).r) - Lc) / (0.04 * Lc));\n"
+    "        sum += texture2D(uAO, q).r * w; wsum += w;\n"
+    "    }\n"
+    "    float ao = pow(sum / wsum, uPower);\n"
+    "    gl_FragColor = vec4(ao, ao, ao, 1.0);\n"
+    "}\n";
+
+void gfx_post_set(int msaa, int ao)
+{
+    g_msaa = msaa >= 2 ? msaa : 0;
+    g_ao = ao != 0;
+}
+
+/* OpenGL 3 / OpenGL ES 3 (or a desktop OpenGL 2.1 with ARB_framebuffer_object): multisampled renderbuffers and
+ * glBlitFramebuffer. An OpenGL ES 2.0 context finds the entry points too, so its version decides */
+static int post_capable(void)
+{
+    if (g_post_ok >= 0) return g_post_ok;
+    g_post_ok = 0;
+    if (!g_has_fbo) return 0;
+    const char *ver = (const char *)glGetString(GL_VERSION), *ext = (const char *)glGetString(GL_EXTENSIONS);
+    const char *p = ver ? ver : "";
+    while (*p && (*p < '0' || *p > '9')) p++;
+    int major = atoi(p);
+    if (major < 3 && !(!plat_is_gles() && ext && strstr(ext, "GL_ARB_framebuffer_object"))) {
+        fprintf(stderr, "gfx: %s: no MSAA / ambient occlusion (they need OpenGL 3 or OpenGL ES 3)\n", ver ? ver : "?");
+        return 0;
+    }
+#define LOAD(v, name) do { void *f_ = plat_gl_proc(name); if (!f_) f_ = plat_gl_proc(name "EXT"); memcpy(&v, &f_, sizeof f_); } while (0)
+    LOAD(glBlitFramebuffer, "glBlitFramebuffer");
+    LOAD(glRenderbufferStorageMultisample, "glRenderbufferStorageMultisample");
+    LOAD(glGetIntegerv, "glGetIntegerv");
+    LOAD(glUniform2f, "glUniform2f");
+    LOAD(glUniform3f, "glUniform3f");
+#undef LOAD
+    if (!glBlitFramebuffer || !glRenderbufferStorageMultisample || !glGetIntegerv || !glUniform2f || !glUniform3f) return 0;
+    glGetIntegerv(GL_MAX_SAMPLES, &g_max_samples);
+    g_post_ok = 1;
+    return 1;
+}
+
+static void scene_destroy(void)
+{
+    if (g_sc.valid) {
+        GLuint fb[4] = { g_sc.fbo != g_sc.rfbo ? g_sc.fbo : 0, g_sc.rfbo, g_sc.dfbo, g_sc.afbo }, rb[2] = { g_sc.color, g_sc.depth };
+        GLuint tx[3] = { g_sc.tex, g_sc.dtex, g_sc.atex };
+        for (int i = 0; i < 4; i++) if (fb[i]) glDeleteFramebuffers(1, &fb[i]);
+        for (int i = 0; i < 2; i++) if (rb[i]) glDeleteRenderbuffers(1, &rb[i]);
+        for (int i = 0; i < 3; i++) if (tx[i]) glDeleteTextures(1, &tx[i]);
+    }
+    memset(&g_sc, 0, sizeof g_sc);
+}
+
+static GLuint target_tex(int w, int h, GLenum ifmt, GLenum fmt, GLenum type)
+{
+    GLuint t;
+    glGenTextures(1, &t);
+    glBindTexture(GL_TEXTURE_2D, t);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (fmt == GL_DEPTH_COMPONENT) glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, (GLint)ifmt, w, h, 0, fmt, type, NULL);
+    return t;
+}
+
+static GLuint renderbuffer(int samples, GLenum fmt, int w, int h)
+{
+    GLuint r;
+    glGenRenderbuffers(1, &r);
+    glBindRenderbuffer(GL_RENDERBUFFER, r);
+    if (samples) glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, fmt, w, h);
+    else glRenderbufferStorage(GL_RENDERBUFFER, fmt, w, h);
+    return r;
+}
+
+static int scene_create(int w, int h)
+{
+    scene_destroy();
+    int s = g_msaa > g_max_samples ? g_max_samples : g_msaa;
+    g_sc.valid = 1;
+    g_sc.w = w;
+    g_sc.h = h;
+    g_sc.samples = s >= 2 ? s : 0;
+    g_sc.ao = g_ao;
+    g_sc.tex = target_tex(w, h, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+    glGenFramebuffers(1, &g_sc.rfbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_sc.rfbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_sc.tex, 0);
+    int ok = 1;
+    if (g_sc.samples) {
+        ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        glGenFramebuffers(1, &g_sc.fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, g_sc.fbo);
+        g_sc.color = renderbuffer(g_sc.samples, GL_RGBA8, w, h);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, g_sc.color);
+    } else g_sc.fbo = g_sc.rfbo;
+    g_sc.depth = renderbuffer(g_sc.samples, GL_DEPTH_COMPONENT24, w, h);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, g_sc.depth);
+    ok = ok && glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    if (ok && g_sc.ao) {   /* the depth copy (with the visibility texture as its colour, for completeness) */
+        g_sc.dtex = target_tex(w, h, GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT);
+        g_sc.atex = target_tex(w, h, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+        glGenFramebuffers(1, &g_sc.dfbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, g_sc.dfbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_sc.atex, 0);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, g_sc.dtex, 0);
+        ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+        glGenFramebuffers(1, &g_sc.afbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, g_sc.afbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_sc.atex, 0);
+        ok = ok && glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (!ok) {
+        fprintf(stderr, "gfx: no %dx%d scene target (MSAA %d, AO %d): drawn as the original\n", w, h, g_sc.samples, g_sc.ao);
+        scene_destroy();
+    }
+    return ok;
+}
+
+static void post_forget(void)              /* a lost context: the names are gone, the programs too */
+{
+    memset(&g_sc, 0, sizeof g_sc);
+    g_prog_ao = g_prog_mix = 0;
+    g_scene = 0;
+}
+
+int gfx_scene_begin(int w, int h, float r, float g, float b)
+{
+    gfx_begin(w, h, r, g, b);
+    g_scene = 0;
+    if ((!g_msaa && !g_ao) || w <= 0 || h <= 0 || !post_capable()) return 0;
+    int want = g_msaa > g_max_samples ? g_max_samples : g_msaa;
+    if (want < 2) want = 0;
+    if (!g_sc.valid || g_sc.w != w || g_sc.h != h || g_sc.samples != want || g_sc.ao != g_ao)
+        if (!scene_create(w, h)) { g_post_ok = 0; return 0; }
+    glBindFramebuffer(GL_FRAMEBUFFER, g_sc.fbo);
+    glViewport(0, 0, w, h);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    g_scene = 1;
+    return 1;
+}
+
+static GLuint post_program(const char *fs)
+{
+    GLuint v = compile(GL_VERTEX_SHADER, AO_VS), f = compile(GL_FRAGMENT_SHADER, fs);
+    if (!v || !f) return 0;
+    GLuint p = glCreateProgram();
+    glAttachShader(p, v);
+    glAttachShader(p, f);
+    glBindAttribLocation(p, 0, "a_pos");
+    glLinkProgram(p);
+    GLint ok = 0;
+    glGetProgramiv(p, GL_LINK_STATUS, &ok);
+    return ok ? p : 0;
+}
+
+/* a quad over the whole viewport in clip space, through the stream buffer */
+static void fullscreen_quad(void)
+{
+    GfxVertex v[6] = {
+        { -1, -1, 0, 0, 0, 255, 255, 255, 255 }, { 1, -1, 0, 1, 0, 255, 255, 255, 255 }, { 1, 1, 0, 1, 1, 255, 255, 255, 255 },
+        { -1, -1, 0, 0, 0, 255, 255, 255, 255 }, { 1, 1, 0, 1, 1, 255, 255, 255, 255 }, { -1, 1, 0, 0, 1, 255, 255, 255, 255 } };
+    glBindBuffer(GL_ARRAY_BUFFER, g_stream_vbo);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)sizeof v, v, GL_STREAM_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    set_pointers();
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+void gfx_scene_ao(const Mat4 *proj, float zn, float zf)
+{
+    if (!g_scene || !g_sc.ao || g_ao_failed) return;
+    if (!g_prog_ao) {
+        g_prog_ao = post_program(AO_FS);
+        g_prog_mix = post_program(MIX_FS);
+        if (!g_prog_ao || !g_prog_mix) {
+            fprintf(stderr, "gfx: the ambient occlusion shaders failed: off\n");
+            g_ao_failed = 1;
+            glUseProgram(g_prog);
+            return;
+        }
+        ua_depth = glGetUniformLocation(g_prog_ao, "uDepth");
+        ua_size = glGetUniformLocation(g_prog_ao, "uSize");
+        ua_z = glGetUniformLocation(g_prog_ao, "uZ");
+        ua_scale = glGetUniformLocation(g_prog_ao, "uScale");
+        ua_radius = glGetUniformLocation(g_prog_ao, "uRadius");
+        um_ao = glGetUniformLocation(g_prog_mix, "uAO");
+        um_depth = glGetUniformLocation(g_prog_mix, "uDepth");
+        um_size = glGetUniformLocation(g_prog_mix, "uSize");
+        um_z = glGetUniformLocation(g_prog_mix, "uZ");
+        um_power = glGetUniformLocation(g_prog_mix, "uPower");
+    }
+    int w = g_sc.w, h = g_sc.h;
+    /* 1. the depth, one sample of each pixel under MSAA */
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, g_sc.fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, g_sc.dfbo);
+    glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    /* 2. the visibility */
+    glBindFramebuffer(GL_FRAMEBUFFER, g_sc.afbo);
+    glViewport(0, 0, w, h);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(0);
+    glDisable(GL_CULL_FACE);
+    glUseProgram(g_prog_ao);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, g_sc.dtex);
+    glUniform1i(ua_depth, 0);
+    glUniform2f(ua_size, (float)w, (float)h);
+    glUniform3f(ua_z, zn * zf, zf - zn, zf);
+    glUniform2f(ua_scale, proj->m[0], proj->m[5]);
+    glUniform1f(ua_radius, AO_RADIUS);
+    fullscreen_quad();
+    /* 3. blurred and multiplied into the picture */
+    glBindFramebuffer(GL_FRAMEBUFFER, g_sc.fbo);
+    glUseProgram(g_prog_mix);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, g_sc.atex);
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(um_ao, 1);
+    glUniform1i(um_depth, 0);
+    glUniform2f(um_size, (float)w, (float)h);
+    glUniform3f(um_z, zn * zf, zf - zn, zf);
+    glUniform1f(um_power, AO_POWER);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ZERO, GL_SRC_COLOR);
+    fullscreen_quad();
+    /* back to the renderer's own state (apply_state sets the rest per draw) */
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glActiveTexture(GL_TEXTURE0);
+    glUseProgram(g_prog);
+    upload_mvp();
+}
+
+/* the target into the window, 1:1 (the colour texture's rows are bottom-up like the window's) */
+void gfx_scene_end(void)
+{
+    if (!g_scene) return;
+    g_scene = 0;
+    int w = g_sc.w, h = g_sc.h;
+    if (g_sc.samples) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, g_sc.fbo);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, g_sc.rfbo);
+        glBlitFramebuffer(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w, h);
+    Mat4 id = m4_identity();
+    Mat4 sp = g_proj, sv = g_view, sm = g_model;
+    g_proj = g_view = g_model = id;
+    upload_mvp();
+    GfxState st = { BLEND_NONE, 0, 0, 0, 0, 0 };
+    int two_d = g_2d;
+    g_2d = 1;                                  /* no fog, no decal */
+    apply_state(&st);
+    g_2d = two_d;
+    glUniform4f(u_tint, 1, 1, 1, 1);
+    glBindTexture(GL_TEXTURE_2D, g_sc.tex);
+    fullscreen_quad();
+    glUniform4f(u_tint, g_tint[0], g_tint[1], g_tint[2], g_tint[3]);
+    g_proj = sp; g_view = sv; g_model = sm;
+    upload_mvp();
 }
 
 /* GLES only guarantees RGBA reads */
