@@ -84,7 +84,9 @@ static int load_mesh(Model *m, const char *name, unsigned tex)
     if (!parse_d3d(name, &v, &nv, &idx, &ni)) return 0;
     m->min = v3(1e9f, 1e9f, 1e9f);
     m->max = v3(-1e9f, -1e9f, -1e9f);
+    int inside = 1;
     for (int i = 0; i < nv; i++) {
+        if (v[i].u < -0.01f || v[i].u > 1.01f || v[i].v < -0.01f || v[i].v > 1.01f) inside = 0;
         if (v[i].x < m->min.x) m->min.x = v[i].x;
         if (v[i].y < m->min.y) m->min.y = v[i].y;
         if (v[i].z < m->min.z) m->min.z = v[i].z;
@@ -95,8 +97,15 @@ static int load_mesh(Model *m, const char *name, unsigned tex)
         if (r > m->radius) m->radius = r;
     }
     /* colour key = alpha test; faces are visible when clockwise on screen (D3DCULL_CCW), see gfx cull */
-    GfxRange r = { tex, 0, ni, gfx_state_opaque() };
+    GfxRange r = { tex, 0, ni, gfx_state_opaque(), 0 };
     r.state.cull = 1;
+    /* The original never sets D3DRENDERSTATE_TEXTUREADDRESS, so its textures wrap (the DX5 default), and with bilinear
+     * filtering a vertex on the texture's edge takes up to half of the texel row/column on the opposite edge. The
+     * meshes share texture pages: MPOLIZEI's front centre line lies at v = 0.0002 of CARS01, whose bottom rows are the
+     * magenta (255,0,255, not the colour key) background of other drawings, so the GL port drew a pink line down the
+     * windscreen, bonnet and bumper. A mesh whose UVs stay inside the texture (most of them; others tile it, e.g.
+     * R_ASTRA's v up to 214) samples it clamped to the edges. */
+    r.clamp = inside;
     m->mesh = gfx_mesh_create(v, nv, idx, ni, &r, 1);
     m->nverts = nv;
     m->nfaces = ni / 3;

@@ -186,7 +186,7 @@ int track_load(Track *t, int etappe)
     for (int g = 0; g < G_COUNT; g++) {
         const Texture *tx = tex_get(t->texname[g]);
         t->tex[g] = tx ? tx->id : 0;
-        GfxRange rg = { t->tex[g], 0, pool[g].ni, gfx_state_opaque() };
+        GfxRange rg = { t->tex[g], 0, pool[g].ni, gfx_state_opaque(), 0 };
         rg.state.alpha_test = 1;
         if (pool[g].nv > 65535) fprintf(stderr, "etappe%d: group %d has %d vertices\n", etappe, g, pool[g].nv);
         t->mesh[g] = gfx_mesh_create(pool[g].v, pool[g].nv, pool[g].idx, pool[g].ni, &rg, 1);
