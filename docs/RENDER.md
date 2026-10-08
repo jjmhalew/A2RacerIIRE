@@ -18,8 +18,46 @@ formats are documented elsewhere. Addresses are spel.dat virtual addresses; name
 
 `g_hw3d` (the "accelerated" path, TGA textures) switches on: the textured sky backdrop, MODULATE texture blending,
 bilinear filtering, Gouraud shade mode, fog, clouds/lights/skid marks (alpha caps permitting). The 8-bit modes are
-the old software renderer path (2D sky blit, TEXTUREMAPBLEND COPY, nearest filtering). A reimplementation should simply
-implement the `g_hw3d = 1` path.
+the old software renderer path (2D sky blit, TEXTUREMAPBLEND COPY, nearest filtering).
+
+What `g_hw_accel` 0 / `g_8bit` 1 change, call site by call site (xrefs of `0x4d9aac`, `0x4d9a70`, `0x4d9a6c`):
+
+| Where | 8-bit modes (RESOLUTION 0, 1) |
+|---|---|
+| `init_3d_library` 0x4234e0 | `texture_set_partition(8.0)` and the accumulator texture `init.pcx` (all textures in 256x256 slots of one 2048x2048 surface); no backdrop image, no `texture_set_source_type(1)` (so the **.pcx** files), no colour key call, no alpha caps check; then `load_game_palette` 0x420900 loads the etappe's `e0N_pal.pcx` (`[PALET] ETAPPEn` first name) into the hardware palette |
+| `rceng_set_hw_uv` 0x441e90 | the road's UVs remapped into the accumulator's slots (the same picture) |
+| `load_anim_config` 0x4236d0 | the `*8_packed` / `*8` preload lists instead of `*16` (which anims are loaded; same meshes and textures) |
+| `set_game_render_states` 0x423e40 | TEXTUREMAPBLEND 7 COPY (`0x423e94`), FILTER: NEAREST (LINEAR needs g_hw3d), no SHADEMODE GOURAUD |
+| `gfx_asci_init_fonts` 0x418330 | font set 0 (`lo_*`) with its own spacing; at g_res_index 0 `[0x4a0268]` = 0: glyphs are not put at even x (HUD.md 2) |
+| `hud_load_anims` 0x41bd50 | the 8-bit sprite list 0x496118; layout row 0 (HUD.md) |
+| `sky_init_moving_sky` 0x41e740 / `render_game` 0x4250b1 | the 2D sky blit (7. Software path) instead of the backdrop (`init_bkg` / `draw_bkg` return at once: **no fog**) |
+| `light_init` 0x41b343 / `light_draw` 0x41b757 | no object lights: the brake lights are texture copies (11.) |
+| `cloud_init` 0x4201b1 | clouds = 0: no tyre smoke |
+| `skid_draw` 0x41e430 / 0x41e6e8 | the skid marks are drawn **without** the blend states (opaque, COPY: the texture alone) |
+| `flag_draw` 0x41af8d / finish callback 0x4155fb | the finish flag is only started with g_hw3d |
+| `txt_blit_anim` 0x42aec6 / 0x42af0d | the 8-bit anim of a copy, x/y + the texture's accumulator slot |
+| `radar_*` (by g_res_index) | LORADAR 64x64 and rect row 0 at 320x200 (HUD.md 4.8); the 8-bit map branch, dots of anim 43 |
+| `gfx_draw_wait_screen` 0x41bde0 | `[wait_lo]` / `[wait_hi]` by g_res_index, drawn as the .pcx with its own palette |
+| `cops_event_camera` 0x4156d0.. | the speed-camera flash: the whole palette (235, 235, 235) for 2 frames |
+| `handle_game` 0x424ca1 | the frame-rate governor stops at 15 visible chunks instead of 25 (2.) |
+| `ev_sweep_text_*` 0x415e80 | (the game-over texts use g_screen_w / g_screen_h: 320x200 there) |
+
+The shadows (`shadow_draw_cb`) and sparks have no mode test: with COPY the shadow is the texture's opaque black.
+
+Port (src/screen.c, screen.h): all three modes. RESOLUTION 0 and 1 draw the race at 320x200 / 640x480 into an
+offscreen target (a framebuffer object with a 16-bit depth buffer, gfx_gl.c `gfx_target_begin`) that is scaled up into
+the window with nearest filtering, into the largest 4:3 rectangle (black bars beside or above it), as a monitor of the
+time showed these modes (320x200 with 1.2 times higher pixels). The 3D projection keeps the 81 degrees across the
+target (dvClipY = h / w, so 320x200 shows less height than 640x480). Everything of the table above is done except the
+accumulator texture and the anim preload lists (no visible effect). In 8-bit mode every 8-bit image (the .pcx
+textures, the sky, the RC sprites, the fonts, the radar colours) is shown through the etappe's palette, as the
+hardware palette did (index 254 the colour key); the wait screens through their own palette; no gamma (Game.ini gamma
+changes 16-bit conversions only). RAMP's handling of the alpha-blend states is not known: the port draws the 8-bit
+modes' blended effects with COPY's texture alpha, so the car shadow is an opaque black rectangle (?). RESOLUTION 2 is
+3 (the original's 2 differs only in `load_game_palette`'s jump table 0x42098c, which gives it the 8-bit `e0N_pal`
+for the 16-bit sprites); 4 (fatal in the original), 5 (a hidden 16-bit software mode at g_res_index 0) and anything else are drawn as 3 too,
+and a missing key reads 3 (the original reads 0). Without framebuffer objects the 8-bit modes are drawn at the
+window's size.
 
 Device creation, d3dlib.cpp / d3dev.cpp:
 - `0x44c7b0` d3dlib_init: `0x44c760` QueryInterface IID_IDirect3D2 from DirectDraw -> `g_d3d2 0x4ea9cc`; `0x44c930`
@@ -299,10 +337,17 @@ Only when `g_hw3d = 0` and `Game.ini [OPTIONS] BACKGROUND` (`0x4d9a80`) is 0.
   screen, destination (0, 0, screenW, H - H/3) = the top 2/3 of the screen (134 rows lores, 320 rows hires = the
   image height). Source y is always 0: **no vertical movement with pitch**. If the source window passes the right
   edge the blit is split in two (`0x41e9d0`, horizontal wrap).
-- `0x41eac0` sky_set_scroll(c): `x = round(-(c + 1) * W/2)`, wrapped into [0, W), W = image width (`0x4cc028`).
-  Callers pass `c = cos_table[yaw & 1023]` (camera heading from atan2 in `0x4144b0`, or the car heading at
-  `0x4261d7`). So the offset is W*(1 - cos(yaw))/2: it sweeps the image once over a 180 deg turn and back - not
-  linear in yaw (probably an original quirk).
+- `0x41eac0` sky_set_scroll(c): `x = ftol(-(c + 1) * (W/2))` (W/2 an integer division), wrapped into [0, W) by one
+  add or subtract, W = image width (`0x4cc028`); then `sky_build_rects` 0x41e9d0: one rectangle (x, 0)-(x + screenW,
+  H - H/3) when it fits, else (x, 0)-(W, ..) to the left edge and (0, 0)-(screenW - (W - x), ..) after it. The source is
+  the image's top H - H/3 rows (SCRL_LO: 134 of 200).
+  Callers: handle_game_cameras (`0x4147d3`, every frame, after the objects) with `c = cos_table[ftol((atan2(dz, dx) -
+  pi/2) * units / 2pi) & mask]` of the active camera's view (target - position): that is dz / |d|, the view's north
+  component; and handle_player_car (`0x4261dd`) with the car's heading, which the camera's call overwrites in the same
+  frame. So the offset is W*(1 - c)/2 with c = the north component: looking east and west shows the same part, and a
+  turn of 180 deg sweeps the image once (an original quirk).
+- Port (race.c `draw_sky_sw`): as above, into the 8-bit modes' target before the scene; the rows below the sky are
+  cleared to black (the original leaves the last frame there; the world covers them).
 
 ## 8. Fog
 - `Game.ini [OPTIONS] fog` (`0x4d9abc`, CD 0, "conflicts with alpha blending"). Only in the accelerated path,
@@ -354,7 +399,8 @@ are frame based. Billboards copy the camera orientation matrix.
 - Lifetime 20 s. `fade_skmarks=1`: each frame alpha += max(1, (255 - alpha)/(life - age)), reaching 255 at the
   end; otherwise the mark simply disappears when its life expires.
 - Draw: ALPHABLEND on, SRCBLEND = INVSRCALPHA, DESTBLEND = SRCALPHA (so **alpha 255 = invisible**), world =
-  identity, DrawPrimitive(TRIANGLESTRIP, LVERTEX, n) per strip with n > 2; not in 8-bit modes.
+  identity, DrawPrimitive(TRIANGLESTRIP, LVERTEX, n) per strip with n > 2; the blend states are skipped in the
+  8-bit modes (`0x41e430`), where the strips are drawn opaque (COPY: the texture's colour; port: the same).
   OpenGL: `glBlendFunc(GL_ONE_MINUS_SRC_ALPHA, GL_SRC_ALPHA)`.
 
 ### Tyre smoke "clouds" (gfx_wolk.cpp; "wolk" = cloud, but these are smoke puffs, not sky clouds)

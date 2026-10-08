@@ -98,6 +98,27 @@ typedef ptrdiff_t GLsizeiptr, GLintptr;
 GLFUNCS
 #undef X
 
+/* framebuffer objects (OpenGL 3.0 / ARB_framebuffer_object / EXT_framebuffer_object, OpenGL ES 2.0): optional, only
+ * the offscreen target of the low-resolution modes uses them (gfx_target_begin) */
+#define GL_FRAMEBUFFER 0x8D40
+#define GL_RENDERBUFFER 0x8D41
+#define GL_COLOR_ATTACHMENT0 0x8CE0
+#define GL_DEPTH_ATTACHMENT 0x8D00
+#define GL_FRAMEBUFFER_COMPLETE 0x8CD5
+#define GL_DEPTH_COMPONENT16 0x81A5
+#define GL_UNSIGNED_SHORT_5_6_5 0x8363
+#define FBOFUNCS \
+    X(void, GenFramebuffers, (GLsizei, GLuint *)) X(void, DeleteFramebuffers, (GLsizei, const GLuint *)) \
+    X(void, BindFramebuffer, (GLenum, GLuint)) X(GLenum, CheckFramebufferStatus, (GLenum)) \
+    X(void, FramebufferTexture2D, (GLenum, GLenum, GLenum, GLuint, GLint)) \
+    X(void, GenRenderbuffers, (GLsizei, GLuint *)) X(void, DeleteRenderbuffers, (GLsizei, const GLuint *)) \
+    X(void, BindRenderbuffer, (GLenum, GLuint)) X(void, RenderbufferStorage, (GLenum, GLenum, GLsizei, GLsizei)) \
+    X(void, FramebufferRenderbuffer, (GLenum, GLenum, GLenum, GLuint))
+#define X(ret, name, args) static ret (GLAPI *gl##name) args;
+FBOFUNCS
+#undef X
+static int g_has_fbo;
+
 struct GfxMesh {
     GLuint vbo, ibo;
     GLenum itype;
@@ -216,6 +237,10 @@ int gfx_init(void)
     if (!gl##name && strcmp(#name, "GenerateMipmap")) { fprintf(stderr, "missing gl%s\n", #name); return 0; }
     GLFUNCS
 #undef X
+    g_has_fbo = 1;          /* the core names, else the EXT ones (same signatures) */
+#define X(ret, name, args) gl##name = (ret (GLAPI *) args)plat_gl_proc("gl" #name);     if (!gl##name) gl##name = (ret (GLAPI *) args)plat_gl_proc("gl" #name "EXT");     if (!gl##name) g_has_fbo = 0;
+    FBOFUNCS
+#undef X
     g_has_mipmap = glGenerateMipmap != NULL;
     {   /* the original's bilinear filtering blurs the road into the distance; 8x anisotropic keeps it sharp */
         const char *ext = (const char *)glGetString(GL_EXTENSIONS);
@@ -261,11 +286,14 @@ static void mesh_upload(GfxMesh *m, const void *v, const void *idx)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)m->ni_bytes, idx, GL_STATIC_DRAW);
 }
 
+static void fbo_forget(void);
+
 /* plat_gl_lost: the new context has none of the old objects; make them again under the same handles */
 static void check_lost(void)
 {
     if (!plat_gl_lost()) return;
     setup();
+    fbo_forget();                               /* the offscreen target is made again at its next use */
     glUniform4f(u_tint, g_tint[0], g_tint[1], g_tint[2], g_tint[3]);
     gfx_set_fog(g_fog[0], g_fog[1], g_fog[2], g_fog[3], g_fog[4]);
     int n = 0;
@@ -630,6 +658,98 @@ void gfx_2d_rect(float x, float y, float w, float h, uint32_t rgba)
 }
 
 void gfx_2d_end(void) {}
+
+/* ---- the offscreen target of the low-resolution modes (screen.c) ------------------------------------------------ */
+/* PORT: the 8-bit modes are drawn at their own size into a framebuffer object (a colour texture and a 16-bit depth
+ * buffer, the original's Z-buffer format) and then scaled up into the window. The target is made on first use and
+ * again when its size changes or g_fb.valid was cleared (after a lost GL context: the names are gone, nothing to
+ * delete); its colour texture is a plain GL texture, not one of gfx_texture's. */
+static struct { GLuint fbo, tex, depth; int w, h, valid; } g_fb;
+static int g_fb_failed;         /* the driver cannot render into it: draw into the window instead */
+
+static void fbo_destroy(void)
+{
+    if (g_fb.valid) {
+        glDeleteFramebuffers(1, &g_fb.fbo);
+        glDeleteRenderbuffers(1, &g_fb.depth);
+        glDeleteTextures(1, &g_fb.tex);
+    }
+    memset(&g_fb, 0, sizeof g_fb);
+}
+
+static void fbo_forget(void) { memset(&g_fb, 0, sizeof g_fb); }    /* its names died with the context */
+
+static int fbo_create(int w, int h)
+{
+    fbo_destroy();
+    glGenTextures(1, &g_fb.tex);
+    glBindTexture(GL_TEXTURE_2D, g_fb.tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenFramebuffers(1, &g_fb.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, g_fb.fbo);
+    glGenRenderbuffers(1, &g_fb.depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, g_fb.depth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, w, h);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, g_fb.depth);
+    g_fb.valid = 1;
+    g_fb.w = w;
+    g_fb.h = h;
+    /* RGBA8, else RGB565 (a colour format every OpenGL ES 2.0 renders to) */
+    for (int k = 0; k < 2; k++) {
+        glTexImage2D(GL_TEXTURE_2D, 0, k ? GL_RGB : GL_RGBA, w, h, 0, k ? GL_RGB : GL_RGBA,
+                     k ? GL_UNSIGNED_SHORT_5_6_5 : GL_UNSIGNED_BYTE, NULL);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_fb.tex, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE) return 1;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    fbo_destroy();
+    fprintf(stderr, "gfx: no offscreen target of %dx%d; the low resolution is drawn into the window\n", w, h);
+    return 0;
+}
+
+int gfx_target_begin(int w, int h, float r, float g, float b)
+{
+    if (!g_has_fbo || g_fb_failed || w <= 0 || h <= 0) return 0;
+    gfx_begin(w, h, r, g, b);                    /* (clears the window's buffer for nothing; gfx_target_present does) */
+    if ((!g_fb.valid || g_fb.w != w || g_fb.h != h) && !fbo_create(w, h)) {
+        g_fb_failed = 1;
+        return 0;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, g_fb.fbo);
+    glViewport(0, 0, w, h);
+    glDepthMask(1);
+    glClearColor(r, g, b, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    return 1;
+}
+
+void gfx_target_present(int win_w, int win_h, int x, int y, int w, int h)
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    g_w = win_w;
+    g_h = win_h;
+    glViewport(0, 0, win_w, win_h);
+    glDepthMask(1);
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    if (!g_fb.valid) return;
+    gfx_2d_begin(win_w, win_h);                  /* window pixels; the target's rows are bottom-up (v 1 at the top) */
+    float x0 = (float)x, y0 = (float)y, x1 = (float)(x + w), y1 = (float)(y + h);
+    GfxVertex v[6] = {
+        { x0, y0, 0, 0, 1, 255, 255, 255, 255 }, { x0, y1, 0, 0, 0, 255, 255, 255, 255 }, { x1, y1, 0, 1, 0, 255, 255, 255, 255 },
+        { x0, y0, 0, 0, 1, 255, 255, 255, 255 }, { x1, y1, 0, 1, 0, 255, 255, 255, 255 }, { x1, y0, 0, 1, 1, 255, 255, 255, 255 } };
+    glBindBuffer(GL_ARRAY_BUFFER, g_stream_vbo);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)sizeof v, v, GL_STREAM_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    set_pointers();
+    GfxState st = { BLEND_NONE, 0, 0, 0, 0, 0 };
+    apply_state(&st);
+    glBindTexture(GL_TEXTURE_2D, g_fb.tex);      /* nearest: the period's big pixels */
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
 
 /* GLES only guarantees RGBA reads */
 void gfx_read_pixels(int w, int h, uint8_t *rgb)

@@ -41,6 +41,7 @@ typedef struct {
     int index;                  /* 0..6 */
     int city;                   /* Raser.ini [MAPS] arg 0: 1 = city (laps), 0 = highway */
     char name[64];              /* "AMSTERDAM - DEN HAAG" */
+    char sky[2][16];            /* [MAPS] args 6 / 7: the software modes' sky at 320x200 / 640x480 ("scrl_lo") */
     int nchunks;
     Chunk *chunks;
     int nwaypoints;

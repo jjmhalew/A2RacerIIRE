@@ -184,6 +184,8 @@ Slot *cur_slot(void);
 void save_slots(void);                         /* 0x40b120 */
 void save_options(void);                       /* 0x408ab0 */
 void load_options(void);                       /* 0x408a40 */
+/* PORT: the player chose the resolution on the options screen (until then the races run in 3D Kaart, menu.c) */
+void menu_resolution_chosen(void);
 void delete_slot(int i);                       /* 0x40b7f0 */
 void slot_touch(int i);                        /* 0x40b820 */
 int  get_last_slot(void);                      /* 0x40b710 */

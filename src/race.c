@@ -20,6 +20,7 @@
 #include "radar.h"
 #include "res.h"
 #include "rules.h"
+#include "screen.h"
 #include "sfx.h"
 #include "shadow.h"
 #include "touch.h"
@@ -34,6 +35,10 @@
 static float SIN[ANGLE_UNITS], COS[ANGLE_UNITS];   /* math3d_init_tables 0x450280 (4096 entries, track.h) */
 #define AMASK (ANGLE_UNITS - 1)
 static Race *R;                         /* the race the callbacks work on */
+/* the software modes' sky (gfx_sky.cpp): Game.ini [OPTIONS] BACKGROUND (non-zero: none), the image */
+static int g_sky_off;
+static unsigned g_sky_sw;
+static int g_sky_w, g_sky_h;
 
 static int ftol(float f) { return (int)f; }   /* MSVC _ftol: truncation toward zero */
 static float frand_sign(void) { return rand() % 10 < 5 ? 1.0f : -1.0f; }
@@ -590,8 +595,10 @@ static void read_ini(Race *r)
      * else controller.ini's steer_linearity does */
     pad_set_steer_curve(r->input_device >= 3 ? ini_int(g, "INPUT", "SENSITIVITY", 50) : -1);
     tex_set_gamma(ini_int(g, "GFX OPTIONS", "gamma", 1) == 1);
+    /* cloud_init 0x4201a0: no smoke without g_hw_accel (clouds = 0) */
     fx_init(ini_int(g, "GFX OPTIONS", "skidmarks", 1), ini_int(g, "GFX OPTIONS", "fade_skmarks", 1),
-            ini_int(g, "GFX OPTIONS", "clouds", 1), ini_int(g, "GFX OPTIONS", "alpha_blending", 1));
+            ini_int(g, "GFX OPTIONS", "clouds", 1) && scr_hw3d(), ini_int(g, "GFX OPTIONS", "alpha_blending", 1));
+    g_sky_off = ini_int(g, "OPTIONS", "BACKGROUND", 0);    /* g_opt_background 0x4d9a80 (ini_load_all 0x421c05) */
     ini_free(g);
 }
 
@@ -619,6 +626,7 @@ int race_init(Race *r, int etappe, int car)
 {
     memset(r, 0, sizeof *r);
     R = r;
+    scr_init(etappe);                                  /* set_game_display: the mode of Raser.ini RESOLUTION (screen.h) */
     ai_snd_object = snd_object;
     ai_snd_play = sfx_play;
     ai_snd_playing = sfx_playing;
@@ -635,11 +643,21 @@ int race_init(Race *r, int etappe, int car)
     r->plr_car = car >= 0 && car < 7 ? car : 0;
     static int hud_ok;
     if (!hud_ok) hud_ok = hud_init();
-    {   /* the sky: one of back1..7.pcx at random (0x4234e0), loaded without gamma */
+    if (scr_hw3d()) {   /* the sky: one of back1..7.pcx at random (0x4234e0), loaded without gamma */
         char n[16];
         snprintf(n, sizeof n, "back%d", rand() % 7 + 1);
         const Texture *t = tex_get(n);
         r->sky_tex = t ? t->id : 0;
+    } else if (!g_sky_off) {
+        /* sky_init_moving_sky 0x41e740 (software modes, BACKGROUND 0): [MAPS] arg 6 (SCRL_LO 480x200) at 320x200, arg 7
+         * (SCRL_HI 960x320) at 640x480, through the screen's palette */
+        Image img;
+        if (tex_pixels(r->track.sky[scr_res_index() ? 1 : 0], &img)) {
+            g_sky_sw = gfx_texture(img.rgba, img.w, img.h, TEX_NEAREST | TEX_CLAMP);
+            g_sky_w = img.w;
+            g_sky_h = img.h;
+            image_free(&img);
+        }
     }
     r->turbo = r->upg_turbo ? 100 : 0;
     r->plr_obj = -1;
@@ -684,6 +702,8 @@ void race_free(Race *r)
     touch_end();
     plat_touch_capture(0);
     g_pad_steering = 0;
+    gfx_texture_free(g_sky_sw);
+    g_sky_sw = 0;
     sfx_stop_all();
     radar_free();
     txcopy_free();
@@ -766,7 +786,7 @@ static void draw_sky(void)
         { 0, y1, 0, u0, 1.0f / 3, hr, hg, hb, 255 }, { 640, H, 0, u1, 1, 255, 255, 255, 255 }, { 640, y1, 0, u1, 1.0f / 3, hr, hg, hb, 255 } };
     /* stretch over the whole window (the original's screen is the 640x480 viewport) */
     int w, h;
-    plat_size(&w, &h);
+    scr_frame_size(&w, &h);
     for (int i = 0; i < 12; i++) { v[i].x = v[i].x * w / 640; v[i].y = v[i].y * h / 480; }
     Mat4 p = m4_ortho(0, (float)w, (float)h, 0, -1, 1), id = m4_identity();
     gfx_set_matrices(&p, &id);
@@ -775,18 +795,51 @@ static void draw_sky(void)
     fog_sky(v, 12, a);
 }
 
+/* the software modes' sky (gfx_sky.cpp): render_game 0x4250b1 blits it before the scene (sky_blit 0x41e850), a
+ * plain copy into the top H - H/3 rows (sky_init_moving_sky 0x41e7e0), the image's rows from 0 (no pitch), at the
+ * x offset of gfx_sky_set_heading 0x41eac0, which handle_game_cameras 0x4147d3 sets every frame from the active
+ * camera: c = cos(atan2(dz, dx) - pi/2) of its view (= dz / |d|, in whole angle units), x = ftol(-(c + 1) * (W / 2)),
+ * wrapped into 0..W-1 (W = image width); past the image's right edge the copy is split in two (sky_build_rects
+ * 0x41e9d0). So looking east or west shows the same part [quirk]. (handle_player_car 0x4261dd also sets it from the
+ * car's heading, but the camera's call comes later in the frame.) */
+static void draw_sky_sw(Vec3 view, int w, int h)
+{
+    if (!g_sky_sw || g_sky_w <= 0) return;
+    float ang = atan2f(view.z, view.x) - PI_F / 2;
+    float c = race_cos(ftol(ang * ANGLE_UNITS / TWO_PI));
+    int W = g_sky_w, x = ftol((c + 1) * (float)-(W / 2));
+    if (x < 0) x += W;
+    if (x >= W) x -= W;
+    int sh = h - h / 3, sw = w, hh = sh < g_sky_h ? sh : g_sky_h;
+    Mat4 p = m4_ortho(0, (float)w, (float)h, 0, -1, 1), id = m4_identity();
+    gfx_set_matrices(&p, &id);
+    GfxState st = { BLEND_NONE, 0, 0, 0, 0, 0 };
+    float v1 = (float)hh / g_sky_h;
+    int part = W - x < sw ? W - x : sw;          /* the first copy, then the rest from the image's left edge */
+    for (int k = 0; k < 2; k++) {
+        int dx0 = k ? part : 0, dx1 = k ? sw : part, sx0 = k ? 0 : x;
+        if (dx1 <= dx0) continue;
+        float u0 = (float)sx0 / W, u1 = (float)(sx0 + dx1 - dx0) / W;
+        GfxVertex q[6] = {
+            { (float)dx0, 0, 0, u0, 0, 255, 255, 255, 255 }, { (float)dx0, (float)hh, 0, u0, v1, 255, 255, 255, 255 },
+            { (float)dx1, (float)hh, 0, u1, v1, 255, 255, 255, 255 }, { (float)dx0, 0, 0, u0, 0, 255, 255, 255, 255 },
+            { (float)dx1, (float)hh, 0, u1, v1, 255, 255, 255, 255 }, { (float)dx1, 0, 0, u1, 0, 255, 255, 255, 255 } };
+        gfx_draw_tris(q, 6, g_sky_sw, &st);
+    }
+}
+
 static void fmt_time(char *b, size_t n, int ms)
 {
     if (ms >= 0x0fffffff) snprintf(b, n, "--:--:-");                  /* no record */
     else snprintf(b, n, "%02d:%02d:%d", ms / 60000, ms / 1000 % 60, ms / 100 % 10);
 }
 
-/* draw_dashboard: the panels of docs/HUD.md 4 in the 640x480x16 layout; then the rules' part (messages, checkpoint
- * box, results, game over, pause) */
+/* draw_dashboard: the panels of docs/HUD.md 4 in the mode's layout (hud.h); then the rules' part (messages,
+ * checkpoint box, results, game over, pause) */
 static void draw_hud(void)
 {
     char b[64], pos[8];
-    gfx_2d_begin(640, 480);
+    scr_2d_begin();
     /* handle_game 0x424c22: draw_2d_display (the whole dashboard, the pause / quit dialog too) only without
      * disable_overlay; the results and the game-over texts are game actions and stay */
     if (rules_hud_on() && !R->event_running && !R->overlay_off) {
@@ -835,7 +888,7 @@ static void draw_hud(void)
             snprintf(b, sizeof b, "%03d", abs(R->speed_kmh));
             hud_item_text(56, 0, 0, b);
             hud_item_text(7, 10, 0, hud_text(55));
-            int dn = 11, df = (int)(R->damage / (100.0f / (dn - 1)));
+            int dn = hud_item_frames(3), df = (int)(R->damage / (100.0f / (dn - 1)));   /* 0x41aabc: 10 / 11 frames */
             if (R->damage < 80 || !((int)(R->tick * 1000 / RACE_HZ / 200) & 1)) hud_item(3, df < 0 ? 0 : df > dn - 1 ? dn - 1 : df);
         }
     }
@@ -861,11 +914,18 @@ static float lerp_angle(float a, float b, float t)
 static void race_draw(float alpha)
 {
     int w, h;
-    plat_size(&w, &h);
-    gfx_begin(w, h, 0.55f, 0.7f, 0.9f);
-    draw_sky();
     Vec3 eye = v3_lerp(R->cam_draw0, R->cam_draw1, alpha), tgt = v3_lerp(R->tgt_draw0, R->tgt_draw1, alpha);
-    float fovy = 2 * atanf(tanf(40.5f * PI_F / 180) * 0.75f);
+    /* the 8-bit modes: into their 320x200 / 640x480 target (screen.h); the colour is cleared there by the sky blit
+     * alone (render_game 0x4250b1, Z only by d3dlib_clear), here to black first */
+    scr_frame_begin(scr_hw3d() ? 0.55f : 0, scr_hw3d() ? 0.7f : 0, scr_hw3d() ? 0.9f : 0, &w, &h);
+    if (scr_hw3d()) draw_sky();
+    else {
+        draw_sky_sw(v3_sub(tgt, eye), w, h);
+        fog_states();                                   /* TEXTUREMAPBLEND COPY (set_game_render_states 0x423e94) */
+    }
+    /* 81 degrees across the screen (RENDER.md 2): the 8-bit modes' viewport has dvClipY = h / w (320x200: 16:10);
+     * PORT: the 16-bit mode keeps the 4:3 height and widens with the window */
+    float fovy = 2 * atanf(tanf(40.5f * PI_F / 180) * (scr_8bit() ? (float)h / w : 0.75f));
     Mat4 proj = m4_perspective(fovy, (float)w / h, 10, 12500), view = view_lh(eye, tgt);
     gfx_set_matrices(&proj, &view);
     int vis = ai_visible_chunks();                      /* g_visible_chunks 0x4d9a8c (render_game 0x42518b) */
@@ -905,6 +965,7 @@ static void race_draw(float alpha)
     gfx_set_model(NULL);
     radar_draw(R, v3_sub(tgt, eye));                    /* 0x4251ed (in the 3D scene there, on top) */
     draw_hud();
+    scr_frame_end();                                    /* PORT: an 8-bit mode's target scaled up into the window */
     touch_draw();                                       /* PORT: the touch controls on top */
 }
 

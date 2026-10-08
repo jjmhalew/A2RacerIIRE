@@ -14,6 +14,7 @@
 #include "pad.h"
 #include "plat.h"
 #include "res.h"
+#include "screen.h"
 #include "sfx.h"
 #include "texture.h"
 #include "touch.h"
@@ -224,7 +225,7 @@ static void trigger(Race *r, int id, int prev, int cur)
     txcopy_trigger(r, id);                           /* speed-limit and direction sign textures */
     switch (id) {
     case 1:                                          /* speed camera 0x42a2e0 */
-        if (r->speed_kmh > G.speed_limit && fwd) { sfx_play(SFX_FLITS); G.flash = 1; }
+        if (r->speed_kmh > G.speed_limit && fwd) { sfx_play(SFX_FLITS); G.flash = scr_8bit() ? 2 : 1; }
         break;
     case 2:                                          /* quick service 0x42a4d0 */
         r->damage = 0;
@@ -389,8 +390,8 @@ static void event_init(Race *r, int s)
     case GS_GAMEOVER: {                              /* ev_gameover_init 0x416060 */
         r->cam_mode = 1;                             /* set_player_cam_mode(1): the orbit starts from the chase view */
         int reason = G.gameover_reason < 0 || G.gameover_reason > 2 ? 0 : G.gameover_reason;
-        sweep_init(&G.sweep[0], 40 + reason, 480 / 4, 1.5f, 1);
-        sweep_init(&G.sweep[1], 43, 480 / 2, 3.0f, 0);
+        sweep_init(&G.sweep[0], 40 + reason, scr_h() / 4, 1.5f, 1);      /* g_screen_h 0x49e730 */
+        sweep_init(&G.sweep[1], 43, scr_h() / 2, 3.0f, 0);
         G.smoke_at = G.clock - 200;
         break;
     }
@@ -459,7 +460,7 @@ void rules_tick(Race *r)
         /* the results panel after 1500 ms (rules_draw_hud); then Esc / Enter / Space, and the event ends when all
          * three are released again (it waits for that in a loop); A2_TEST_FINISH: 3 s after the finish */
         if (in_state >= 1500) {
-            if (!G.flag_started) { flag_start(1); G.flag_started = 1; }   /* the waving flag (hw accel only) */
+            if (!G.flag_started && scr_hw3d()) { flag_start(1); G.flag_started = 1; }   /* the flag: g_hw_accel (0x4155fb) */
             if (continue_key_down()) G.fin_key = 1;
             else if (G.fin_key || (getenv("A2_TEST_FINISH") && in_state >= 3000)) {
                 int prize = prize_money(r);
@@ -576,7 +577,7 @@ void rules_draw_3d(Race *r)
 {
     float a = (float)(r->accum * RACE_HZ);           /* the same interpolation as race_draw */
     int w, h;
-    plat_size(&w, &h);
+    scr_frame_size(&w, &h);
     flag_draw(v3_lerp(r->cam_draw0, r->cam_draw1, a), v3_lerp(r->tgt_draw0, r->tgt_draw1, a),
               h > 0 ? (float)w / h : 4.0f / 3.0f, a);
     font3d_draw(a);
@@ -597,7 +598,7 @@ static void sweep_draw(const Sweep *s, float alpha)
 {
     if (!s->active) return;
     const char *t = hud_text(s->text);
-    int W = 640, w = hud_text_width(14, t), cx = (W - w) / 2;
+    int W = scr_w(), w = hud_text_width(14, t), cx = (W - w) / 2;                 /* g_screen_w 0x49e72c */
     if (s->frame == s->frames - 1 && !s->out) { hud_print(14, cx, s->y, 0, t); return; }
     float f = s->frame + (s->out ? -alpha : alpha);
     if (f < 0) f = 0;
@@ -613,7 +614,8 @@ void rules_draw_hud(Race *r)
 {
     char b[96];
     int D = r->detail;
-    if (G.flash) gfx_2d_rect(0, 0, 640, 480, 0xebebebffu);          /* speed-camera flash (palette colour 15) */
+    /* speed-camera flash, 16-bit: the screen filled with palette colour 15 once (0x415750) */
+    if (G.flash && !scr_8bit()) gfx_2d_rect(0, 0, (float)scr_w(), (float)scr_h(), 0xebebebffu);
     /* draw_dashboard 0x41a8a0: nothing of it during an event, nor with disable_overlay (handle_game 0x424c22) */
     if (!r->event_running && !r->overlay_off) {
         if (!r->track.city && D >= 3 && G.t[11].start >= 0) {      /* 4.4 checkpoint box and the time left */
@@ -642,7 +644,7 @@ void rules_draw_hud(Race *r)
     }
     if (G.state == GS_FINISHED && G.clock - G.state_since >= 1500) {   /* 4.7 results */
         int prize = prize_money(r), bonus = 2000 * G.poles;
-        hud_print(14, 68, 78, 0, hud_text(17));
+        hud_item_text(63, 14, 0, hud_text(17));     /* GEFINISHT */
         if (r->track.city) {
             hud_item(62, 0);
             fmt_time(b, sizeof b, G.laptime[0]); hud_item_text(65, 15, 0, b);
@@ -674,25 +676,43 @@ void rules_draw_hud(Race *r)
         hud_item_text(36, 6, 1, hud_text(base + 1));
         hud_item_text(37, 6, 1, hud_text(base + 2));
     }
+    /* speed-camera flash, 8-bit: all 256 palette entries (235, 235, 235) for 2 frames (ev_flash_update 0x415750):
+     * the whole picture, overlay included */
+    if (G.flash && scr_8bit()) gfx_2d_rect(0, 0, (float)scr_w(), (float)scr_h(), 0xebebebffu);
 }
 
 void rules_loading_screen(int etappe, int step)       /* handle_progress_bar 0x41c410, gfx_draw_wait_screen 0x41bde0 */
 {
     char p[1024], k[16], name[64];
+    scr_init(etappe);                                  /* the mode (screen.h), before init_game in the original too */
     res_user_path(p, sizeof p, "Raser.ini");
     Ini *ini = ini_load(p);
     snprintf(k, sizeof k, "%d", etappe);
-    ini_str(ini, "wait_hi", k, "e01_w_hi.pcx", name, sizeof name);
+    /* load_wait_screen_names 0x4220e0: [wait_lo] at g_res_index 0, else [wait_hi] */
+    ini_str(ini, scr_res_index() ? "wait_hi" : "wait_lo", k, scr_res_index() ? "e01_w_hi.pcx" : "e01_w_lo.pcx",
+            name, sizeof name);
     snprintf(k, sizeof k, "percent%d", step);
     int pct = ini_int(ini, "progress", k, step * 10);
     ini_free(ini);
-    const Texture *t = tex_get(name);                  /* the 16-bit mode loads the name with .tga */
-    int w, h;
-    plat_size(&w, &h);
-    gfx_begin(w, h, 0, 0, 0);
-    gfx_2d_begin(640, 480);
-    if (t) gfx_2d_quad(t->id, 0, 0, 640, 480, 0, 0, 1, 1, 0xffffffffu, BLEND_NONE);
+    /* gfx_draw_wait_screen 0x41bde0: 8-bit, the .pcx with its own palette (rcpcx_draw_to_surface sets it); 16-bit,
+     * the name with .tga */
+    unsigned tex = 0, own = 0;
+    if (scr_8bit()) {
+        Image img;
+        if (tex_image(name, &img)) {
+            tex = own = gfx_texture(img.rgba, img.w, img.h, TEX_NEAREST | TEX_CLAMP);
+            image_free(&img);
+        }
+    } else {
+        const Texture *t = tex_get(name);
+        tex = t ? t->id : 0;
+    }
+    scr_frame_begin(0, 0, 0, NULL, NULL);
+    scr_2d_begin();
+    if (tex) gfx_2d_quad(tex, 0, 0, (float)scr_w(), (float)scr_h(), 0, 0, 1, 1, 0xffffffffu, BLEND_NONE);
     hud_item_part(14, 0, pct / 100.0f);
     gfx_2d_end();
+    scr_frame_end();
     plat_swap();
+    gfx_texture_free(own);
 }

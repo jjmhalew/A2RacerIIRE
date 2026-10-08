@@ -129,5 +129,5 @@ RC palette: entries 0..401 are the 16-bit set (e02_pl16) and 402..452 the 8-bit 
 ## Open questions
 - The 4 header shorts of `.fnt` files: (252,255,253,254), (0,0,0,0), (240,255,296,0) and others. They are never read after loading; probably leftovers from the font editor.
 - The meaning of the `.img` header value `c`.
-- Which palette the 8-bit (RESOLUTION 0/1) mode really shows for the fonts painted in e02_pl16 indices (Logeel, lo_vlag). With e0N_pal they would look wrong; maybe these slots are unused in practice (HUD.md lists them as unused).
+- Which palette the 8-bit (RESOLUTION 0/1) mode really shows for the fonts painted in e02_pl16 indices (Logeel, lo_vlag). With e0N_pal they would look wrong; maybe these slots are unused in practice (HUD.md lists them as unused). The port shows every 8-bit image of the 8-bit modes through the track palette (as the hardware palette does); the HUD's lo fonts look right that way.
 - `PAL.PCX`, `palet.pcx`, `normcar1.pcx`, `Scroll.pcx`: not referenced by name in spel.dat; menu.dat use not checked.

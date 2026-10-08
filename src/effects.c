@@ -4,6 +4,7 @@
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "effects.h"
 #include "gfx.h"
+#include "screen.h"
 #include "texture.h"
 #include <math.h>
 #include <stdlib.h>
@@ -227,7 +228,10 @@ void fx_draw(Vec3 cam_pos, Vec3 cam_right, Vec3 cam_up)
                 buf[nv++] = vtx(p2, 0.453125f, 0.15625f, 64, 64, 64, a);
             }
     }
+    /* skid_draw 0x41e430: the blend states only when g_8bit is 0; in the 8-bit modes (COPY) the strips are opaque
+     * texture with Z writes (the device defaults) */
     GfxState st = { BLEND_INVALPHA, 0, 1, 0, 0, 0 };
+    if (scr_8bit()) { st.blend = BLEND_NONE; st.depth_write = 1; }
     if (nv) gfx_draw_tris(buf, nv, g_tex, &st);
 
     /* sparks: opaque, colour key, a small triangle facing the camera */

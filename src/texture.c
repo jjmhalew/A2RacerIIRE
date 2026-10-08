@@ -9,14 +9,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct { char name[32]; Texture t; } Entry;
+typedef struct { char name[32]; int bit8; Texture t; } Entry;
 static Entry *g_tex;
 static int g_gamma;
+static int g_bit8;                  /* the 8-bit modes (screen.h): the .pcx through the palette g_pal8, nearest */
+static uint8_t g_pal8[768];
 
 void tex_set_gamma(int on) { g_gamma = on; }
 void tex_apply_gamma(uint8_t *q, int n)
 {
-    if (!g_gamma) return;
+    if (!g_gamma || g_bit8) return;     /* pformat_set_gamma: conversions to 16 bit only; 8-bit surfaces are copies */
     for (int i = 0; i < n; i++, q += 4) {
         q[0] = (uint8_t)(q[0] * q[0] / 256); q[1] = (uint8_t)(q[1] * q[1] / 256); q[2] = (uint8_t)(q[2] * q[2] / 256);
     }
@@ -48,12 +50,14 @@ static int mod_image(const char *b, Image *out)
     return 0;
 }
 
+/* texture_load_file 0x45ae00: the .tga after texture_set_source_type(1) (g_hw_accel only, init_3d_library 0x42359f),
+ * else the .pcx; PORT: the other one when the first is missing */
 static int orig_image(const char *b, Image *out)
 {
     char n[40];
-    snprintf(n, sizeof n, "%s.tga", b);
+    snprintf(n, sizeof n, "%s.%s", b, g_bit8 ? "pcx" : "tga");
     if (image_load(n, out)) return 1;
-    snprintf(n, sizeof n, "%s.pcx", b);
+    snprintf(n, sizeof n, "%s.%s", b, g_bit8 ? "tga" : "pcx");
     return image_load(n, out);
 }
 
@@ -127,7 +131,16 @@ int tex_pixels(const char *name, Image *out)
 {
     char b[32];
     base_name(name, b, sizeof b);
-    if (!tex_image(b, out)) return 0;
+    if (!mod_image(b, out)) {
+        if (!orig_image(b, out)) return 0;
+        if (g_bit8 && out->index)       /* an 8-bit surface keeps the indices: shown through the screen's palette */
+            for (int i = 0; i < out->w * out->h; i++) {
+                const uint8_t *c = g_pal8 + out->index[i] * 3;
+                uint8_t *q = out->rgba + (size_t)i * 4;
+                q[0] = c[0]; q[1] = c[1]; q[2] = c[2]; q[3] = 255;
+                if (out->index[i] == 254) { q[0] = 255; q[1] = 0; q[2] = 127; }   /* the colour key */
+            }
+    }
     key_and_bleed(out);
     if (_strnicmp(b, "back", 4)) tex_apply_gamma(out->rgba, out->w * out->h);   /* not the sky (0x423565) */
     return 1;
@@ -150,7 +163,7 @@ const Texture *tex_get(const char *name)
     char b[32];
     base_name(name, b, sizeof b);
     for (int i = 0; i < g_n; i++)
-        if (!_stricmp(g_tex[i].name, b)) return g_tex[i].t.id ? &g_tex[i].t : NULL;
+        if (g_tex[i].bit8 == g_bit8 && !_stricmp(g_tex[i].name, b)) return g_tex[i].t.id ? &g_tex[i].t : NULL;
     if (g_n == g_cap) {
         g_cap = g_cap ? g_cap * 2 : 64;
         g_tex = realloc(g_tex, sizeof *g_tex * (size_t)g_cap);
@@ -158,14 +171,32 @@ const Texture *tex_get(const char *name)
     Entry *e = &g_tex[g_n++];
     memset(e, 0, sizeof *e);
     snprintf(e->name, sizeof e->name, "%s", b);
+    e->bit8 = g_bit8;
     Image img;
     if (!tex_pixels(b, &img)) { fprintf(stderr, "texture %s missing\n", b); return NULL; }
-    e->t.id = gfx_texture(img.rgba, img.w, img.h, TEX_MIPMAP);
+    /* TEXTUREMAG/MIN (0x423ead): LINEAR with g_hw_accel and FILTER=2, else NEAREST; PORT: mipmaps in the 16-bit mode */
+    e->t.id = gfx_texture(img.rgba, img.w, img.h, g_bit8 ? TEX_NEAREST : TEX_MIPMAP);
     e->t.w = img.w;
     e->t.h = img.h;
     image_free(&img);
     return &e->t;
 }
+
+void tex_set_mode(int bit8, const uint8_t *pal)
+{
+    g_bit8 = bit8 != 0;
+    if (!g_bit8 || !pal || !memcmp(pal, g_pal8, sizeof g_pal8)) return;
+    /* another etappe's palette: the 8-bit textures loaded so far take its colours (in place: the models keep the ids) */
+    memcpy(g_pal8, pal, sizeof g_pal8);
+    for (int i = 0; i < g_n; i++) {
+        Image img;
+        if (!g_tex[i].bit8 || !g_tex[i].t.id || !tex_pixels(g_tex[i].name, &img)) continue;
+        if (img.w == g_tex[i].t.w && img.h == g_tex[i].t.h) gfx_texture_update(g_tex[i].t.id, img.rgba, img.w, img.h);
+        image_free(&img);
+    }
+}
+
+int tex_8bit(void) { return g_bit8; }
 
 void tex_free_all(void)
 {

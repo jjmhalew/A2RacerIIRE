@@ -1334,7 +1334,7 @@ static void revert_options(int *music, const char *name)
 
 int menu_opties(int *music, const char *music_name)
 {
-    int snd = -1, need_form = 1, cancel = 0;
+    int snd = -1, need_form = 1, cancel = 0, res_clicked = 0;
     AnimHeader hdr;
     AnimButtons btn;
     mo_open_screen(&hdr, &btn);
@@ -1387,6 +1387,7 @@ int menu_opties(int *music, const char *music_name)
         case 7: case 8: case 9:                    /* 320 x 200 / 640 x 480 / 3D Kaart: RESOLUTION 0 / 1 / 3 */
             g_options.resolution = ev == 7 ? 0 : ev == 8 ? 1 : 3;
             mo_show_resolution(0, g_options.resolution);
+            res_clicked = 1;
             break;
         case 10: case 11:                          /* Makkelijk / Moeilijk */
             g_options.difficulty = ev - 10;
@@ -1418,7 +1419,10 @@ int menu_opties(int *music, const char *music_name)
     }
     close_screen();
     if (cancel) revert_options(music, music_name);
-    else save_options();
+    else {
+        save_options();
+        if (res_clicked) menu_resolution_chosen();   /* PORT: from now on the chosen resolution counts (menu.c) */
+    }
     return 0;
 }
 

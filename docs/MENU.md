@@ -183,7 +183,15 @@ OK saves `options.ras`, Annuleren / Esc reloads it. Help: help_50-52, 54-62.
 
 `options.ras` (18 bytes, packed, at 0x43e7d8): `int sfx_on; int music_on; u8 sfx_vol; u8 music_vol; int resolution;
 int difficulty;` defaults 1, 1, 80, 80, 0, 1. Menu volume: DirectSound volume = `vol*30 - 3100` (1/100 dB). Written to
-Raser.ini `[Sound] SFXVOLUME/MUSICVOLUME = on ? 3100 - 30*vol : 0` (an attenuation; 0 = off).
+Raser.ini `[Sound] SFXVOLUME/MUSICVOLUME = on ? 3100 - 30*vol : 0` (an attenuation; 0 = off). The resolution goes to
+Raser.ini `[Program] RESOLUTION` at every race start (`ini_write_options` 0x401820); the race reads it there
+(RENDER.md 1).
+
+Port: the default resolution 0 (320 x 200, the safe choice of 1998 for a PC without a 3D card) is in every
+options.ras the port has made, and until the port drew the 8-bit modes it had no effect. So the port takes the
+resolution of options.ras only after the player has chosen one: an OK of the options screen after a click on one of
+the three radio buttons writes Raser.ini `[Program] RESOLUTION_CHOSEN=1` (menu.c `menu_resolution_chosen`). Until then
+the menu works with 3 ("3D Kaart"): the options screen shows it selected and the races start in it.
 
 ### Standings "Standen" (`menu_highscore` 0x405630, background `hiscore.pcx`)
 8 tabs (x=177, y=59+45*i, 108x50 hotspots; selected tab anim 0x3b frame i, others anim 0x3a, colour 0x1f / 0x74):

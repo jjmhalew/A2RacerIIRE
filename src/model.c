@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct { int mesh, texture; Model m; int tried; } Slot;
+typedef struct { int mesh, texture, bit8; Model m; int tried; } Slot;     /* bit8: the texture's mode (texture.h) */
 
 static ExeTables g_tab;
 static Slot *g_slots;
@@ -117,7 +117,8 @@ static int load_mesh(Model *m, const char *name, unsigned tex)
 const Model *model_get(int mesh, int texture)
 {
     for (int i = 0; i < g_nslots; i++)
-        if (g_slots[i].mesh == mesh && g_slots[i].texture == texture) return g_slots[i].m.mesh ? &g_slots[i].m : NULL;
+        if (g_slots[i].mesh == mesh && g_slots[i].texture == texture && g_slots[i].bit8 == tex_8bit())
+            return g_slots[i].m.mesh ? &g_slots[i].m : NULL;
     if (g_nslots == g_capslots) {
         g_capslots = g_capslots ? g_capslots * 2 : 64;
         g_slots = realloc(g_slots, sizeof *g_slots * (size_t)g_capslots);
@@ -126,6 +127,7 @@ const Model *model_get(int mesh, int texture)
     memset(s, 0, sizeof *s);
     s->mesh = mesh;
     s->texture = texture;
+    s->bit8 = tex_8bit();
     if (mesh < 0 || mesh >= g_tab.nmeshes) return NULL;
     const Texture *t = texture >= 0 && texture < g_tab.ntextures ? tex_get(g_tab.texture[texture]) : NULL;
     if (!load_mesh(&s->m, g_tab.mesh[mesh], t ? t->id : 0)) return NULL;

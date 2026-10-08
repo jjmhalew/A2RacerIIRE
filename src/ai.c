@@ -9,6 +9,7 @@
 #include "collide.h"
 #include "exetab.h"
 #include "model.h"
+#include "screen.h"
 #include "res.h"
 #include "txcopy.h"
 #include <math.h>
@@ -1943,7 +1944,7 @@ void ai_frame_rate_governor(double frame_seconds, int racing)
     /* timer_frame_dt 0x441cd0: 0 or more than 0.1 s -> 0.1f; handle_game 0x424c98: if g_game_event == 0 and
      * 1 / dt < 10 (true for 0.1f) and visiblechunks > (g_hw_accel ? 25 : 15): visiblechunks-- */
     float dt = avg == 0 || avg > 0.1 ? 0.1f : avg;
-    if (racing && 1.0 / dt < 10.0 && g_visible_chunks > 25) g_visible_chunks--;
+    if (racing && 1.0 / dt < 10.0 && g_visible_chunks > (scr_hw3d() ? 25 : 15)) g_visible_chunks--;
 }
 int ai_racer_object(int i) { return i >= 0 && i < 3 ? g_racers[i].object : -1; }
 int ai_active_cop(int slot) { return slot >= 0 && slot < 20 ? g_active_cops[slot] : -1; }

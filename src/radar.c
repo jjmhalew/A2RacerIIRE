@@ -1,29 +1,36 @@
-/* radar.c - see radar.h. The 640x480 layout throughout (g_res_index 1): HIRADAR (128 x 128), rect row 1, dot anim 44.
+/* radar.c - see radar.h. By g_res_index: 320x200 LORADAR (64 x 64) and rect row 0, 640x480 HIRADAR (128 x 128) and
+ * rect row 1; by g_8bit: the dots of anim 43 (5 x 5) or 44 (8 x 8) and the map's edge 4 x 4 or 7 x 7 (screen.h).
  *
  * The map surface holds palette indices like the original's: 0xfe empty, 13 road, 0 road edge. The original fills
  * the surface and the texture with pformat_convert(0xfe), the colour key of the textures (the radar images on the CD
- * are nothing but key colour), so all but the road and the dots is transparent; road and edge are e02_pl16 colours 13
- * (light grey) and 0 (black).
+ * are nothing but key colour), so all but the road and the dots is transparent; road and edge are colours 13 and 0
+ * of the screen's palette: e02_pl16 (light grey, black), in the 8-bit modes the etappe's.
  *
  * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "radar.h"
 #include "ai.h"
 #include "gfx.h"
 #include "hud.h"
+#include "screen.h"
 #include "txcopy.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define TEX 128                                     /* HIRADAR.PCX / .TGA */
-enum { MAP_EMPTY = 0xfe, MAP_ROAD = 13, MAP_EDGE = 0, DOT_ANIM = 44 };   /* anim of item 15, row 1 of 0x4885c4 */
-static const int RECT[4] = { 30, 361, 158, 489 };   /* 0x489040 row 1: the 128 x 128 window; the quad's corner */
+/* g_res_index (radar_init 0x41cf20): 0 LORADAR.PCX 64 x 64, 1 HIRADAR 128 x 128 (the size table of radar_blit_dot
+ * 0x41c880); the rect table 0x489040 by g_res_index: the window into the map and the quad's corner */
+static int g_tsz = 128;
+#define TEX g_tsz
+static const int RECTS[2][4] = { { 15, 146, 79, 210 }, { 30, 361, 158, 489 } };
+static const int *RECT = RECTS[1];
+static int g_8bit;                                  /* g_8bit 0x4d9a70: the map's 8-bit branch, the 8-bit dots */
+enum { MAP_EMPTY = 0xfe, MAP_ROAD = 13, MAP_EDGE = 0 };
 
 static int g_init;                                  /* 0x4acab0 */
 static int g_bbox[4];                               /* 0x4acab8: min x, min z, max x, max z */
 static uint8_t *g_map;                              /* 0x4ac994, g_map_w 0x4ac990 x g_map_h 0x4aca28 */
 static int g_map_w, g_map_h;
-static uint8_t g_rgba[TEX * TEX * 4];               /* the radar texture's surface */
+static uint8_t g_rgba[128 * 128 * 4];               /* the radar texture's surface */
 static unsigned g_tex;
 static uint8_t *g_dot[3];                           /* frames 0 racer, 1 player, 2 cop */
 static int g_dot_w[3], g_dot_h[3];
@@ -77,16 +84,17 @@ static void map_set(int x, int y, uint8_t v)
     if (x >= 0 && y >= 0 && x < g_map_w && y < g_map_h) g_map[(size_t)y * g_map_w + x] = v;
 }
 
-/* radar_draw_road_map 0x41c9a0, the 16-bit branch (0x41cb79): per chunk the road pixel, a 7x7 edge around it where
- * there is no road yet, then a 3x3 road block */
+/* radar_draw_road_map 0x41c9a0: per chunk the road pixel, an edge around it where there is no road yet (16-bit branch
+ * 0x41cb79: 7x7 at -3..3; 8-bit branch 0x41cb06: 4x4 at -2..1), then a 3x3 road block */
 static void draw_road_map(const Track *t)
 {
+    int e0 = g_8bit ? -2 : -3, e1 = g_8bit ? 2 : 4;
     for (int c = 0; c < t->nchunks; c++) {
         int x, y;
         chunk_to_map(t, c, &x, &y);
         map_set(x, y, MAP_ROAD);
-        for (int dx = -3; dx < 4; dx++)
-            for (int dy = -3; dy < 4; dy++) {
+        for (int dx = e0; dx < e1; dx++)
+            for (int dy = e0; dy < e1; dy++) {
                 int xx = x + dx, yy = y + dy;
                 if (xx >= 0 && yy >= 0 && xx < g_map_w && yy < g_map_h && g_map[(size_t)yy * g_map_w + xx] != MAP_ROAD)
                     g_map[(size_t)yy * g_map_w + xx] = MAP_EDGE;
@@ -110,6 +118,9 @@ void radar_init(const Race *r)
 {
     radar_free();
     if (!txcopy_enabled()) return;                  /* init_game 0x424252: only with g_radar_enabled */
+    g_8bit = scr_8bit();
+    g_tsz = scr_res_index() ? 128 : 64;
+    RECT = RECTS[scr_res_index() ? 1 : 0];
     init_quad();
     /* create_radar 0x41cda0 */
     road_bbox(&r->track);
@@ -123,8 +134,9 @@ void radar_init(const Race *r)
     hud_pal_rgba(MAP_ROAD, g_col_road);
     hud_pal_rgba(MAP_EDGE, g_col_edge);
     draw_road_map(&r->track);
-    for (int i = 0; i < 3; i++) g_dot[i] = hud_sprite_rgba(DOT_ANIM, i, &g_dot_w[i], &g_dot_h[i]);
-    g_tex = gfx_texture(g_rgba, TEX, TEX, TEX_CLAMP);
+    /* the dots: the anim of layout item 15 (radar_blit_dot 0x41c8be: 43 in row 0, 44 in row 1) */
+    for (int i = 0; i < 3; i++) g_dot[i] = hud_sprite_rgba(hud_item_anim(15), i, &g_dot_w[i], &g_dot_h[i]);
+    g_tex = gfx_texture(g_rgba, TEX, TEX, TEX_CLAMP | (g_8bit ? TEX_NEAREST : 0));
     g_init = g_tex != 0;
 }
 
@@ -210,7 +222,7 @@ void radar_draw(const Race *r, Vec3 view)
     if (l > 1e-6f) { vx /= l; vz /= l; } else { vx = 0; vz = 1; }
     GfxVertex v[6];
     static const int FAN[6] = { 0, 1, 2, 0, 2, 3 };                  /* D3DPT_TRIANGLEFAN of 4 TL vertices */
-    gfx_2d_begin(640, 480);
+    scr_2d_begin();                                  /* the TL vertices are in screen coordinates */
     for (int i = 0; i < 6; i++) {
         const float *q = g_quad[FAN[i]];
         float x = q[0] - g_cx, y = q[1] - g_cy, sx, sy;
