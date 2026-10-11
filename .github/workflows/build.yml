@@ -167,4 +167,6 @@ jobs:
           new=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed -e 's/[[:space:]]*$//')
           start="Windows: unzip, start A2RacerIIRE.exe and point it to your A2 Racer II CD (or a mounted ISO image of it). Linux / Steam Deck: unpack the .tar.gz and start a2racerre (needs SDL2). Android: install the .apk and choose your ISO image or a copy of the CD at the first start. Nintendo Switch (homebrew): unzip the -switch.zip onto the SD card and put an ISO image of the CD next to a2racerre.nro in /switch/a2racerre/. The game files are not included - see README.md."
           if [ -n "$new" ]; then printf '%s\n\n%s\n' "$new" "$start" > notes.md; else printf '%s\n' "$start" > notes.md; fi
-          gh release create "$GITHUB_REF_NAME" dist/* --title "A2RacerIIRE $GITHUB_REF_NAME" --notes-file notes.md
+          # a release published by hand on github.com (which makes the tag too) only gets the files added
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else gh release create "$GITHUB_REF_NAME" dist/* --title "A2RacerIIRE $GITHUB_REF_NAME" --notes-file notes.md; fi
