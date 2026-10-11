@@ -2,7 +2,7 @@
  * the original (one game tick = one of its frames): skid marks (gfx_skid.cpp), tyre smoke puffs (gfx_wolk.cpp) and
  * sparks (gfx_sprk.cpp). Game.ini [GFX OPTIONS] skidmarks, fade_skmarks, clouds, alpha_blending switch them.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_EFFECTS_H
 #define A2_EFFECTS_H
 #include "vmath.h"

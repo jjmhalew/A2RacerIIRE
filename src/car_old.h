@@ -2,7 +2,7 @@
  * forces from axle loads, a Pacejka-like tyre curve, a torque parabola with its own automatic gearbox, drag, rolling
  * resistance, brakes (ABS) and handbrake, summed into the object's force/torque for obj_integrate. Player only.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_CAR_OLD_H
 #define A2_CAR_OLD_H
 #include "race.h"

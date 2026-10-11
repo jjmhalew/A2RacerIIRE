@@ -2,7 +2,7 @@
  * canal tour boats, the trams of Den Haag and Rotterdam, the helicopter over Den Haag, the aeroplane over the A4 and
  * a few cars, each started when the player reaches its start chunk and moved along a spline in a fixed time.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_PATHS_H
 #define A2_PATHS_H
 #include "vmath.h"

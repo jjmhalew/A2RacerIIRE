@@ -2,7 +2,7 @@
  * (docs/FORMAT_ROAD.md, the original's rd_main.cpp / rd_chunk.cpp / rd_drmap.cpp / rd_rail.cpp).
  * Coordinates are the original's: Direct3D left-handed, y up, one chunk = 128 units.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_TRACK_H
 #define A2_TRACK_H
 #include "gfx.h"

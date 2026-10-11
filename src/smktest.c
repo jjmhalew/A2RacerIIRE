@@ -1,8 +1,8 @@
 /*
  * smktest.c - command-line test for the Smacker decoder (smk.c).
  *
- * Part of A2RacerRE, a reimplementation of the "A2 Racer II" engine.
- * Copyright (C) 2026 A2RacerRE contributors
+ * Part of A2RacerIIRE, a reimplementation of the "A2 Racer II" engine.
+ * Copyright (C) 2026 A2RacerIIRE contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Usage: smktest file.smk outdir [first] [count]

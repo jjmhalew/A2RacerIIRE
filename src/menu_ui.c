@@ -10,7 +10,7 @@
  * that also holds the screen's clickable areas (slot rows, sliders, check boxes, tabs), so every screen can be used
  * without a mouse; a focused area gets an outline.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "menu_int.h"
 #include "audio.h"
 #include "exetab.h"

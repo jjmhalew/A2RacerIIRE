@@ -1,8 +1,8 @@
-# Builds A2RacerRE.exe with build.bat (Windows), a2racerre with build.sh (Linux / Steam Deck, SDL2), the Android APK
+# Builds A2RacerIIRE.exe with build.bat (Windows), a2racerre with build.sh (Linux / Steam Deck, SDL2), the Android APK
 # (android/, Gradle) and a2racerre.nro with build_switch.sh (Nintendo Switch homebrew) on every push and pull request (no
 # game data involved: the programs hold only the port's own code). A pushed tag v* also publishes a GitHub release with
-# A2RacerRE-<tag>.zip (A2RacerRE.exe, README.md, LICENSE), A2RacerRE-<tag>-linux-x86_64.tar.gz (a2racerre, README.md,
-# LICENSE), A2RacerRE-<tag>.apk and A2RacerRE-<tag>-switch.zip (switch/a2racerre/a2racerre.nro for the SD card).
+# A2RacerIIRE-<tag>.zip (A2RacerIIRE.exe, README.md, LICENSE), A2RacerIIRE-<tag>-linux-x86_64.tar.gz (a2racerre, README.md,
+# LICENSE), A2RacerIIRE-<tag>.apk and A2RacerIIRE-<tag>-switch.zip (switch/a2racerre/a2racerre.nro for the SD card).
 name: build
 
 on:
@@ -27,8 +27,8 @@ jobs:
       - name: Check the exe
         shell: pwsh
         run: |
-          $v = (Get-Item A2RacerRE.exe).VersionInfo
-          "A2RacerRE.exe: $((Get-Item A2RacerRE.exe).Length) bytes, $($v.ProductName) $($v.FileVersion)"
+          $v = (Get-Item A2RacerIIRE.exe).VersionInfo
+          "A2RacerIIRE.exe: $((Get-Item A2RacerIIRE.exe).Length) bytes, $($v.ProductName) $($v.FileVersion)"
           # a release tag must match res/a2racerre.rc (the exe's and the APK's version): v1.2.3 = "1.2.3"
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$($v.ProductVersion)") {
             "::error::tag $env:GITHUB_REF_NAME does not match the version in res/a2racerre.rc ($($v.ProductVersion))"; exit 1 }
@@ -36,15 +36,15 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          $name = if ($env:GITHUB_REF_TYPE -eq 'tag') { "A2RacerRE-$env:GITHUB_REF_NAME" } else { "A2RacerRE-$($env:GITHUB_SHA.Substring(0, 7))" }
+          $name = if ($env:GITHUB_REF_TYPE -eq 'tag') { "A2RacerIIRE-$env:GITHUB_REF_NAME" } else { "A2RacerIIRE-$($env:GITHUB_SHA.Substring(0, 7))" }
           New-Item -ItemType Directory -Force "pkg/$name" | Out-Null
-          Copy-Item A2RacerRE.exe, README.md, LICENSE "pkg/$name/"
+          Copy-Item A2RacerIIRE.exe, README.md, LICENSE "pkg/$name/"
           Compress-Archive -Path "pkg/$name" -DestinationPath "$name.zip"
           "ZIP=$name.zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - uses: actions/upload-artifact@v4
         with:
-          name: A2RacerRE-windows
+          name: A2RacerIIRE-windows
           path: ${{ env.ZIP }}
 
   # Ubuntu 22.04: glibc 2.35 and SDL 2.0.20, so the binary also runs on older distributions and on SteamOS.
@@ -64,14 +64,14 @@ jobs:
 
       - name: Package
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then name="A2RacerRE-$GITHUB_REF_NAME"; else name="A2RacerRE-${GITHUB_SHA:0:7}"; fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="A2RacerIIRE-$GITHUB_REF_NAME"; else name="A2RacerIIRE-${GITHUB_SHA:0:7}"; fi
           mkdir -p "pkg/$name" && cp a2racerre README.md LICENSE "pkg/$name/"
           tar -C pkg -czf "$name-linux-x86_64.tar.gz" "$name"
           echo "TGZ=$name-linux-x86_64.tar.gz" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: A2RacerRE-linux
+          name: A2RacerIIRE-linux
           path: ${{ env.TGZ }}
 
   # Android: arm64 phones and tablets, x86_64 for the emulator and Chromebooks. CMake fetches SDL 2.32.10. Signed with
@@ -113,13 +113,13 @@ jobs:
 
       - name: Package
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then name="A2RacerRE-$GITHUB_REF_NAME"; else name="A2RacerRE-${GITHUB_SHA:0:7}"; fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="A2RacerIIRE-$GITHUB_REF_NAME"; else name="A2RacerIIRE-${GITHUB_SHA:0:7}"; fi
           cp android/app/build/outputs/apk/release/app-release.apk "$name.apk" && ls -l "$name.apk"
           echo "APK=$name.apk" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: A2RacerRE-android
+          name: A2RacerIIRE-android
           path: ${{ env.APK }}
 
   # Nintendo Switch homebrew: devkitPro's own image has devkitA64, libnx, switch-sdl2 and switch-mesa.
@@ -134,14 +134,14 @@ jobs:
 
       - name: Package
         run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then name="A2RacerRE-$GITHUB_REF_NAME"; else name=$(printf 'A2RacerRE-%.7s' "$GITHUB_SHA"); fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="A2RacerIIRE-$GITHUB_REF_NAME"; else name=$(printf 'A2RacerIIRE-%.7s' "$GITHUB_SHA"); fi
           mkdir -p pkg/switch/a2racerre && cp a2racerre.nro README.md LICENSE pkg/switch/a2racerre/
           (cd pkg && zip -qr "../$name-switch.zip" .)
           echo "SWZIP=$name-switch.zip" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: A2RacerRE-switch
+          name: A2RacerIIRE-switch
           path: ${{ env.SWZIP }}
 
   # The release notes: the annotated tag's message, then how to start.
@@ -165,6 +165,6 @@ jobs:
         run: |
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
           new=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed -e 's/[[:space:]]*$//')
-          start="Windows: unzip, start A2RacerRE.exe and point it to your A2 Racer II CD (or a mounted ISO image of it). Linux / Steam Deck: unpack the .tar.gz and start a2racerre (needs SDL2). Android: install the .apk and choose your ISO image or a copy of the CD at the first start. Nintendo Switch (homebrew): unzip the -switch.zip onto the SD card and put an ISO image of the CD next to a2racerre.nro in /switch/a2racerre/. The game files are not included - see README.md."
+          start="Windows: unzip, start A2RacerIIRE.exe and point it to your A2 Racer II CD (or a mounted ISO image of it). Linux / Steam Deck: unpack the .tar.gz and start a2racerre (needs SDL2). Android: install the .apk and choose your ISO image or a copy of the CD at the first start. Nintendo Switch (homebrew): unzip the -switch.zip onto the SD card and put an ISO image of the CD next to a2racerre.nro in /switch/a2racerre/. The game files are not included - see README.md."
           if [ -n "$new" ]; then printf '%s\n\n%s\n' "$new" "$start" > notes.md; else printf '%s\n' "$start" > notes.md; fi
-          gh release create "$GITHUB_REF_NAME" dist/* --title "A2RacerRE $GITHUB_REF_NAME" --notes-file notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "A2RacerIIRE $GITHUB_REF_NAME" --notes-file notes.md

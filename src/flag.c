@@ -1,6 +1,6 @@
 /* flag.c - see flag.h; the original is documented in docs/RENDER.md "Finish flag (gfx_flag.cpp)".
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "flag.h"
 #include "gfx.h"
 #include "image.h"

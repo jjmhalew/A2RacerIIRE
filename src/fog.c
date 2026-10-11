@@ -12,7 +12,7 @@
  * the skid marks' inverted blend, invisible - the "conflicts with alpha blending" of Game.ini). Fog is computed on the
  * eye depth (D3D's vertex fog of the lighting module) (?).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "fog.h"
 #include "ini.h"
 #include "res.h"

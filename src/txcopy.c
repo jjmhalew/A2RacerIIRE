@@ -5,7 +5,7 @@
  * changes them and replaces the GL texture's contents (mipmaps rebuilt). The copies' coordinates are those of the CD's
  * texture images; a texture pack's image of another size (mods/textures) gets them scaled to its size.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "txcopy.h"
 #include "exetab.h"
 #include "gfx.h"

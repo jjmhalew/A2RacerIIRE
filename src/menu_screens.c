@@ -4,7 +4,7 @@
  * original's loop: open the screen (draw it into the back buffer, present, start the sliding buttons and title bar),
  * animate a frame, create the form once the buttons are in, then act on get_menu_event.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "menu_int.h"
 #include "pad.h"
 #include "plat.h"

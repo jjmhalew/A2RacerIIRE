@@ -1,10 +1,10 @@
 /* pack.c - makes the single-file build for your own use (make_standalone.bat): the launcher stub (bundle.c) +
- * A2RacerRE.exe + the files of the manifest (src/datafiles.h) from your copy of the CD's data folder, in the payload
+ * A2RacerIIRE.exe + the files of the manifest (src/datafiles.h) from your copy of the CD's data folder, in the payload
  * layout bundle.c documents. The result holds the game's files: it is for your own machine only, never share it.
- * Usage: pack <stub.exe> <A2RacerRE.exe> <data folder> <out.exe>
+ * Usage: pack <stub.exe> <A2RacerIIRE.exe> <data folder> <out.exe>
  * Build: zig cc -std=c99 -O2 -o pack.exe tools/native/pack.c
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -39,7 +39,7 @@ static void put(FILE *o, const void *p, size_t n) { fwrite(p, 1, n, o); }
 
 int main(int argc, char **argv)
 {
-    if (argc != 5) { fprintf(stderr, "usage: pack <stub.exe> <A2RacerRE.exe> <data folder> <out.exe>\n"); return 2; }
+    if (argc != 5) { fprintf(stderr, "usage: pack <stub.exe> <A2RacerIIRE.exe> <data folder> <out.exe>\n"); return 2; }
     FILE *o = fopen(argv[4], "wb");
     if (!o) { fprintf(stderr, "pack: cannot write %s\n", argv[4]); return 1; }
     static uint64_t offs[NFILES + 1], sizes[NFILES + 1];
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
     if (!append_path(o, argv[1], &sz)) return 1;
     offs[0] = (uint64_t)_ftelli64(o);
     if (!append_path(o, argv[2], &sizes[0])) return 1;              /* entry 0: the game, as the launcher runs it */
-    snprintf(names[n++], sizeof names[0], "A2RacerRE.exe");
+    snprintf(names[n++], sizeof names[0], "A2RacerIIRE.exe");
     for (int i = 0; i < NFILES; i++) {
         char p[1024];
         snprintf(p, sizeof p, "%s/%s", argv[3], DATA_FILES[i].name);

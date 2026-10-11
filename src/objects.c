@@ -2,7 +2,7 @@
  * docs/FORMAT_OBJECTS.md 2.1); a handler runs once per tick for the objects in the handling window, as
  * rceng_handle_objects 0x440850 calls it once per frame.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "objects.h"
 #include "ai.h"
 #include "model.h"

@@ -4,7 +4,7 @@
  * speed, turns the front pair with the steering and keeps them on the road while the body bobs. Traffic and police
  * meshes have their wheels modelled in.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_WHEELS_H
 #define A2_WHEELS_H
 #include "race.h"

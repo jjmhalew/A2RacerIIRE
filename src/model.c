@@ -1,6 +1,6 @@
 /* model.c - see model.h.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "model.h"
 #include "res.h"
 #include "texture.h"

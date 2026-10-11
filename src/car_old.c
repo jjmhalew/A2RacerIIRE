@@ -1,7 +1,7 @@
 /* car_old.c - see car_old.h. Transcribed from docs/PHYSICS.md 7 with its quirks (marked [quirk]); the per-frame steps
  * stay per frame (one game tick).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "car_old.h"
 #include "exetab.h"
 #include <math.h>

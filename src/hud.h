@@ -3,7 +3,7 @@
  * fonts; the 8-bit modes (hud_set_mode) row 0 (320x200 coordinates, 320 px to the right in 640x480x8), the lo fonts
  * and the etappe's 8-bit palette.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_HUD_H
 #define A2_HUD_H
 #include <stdint.h>

@@ -4,7 +4,7 @@
  * police (type-9 .omp cars: speeding check, pursuit, arrest and its game action), the waypoint obstacle lists and the
  * object handling window of the engine, the traffic lights, and the race position of the player.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_AI_H
 #define A2_AI_H
 #include "ini.h"

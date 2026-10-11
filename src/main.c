@@ -1,6 +1,6 @@
-/* main.c - A2RacerRE: start-up, command line and the top-level loop.
+/* main.c - A2RacerIIRE: start-up, command line and the top-level loop.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "audio.h"
 #include "datasetup.h"
 #include "film.h"
@@ -164,7 +164,7 @@ static int view_track(int etappe, int chunk)
 
 int main(int argc, char **argv)
 {
-    PlatConfig cfg = { 960, 720, 0, 1, "A2RacerRE" };
+    PlatConfig cfg = { 960, 720, 0, 1, "A2RacerIIRE" };
     if (getenv("A2_HIDDEN")) setvbuf(stdout, NULL, _IONBF, 0);   /* tests are often stopped by a timeout */
     if (getenv("SteamDeck")) cfg.fullscreen = 1;     /* Steam sets it on the Deck, also in its desktop mode */
     for (int i = 1; i < argc; i++) {

@@ -8,7 +8,7 @@
  * the wheels stay on the road while the body bobs. obj_draw_with_damage 0x440270 draws them with
  * child matrix * parent matrix, i.e. they lean and pitch with the body.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "wheels.h"
 #include "ai.h"
 #include "exetab.h"

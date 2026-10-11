@@ -6,7 +6,7 @@
  * are nothing but key colour), so all but the road and the dots is transparent; road and edge are colours 13 and 0
  * of the screen's palette: e02_pl16 (light grey, black), in the 8-bit modes the etappe's.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "radar.h"
 #include "ai.h"
 #include "gfx.h"

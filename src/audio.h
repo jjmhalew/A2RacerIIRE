@@ -3,7 +3,7 @@
  * for the films' sound. The original plays them through DirectSound buffers (winlib sound.cpp, Raser.ini
  * [SOUND] BUFFERS=60, 3dsound=1 in Game.ini for positional sound).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_AUDIO_H
 #define A2_AUDIO_H
 #include <stddef.h>

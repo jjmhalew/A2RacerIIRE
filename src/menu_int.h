@@ -8,7 +8,7 @@
  * Every drawing call of menu.dat maps onto one of the mui_* calls below with the same arguments, so the screens read
  * like the disassembly. The palette is that of the menu screens (hoofd.pcx), also used by MENURC and the .img fonts.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_MENU_INT_H
 #define A2_MENU_INT_H
 #include <stdint.h>

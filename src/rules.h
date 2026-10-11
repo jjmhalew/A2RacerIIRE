@@ -3,7 +3,7 @@
  * service, start, laps and finish, time checks), the highway time limit, damage and total loss, police stops, game
  * over, results and prize money, pause / quit, and the exchange with the menu through Game.ini.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_RULES_H
 #define A2_RULES_H
 #include "ini.h"

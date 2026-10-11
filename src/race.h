@@ -6,7 +6,7 @@
  * (lateral grip x0.8 per frame, the keyboard brake only builds up below 40 fps, ...). Here the game logic runs at a
  * fixed RACE_HZ like a 1998 PC; the picture is drawn at the display's rate, interpolated between the last two ticks.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_RACE_H
 #define A2_RACE_H
 #include "objects.h"

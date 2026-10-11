@@ -1,6 +1,6 @@
 /* game.c - see game.h.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "game.h"
 #include "audio.h"
 #include "ini.h"

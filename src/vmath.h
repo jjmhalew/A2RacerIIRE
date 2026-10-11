@@ -1,6 +1,6 @@
 /* vmath.h - small vector / 4x4 matrix helpers (column-major, as OpenGL takes them).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_VMATH_H
 #define A2_VMATH_H
 #include <math.h>

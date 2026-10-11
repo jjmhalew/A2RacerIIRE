@@ -4,8 +4,8 @@ extract/
 game/
 *.iso
 # build output
-/A2RacerRE.exe
-/A2RacerRE-standalone.exe
+/A2RacerIIRE.exe
+/A2RacerIIRE-standalone.exe
 /a2racerre.nro
 *.pdb
 build/

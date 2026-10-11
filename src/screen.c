@@ -1,6 +1,6 @@
 /* screen.c - see screen.h.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "screen.h"
 #include "gfx.h"
 #include "hud.h"
@@ -21,7 +21,7 @@ static int g_fw = 640, g_fh = 480;   /* the size of this frame's drawing */
 
 /* graphics.ini in the user folder: the port's picture options (PORT EXTRA), written with its comments when missing */
 static const char GRAPHICS_INI[] =
-    "; graphics.ini - A2RacerRE: picture options of the port that the original does not have. With all of them 0 the\r\n"
+    "; graphics.ini - A2RacerIIRE: picture options of the port that the original does not have. With all of them 0 the\r\n"
     "; picture is the original's. They apply to the 3D card mode (\"3D Kaart\", Raser.ini RESOLUTION 3), from the next\r\n"
     "; race on, and need OpenGL 3 or OpenGL ES 3 (without it they stay off).\r\n"
     "[graphics]\r\n"

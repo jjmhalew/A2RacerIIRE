@@ -1,7 +1,7 @@
 /* collide.c - see collide.h. The pseudocode is docs/PHYSICS.md 8; angles are ANGLE_UNITS (4096) per turn, the
  * rotations use the engine's SIN/COS tables like the original.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "collide.h"
 #include "ai.h"
 #include "effects.h"

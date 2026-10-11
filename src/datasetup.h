@@ -2,7 +2,7 @@
  * the rest from the CD): finding a copy of the CD's data folder, and at the first start copying it from the CD, a
  * mounted or unmounted ISO image of it, or a folder with a copy, checked against src/datafiles.h.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_DATASETUP_H
 #define A2_DATASETUP_H
 

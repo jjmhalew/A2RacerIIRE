@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - builds A2RacerRE for Linux (and the Steam Deck) with SDL2: ./build.sh -> ./a2racerre
+# build.sh - builds A2RacerIIRE for Linux (and the Steam Deck) with SDL2: ./build.sh -> ./a2racerre
 # Needs a C compiler and SDL2, e.g. on Debian / Ubuntu: sudo apt install build-essential libsdl2-dev
 # (Windows: build.bat. Android: android/.) The game files come from your own CD; see README.md.
 # The source list is the same in build.bat and android/app/CMakeLists.txt.

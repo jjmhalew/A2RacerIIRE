@@ -3,7 +3,7 @@
  *   mesh names 0x48d0e0 (357), texture names 0x48e1a0 (91), frames 0x48e5e8 (386: mesh + texture),
  *   anims 0x492050 (312: a list of frames) with their names at 0x490430 ("N_GOLF_ANIM").
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_EXETAB_H
 #define A2_EXETAB_H
 #include <stddef.h>

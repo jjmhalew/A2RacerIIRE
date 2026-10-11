@@ -2,7 +2,7 @@
  * and anims (lists of such frames) by name, as the track files and the game code use them ("MPOLIZEI_ANIM").
  * Meshes are pre-lit (the original loads every one as D3DLVERTEX with white colour): the picture is the texture.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_MODEL_H
 #define A2_MODEL_H
 #include "exetab.h"

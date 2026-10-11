@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A2RacerRE: SDL's AndroidManifest (SDL2 2.32.10, android-project) with the game's activity and a landscape screen -->
+<!-- A2RacerIIRE: SDL's AndroidManifest (SDL2 2.32.10, android-project) with the game's activity and a landscape screen -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 

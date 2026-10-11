@@ -1,7 +1,7 @@
 /* rules.c - see rules.h; the rules are in docs/GAMEFLOW.md 5. Time is the race's own clock in ms, advanced by the game
  * ticks (the original reads GetTickCount; its pause dialog blocks the whole game, so stopping the ticks is the same).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "rules.h"
 #include "effects.h"
 #include "flag.h"

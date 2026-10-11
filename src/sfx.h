@@ -3,7 +3,7 @@
  * objects relative to the player car (snd_main.cpp). Volumes are the original's DirectSound values in 1/100 dB, made
  * quieter by Raser.ini [SOUND] SFXVOLUME (an attenuation: 0 = no sound effects).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_SFX_H
 #define A2_SFX_H
 #include "vmath.h"

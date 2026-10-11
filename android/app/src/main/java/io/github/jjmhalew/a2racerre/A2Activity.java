@@ -3,7 +3,7 @@
 // and a progress dialog.
 // Testing: adb shell am start -n io.github.jjmhalew.a2racerre/.A2Activity -e args "--track 1"
 //
-// This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE).
+// This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE).
 package io.github.jjmhalew.a2racerre;
 
 import android.app.Activity;
@@ -26,7 +26,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 public class A2Activity extends SDLActivity {
-    private static final String TAG = "A2RacerRE";
+    private static final String TAG = "A2RacerIIRE";
     private static final int REQ_ISO = 0xa201, REQ_DIR = 0xa202;
 
     private static final Object sLock = new Object();
@@ -96,7 +96,7 @@ public class A2Activity extends SDLActivity {
             if (text == null) { if (sProgress != null) { sProgress.dismiss(); sProgress = null; } return; }
             if (sProgress == null) {
                 sProgress = new AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle("A2RacerRE").setMessage(text).setCancelable(false).create();
+                    .setTitle("A2RacerIIRE").setMessage(text).setCancelable(false).create();
                 sProgress.show();
             } else sProgress.setMessage(text);
         });

@@ -5,7 +5,7 @@
  * modes (layout row 0 in 320x200 coordinates, the lo_* fonts, every sprite and glyph shown through the etappe's 8-bit
  * palette, no gamma). The index of a table row is (g_8bit == 0) everywhere (0x41c128, 0x41c018, 0x418330).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "hud.h"
 #include "exetab.h"
 #include "gfx.h"

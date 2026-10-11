@@ -2,7 +2,7 @@
  * only for the player car's two brake lights, lit while g_plr_brake_light is set. Game.ini [GFX OPTIONS] object_lights
  * and alpha_blending switch them.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_LIGHTS_H
 #define A2_LIGHTS_H
 #include "race.h"

@@ -1,7 +1,7 @@
 /* film.c - see film.h. The picture follows the clock of the sound: a frame is shown when the sound queued before it
  * has been played (the first frame of these films carries about a second of sound ahead of the picture).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "film.h"
 #include "audio.h"
 #include "gfx.h"
