@@ -4,6 +4,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "objects.h"
+#include "crt.h"
 #include "ai.h"
 #include "model.h"
 #include "race.h"
@@ -187,7 +188,7 @@ static int object_flyup_check_collision(int i, float mass)
     if (!hit_by_player(i)) return 0;
     const Obj *p = &R->obj[R->plr_obj];
     Vec3 v = p->vel;
-    int a = ftol(p->yaw) + (125 - rand() % 250);
+    int a = ftol(p->yaw) + (125 - crt_rand() % 250);
     if (a > ANGLE_UNITS) a -= ANGLE_UNITS;                            /* [0x49b010], then & mask */
     float s = (v.x + v.z) / mass, sn = race_sin(a), cs = race_cos(a);
     t->vel.x = cs * v.x - sn * v.z * 1.5f;

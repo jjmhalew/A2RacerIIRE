@@ -2,6 +2,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "race.h"
+#include "crt.h"
 #include "ai.h"
 #include "car_old.h"
 #include "collide.h"
@@ -42,7 +43,7 @@ static unsigned g_sky_sw;
 static int g_sky_w, g_sky_h;
 
 static int ftol(float f) { return (int)f; }   /* MSVC _ftol: truncation toward zero */
-static float frand_sign(void) { return rand() % 10 < 5 ? 1.0f : -1.0f; }
+static float frand_sign(void) { return crt_rand() % 10 < 5 ? 1.0f : -1.0f; }
 
 /* ---- road helpers -------------------------------------------------------------------------------------------- */
 /* chunk_height_at 0x442f00: the chunk is one plane n.p = d */
@@ -646,7 +647,7 @@ int race_init(Race *r, int etappe, int car)
     if (!hud_ok) hud_ok = hud_init();
     if (scr_hw3d()) {   /* the sky: one of back1..7.pcx at random (0x4234e0), loaded without gamma */
         char n[16];
-        snprintf(n, sizeof n, "back%d", rand() % 7 + 1);
+        snprintf(n, sizeof n, "back%d", crt_rand() % 7 + 1);
         const Texture *t = tex_get(n);
         r->sky_tex = t ? t->id : 0;
     } else if (!g_sky_off) {

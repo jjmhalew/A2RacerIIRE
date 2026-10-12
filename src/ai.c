@@ -6,6 +6,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "ai.h"
+#include "crt.h"
 #include "collide.h"
 #include "exetab.h"
 #include "model.h"
@@ -405,7 +406,7 @@ static void add_ai(int o, int behavior, int waypoint, int lane)
         backtrack_speed_trigger(o, &speed_trig, &lane_trig);
         ai_apply_trigger(a, c->side, speed_trig);
         ai_apply_trigger(a, c->side, lane_trig);
-        s->speed_factor = (float)rand() * 3.05185e-05f * 0.2f - -0.9f;        /* 0.9 .. 1.1 */
+        s->speed_factor = (float)crt_rand() * 3.05185e-05f * 0.2f - -0.9f;        /* 0.9 .. 1.1 */
     }
     if (behavior == 14) {
         s->cop = cop_new(o);
@@ -1381,9 +1382,9 @@ static void cop_siren_light_update(void)                              /* 0x40c86
 static void cop_voice(int target, int *handle, const int *samples, int n)   /* 0x4150f0 / 0x415170 */
 {
     if (!ai_snd_play) return;
-    if (target != R->plr_obj && rand() % 3 != 0) return;
+    if (target != R->plr_obj && crt_rand() % 3 != 0) return;
     if (*handle != -1 && snd_playing(*handle)) return;
-    *handle = sndfx_play(samples[rand() % n]);
+    *handle = sndfx_play(samples[crt_rand() % n]);
 }
 
 /* ---- game actions: the arrest (cops_init 0x415300 / cops_handle 0x415420 / cops_exit 0x415490) and game over --- */
@@ -1393,7 +1394,7 @@ static void cops_init(void)
     if (g_times_caught == 1) R->hud_message = 49;                     /* EERSTE WAARSCHUWING */
     else if (g_times_caught == 2) R->hud_message = 50;                /* LAATSTE WAARSCHUWING */
     if (ai_snd_play && g_times_caught >= 1 && g_times_caught <= 3)
-        sndfx_play(g_arrest_samples[g_times_caught - 1][rand() % g_arrest_count[g_times_caught - 1]]);
+        sndfx_play(g_arrest_samples[g_times_caught - 1][crt_rand() % g_arrest_count[g_times_caught - 1]]);
     g_cops_start_ms = now_ms();
 }
 
@@ -1446,7 +1447,7 @@ static int cfun_random_block(int i)                                   /* 0x4018b
     if (g_racers[i].position != 0) return 0;
     if (OBJ(g_fsm[i].object)->vel.z < 30.0f) return 0;
     float p = dt() * 50.0f;
-    int r = rand() % 100;
+    int r = crt_rand() % 100;
     if ((float)r < p && g_fsm[i].timer < 1.0f) return 1;
     g_fsm[i].timer = 0;
     return 0;
@@ -1578,7 +1579,7 @@ static int ai_cop_start_chase(int cop, int target)
     int max_cops = target == R->plr_obj ? (g_difficulty ? 3 : 1) : 2;
     if (R->track.city == 1) {
         float p = dt() * 1000.0f;
-        if (!((float)(rand() % 1000) <= p)) return 0;
+        if (!((float)(crt_rand() % 1000) <= p)) return 0;
     }
     int s;
     for (s = 3; s < NFSM && g_fsm[s].object != -1; s++) ;
@@ -2262,7 +2263,7 @@ static void init_traffic(void)
         int side = g < 2 ? side_a : side_b, n = (g < 2 ? g_traffic_same_side : g_traffic_oncoming) / 2;
         for (int i = 0, d = 0; i < n; i++, d += 3) {
             int chunk = rceng_wrap_chunk(g & 1 ? g_startchunk + g_visible_chunks + d + 5 : g_startchunk - g_visible_chunks - d - 5);
-            int type = g_traffic_types[rand() % 12][0], beh = g_traffic_types[rand() % 12][1];
+            int type = g_traffic_types[crt_rand() % 12][0], beh = g_traffic_types[crt_rand() % 12][1];
             int o = add_car(type, chunk, 0, side, side, handle_traffic_ai, mesh_damage_collision_func, 2);
             if (o < 0) continue;
             add_ai(o, beh, rceng_get_waypoint_index(chunk, 0, side), 0);
@@ -2284,7 +2285,7 @@ static int objects_overlap(int a, int b)
 static int can_respawn_at(int w, int o, int force)                    /* 0x40b650 */
 {
     if (!force) {
-        if (rand() % 30 != 0) return 0;
+        if (crt_rand() % 30 != 0) return 0;
         if (1.0f / dt() < 14.5f) return 0;
     }
     if (w != -1) {

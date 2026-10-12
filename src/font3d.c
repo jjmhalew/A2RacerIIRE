@@ -2,6 +2,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "font3d.h"
+#include "crt.h"
 #include "exetab.h"
 #include "gfx.h"
 #include "model.h"
@@ -142,9 +143,9 @@ static void fx0_update(Letter *l)                   /* 0x417b20 */
 static void fx1_init(Letter *l)                     /* 0x417c30: burst apart */
 {
     l->vel = v3((l->ipos.x - l->center.x) * 0.2f, 15.0f, (l->ipos.z - l->center.z) * 0.2f);
-    l->rotvel.x = (float)(rand() % 200);
-    l->rotvel.y = (float)(rand() % 200);
-    l->rotvel.z = (float)(rand() % 200);
+    l->rotvel.x = (float)(crt_rand() % 200);
+    l->rotvel.y = (float)(crt_rand() % 200);
+    l->rotvel.z = (float)(crt_rand() % 200);
     l->frames = 25;
 }
 

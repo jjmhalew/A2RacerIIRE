@@ -15,6 +15,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "particles.h"
+#include "crt.h"
 #include "fog.h"
 #include "gfx.h"
 #include "ini.h"
@@ -22,6 +23,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define POOL 4000                       /* prt_alloc_pool 0x431fb0: malloc(0x52080) = 4000 x 0x54 */
 
@@ -53,7 +55,7 @@ static int g_n;
 static int ftol(float f) { return (int)f; }   /* MSVC _ftol (0x4700e0): truncation toward zero */
 
 /* (rand() - 0x3fff) * [0x47f920] (1/16383): -1 .. 1; the original's rand() is the MSVC CRT one (0..32767) */
-static float rnd(void) { return (float)((rand() & 0x7fff) - 0x3fff) * 6.10388815e-05f; }
+static float rnd(void) { return (float)((crt_rand() & 0x7fff) - 0x3fff) * 6.10388815e-05f; }
 
 static void rain_setup(Emitter *e, int active)                      /* prt_rain_setup 0x4328b0 */
 {
@@ -85,7 +87,8 @@ void prt_init(void)
     g_n = 0;
     if (!g_on) return;
     /* prt_alloc_pool also calls srand(time(NULL)), which reseeds every later rand() of the race (the fog coin, the
-     * traffic); PORT: not done, the port seeds nothing */
+     * traffic, the sky); without particles the CRT stays on seed 1 */
+    crt_srand((unsigned)time(NULL));
     rain_setup(&E, rain);
 }
 

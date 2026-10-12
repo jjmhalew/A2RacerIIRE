@@ -14,6 +14,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "fog.h"
+#include "crt.h"
 #include "ini.h"
 #include "res.h"
 #include "rules.h"
@@ -69,7 +70,7 @@ void fog_init(void)                                                 /* init_bkg 
      * the device in TEXTUREMAPBLEND COPY for the whole race */
     if (!scr_hw3d()) { g_decal = 1; return; }
     /* A2_TEST_FOG (tests): the coin always says yes */
-    if (fog && ((rand() & 1) || getenv("A2_TEST_FOG"))) {
+    if (fog && ((crt_rand() & 1) || getenv("A2_TEST_FOG"))) {
         if (fog != 2) g_decal = 1;                                  /* TEXTUREMAPBLEND COPY */
         fog_enable();
         g_base[0] = 0xdc; g_base[1] = 0x7d; g_base[2] = 0x64;

@@ -3,6 +3,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "collide.h"
+#include "crt.h"
 #include "ai.h"
 #include "effects.h"
 #include "exetab.h"
@@ -375,7 +376,7 @@ static void plr_collision_sound(void)                                 /* 0x427cc
         if (now - g_crash_sound_ms < 300) {
             if (J < 18000 && g_coll.type == 0 && (g_scrape_snd == -1 || !(ai_snd_playing && ai_snd_playing(g_scrape_snd))))
                 g_scrape_snd = ai_snd_play(0x52);                     /* rail scrape */
-        } else ai_snd_play(g_crash_samples[J < 18000 ? 0 : J < 25000 ? 1 : 2][rand() % 2]);
+        } else ai_snd_play(g_crash_samples[J < 18000 ? 0 : J < 25000 ? 1 : 2][crt_rand() % 2]);
     }
     g_crash_sound_ms = now;
 }

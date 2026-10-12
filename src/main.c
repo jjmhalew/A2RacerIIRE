@@ -2,6 +2,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "audio.h"
+#include "crt.h"
 #include "datasetup.h"
 #include "film.h"
 #include "gfx.h"
@@ -24,6 +25,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+unsigned g_crt_seed = 1;        /* crt.h: the CRT's holdrand (0x4a21b8), shared by every crt_rand() */
 
 /* the first argument that is not an option or an option's value: a data folder, the CD or an ISO image */
 static const char *path_arg(int argc, char **argv)

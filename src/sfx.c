@@ -2,6 +2,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "sfx.h"
+#include "crt.h"
 #include "audio.h"
 #include "exetab.h"
 #include "ini.h"
@@ -163,7 +164,7 @@ int sfx_object(int key, int idx, Vec3 src, int loop)
     if (!sl) return 0;                                             /* none free: dropped */
     sl->key = key;
     sl->idx = idx;
-    int f = s->rate + rand() % 500;                                /* random detune */
+    int f = s->rate + crt_rand() % 500;                                /* random detune */
     f = clampi(f, 8000, 40000);
     sl->freq_detune = f - s->rate;
     sl->voice = audio_play(s, db(v - 100), pan, (float)f / s->rate, loop);

@@ -3,6 +3,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "effects.h"
+#include "crt.h"
 #include "gfx.h"
 #include "screen.h"
 #include "texture.h"
@@ -40,7 +41,7 @@ static double g_smoke_clock;
 static unsigned g_tex;
 static int g_on_skid = 1, g_fade = 1, g_on_smoke = 1;
 
-static float frnd(void) { return (float)rand() / (float)RAND_MAX; }
+static float frnd(void) { return (float)crt_rand() / (float)CRT_RAND_MAX; }
 
 void fx_init(int skidmarks, int fade, int smoke, int alpha_blending)
 {
@@ -115,7 +116,7 @@ static void puff_spawn(Vec3 pos, Vec3 vel, float dt)          /* 0x41fd80 */
             if (p->life < 1) p->life = 1;
             p->pos = pos;
             float k = 0.75f + frnd() * 0.25f;
-            p->vel = v3(vel.x * k, (float)(rand() % 35 + 9) / p->life, vel.z * k);
+            p->vel = v3(vel.x * k, (float)(crt_rand() % 35 + 9) / p->life, vel.z * k);
             p->size = 7;
             p->alpha = 0x50;
             return;
@@ -161,7 +162,7 @@ void fx_sparks(Vec3 pos, Vec3 dir, float speed, float dt)
                 s->pos = v3(pos.x + (frnd() - 0.5f) * 5, pos.y + (frnd() - 0.5f) * 5, pos.z + (frnd() - 0.5f) * 5);
                 float m = (frnd() + 0.5f) * speed * 3 / s->life;
                 s->vel = v3(dir.x * m, 0, dir.z * m);
-                float a = ((rand() % 50) + speed - 25) * 0.02f + 1.5f;
+                float a = ((crt_rand() % 50) + speed - 25) * 0.02f + 1.5f;
                 s->amp = a < 1.5f ? 1.5f : a > 2.3f ? 2.3f : a;
                 s->y0 = s->pos.y;
                 break;

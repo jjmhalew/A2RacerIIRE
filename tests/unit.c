@@ -1,8 +1,9 @@
-/* unit.c - tests that need no game data (CI: tests/run.sh): the ini reader/writer, the PCX and TGA decoders on images
- * made here, the Smacker decoder on garbage, the WAV reader.
+/* unit.c - tests that need no game data (CI: tests/run.sh): the ini reader/writer, the CRT's rand, the PCX and TGA
+ * decoders on images made here, the Smacker decoder on garbage, the WAV reader.
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "audio.h"
+#include "crt.h"
 #include "image.h"
 #include "ini.h"
 #include "smk.h"
@@ -22,6 +23,18 @@ uint8_t *res_load(const char *name, size_t *size) { (void)name; (void)size; retu
 
 static int g_fail;
 #define CHECK(c) do { if (!(c)) { printf("FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); g_fail++; } } while (0)
+
+unsigned g_crt_seed = 1;
+
+/* crt_rand() gives the MSVC CRT sequence from seed 1 on every platform */
+static void test_crt_rand(void)
+{
+    static const int want[] = { 41, 18467, 6334, 26500, 19169, 15724, 11478, 29358 };
+    crt_srand(1);
+    for (int i = 0; i < 8; i++) CHECK(crt_rand() == want[i]);
+    crt_srand(0xffffffffu);
+    for (int i = 0; i < 100000; i++) { int v = crt_rand(); if (v < 0 || v > CRT_RAND_MAX) { CHECK(0); break; } }
+}
 
 static void test_ini(void)
 {
@@ -117,6 +130,7 @@ static void test_smk_garbage(void)
 int main(void)
 {
     test_ini();
+    test_crt_rand();
     test_pcx();
     test_tga();
     test_wav();

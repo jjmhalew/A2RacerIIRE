@@ -3,6 +3,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "rules.h"
+#include "crt.h"
 #include "effects.h"
 #include "flag.h"
 #include "fog.h"
@@ -476,7 +477,7 @@ void rules_tick(Race *r)
         if (r->damage >= 99 && G.clock - G.smoke_at >= 200) {      /* 0x4159a0: the wreck smokes */
             G.smoke_at = G.clock;
             const Obj *c = player(r);
-            float fwd = (float)(rand() % 6 - 3 + 16), side = (float)(rand() % 18 - 9);
+            float fwd = (float)(crt_rand() % 6 - 3 + 16), side = (float)(crt_rand() % 18 - 9);
             Vec3 f = car_fwd(c), rt = v3(f.z, 0, -f.x);
             Vec3 p = v3_add(c->pos, v3_add(v3_scale(rt, side), v3_scale(f, fwd)));
             p.y = c->pos.y + 5;

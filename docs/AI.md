@@ -18,7 +18,8 @@ How to read the pseudocode:
   name functions and variables. `fatal()` = `sub_464e50` (prints and continues).
 - `dt()` = `sub_441cd0(this = 0x4e4970)`: the smoothed frame time in seconds. It returns 0.1 when the time is 0 or
   above 0.1, so it is never larger than 0.1.
-- `rand()` = MSVC `sub_470120` (0..32767).
+- `rand()` = MSVC `sub_470120` (0..32767; holdrand 0x4a21b8, seed 1). The port calls `crt_rand()` (src/crt.h), the same
+  LCG on every platform: the host's rand() has RAND_MAX 0x7fffffff on Linux, Android and the Switch.
 - Helper macros used in several sections: `OBJ(o)` (object, stride 0xa0), `O3D(o)` (object3d, stride **0x99**),
   `WP(w)` (driver-map waypoint, 0x50), `CHUNK(c)` (chunk record, 0x184), `AI(a)` (t_ai_state, 0x6c),
   `BH(b)` (t_ai_behavior, 0x2c), `COP(c)` (t_cop, 0x20), `fsm[i]` / `E` (t_fsm, 0x60).

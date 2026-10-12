@@ -2,6 +2,7 @@
  *
  * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "paths.h"
+#include "crt.h"
 #include "model.h"
 #include "res.h"
 #include "sfx.h"
@@ -105,7 +106,7 @@ static void start(int pi, float dt)
     case 4: a->anim = anim_find("C_TREIN_ANIM"); a->sample = SFX_TREIN; break;   /* tram 0x434a70 */
     case 5: a->anim = anim_find("C_HELI_ANIM"); a->sample = SFX_HELI;    /* helicopter 0x433170 */
             a->anim2 = anim_find("C_LBLADE_ANIM"); a->anim3 = anim_find("C_SBLADE_ANIM"); break;
-    case 6: a->anim = anim_find(TRAFFIC[rand() % 5]); a->sample = 32; break;      /* traffic car 0x434cf0 */
+    case 6: a->anim = anim_find(TRAFFIC[crt_rand() % 5]); a->sample = 32; break;      /* traffic car 0x434cf0 */
     case 7: a->anim = anim_find("A_VLIEGT_ANIM"); a->sample = SFX_VLIEGT; break; /* aeroplane 0x434550 */
     default: return;                                                     /* 0..2: no object in the data */
     }

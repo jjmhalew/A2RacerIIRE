@@ -556,8 +556,8 @@ the same in the 3D-card mode and the 8-bit (RAMP) modes (render_game calls prt_f
   one frame's movement, so short and slanted at first, nearly vertical and about 5 long later; grey 102..153.
 - Port (src/particles.c): prt_init from race_init (keys missing: the CD's values 0 and 1), prt_tick from race_tick
   after the effects (one game tick = one original frame), prt_draw from race_draw after fx_draw, before the flag,
-  around the camera as drawn (interpolated); the particles move per tick. rand() & 0x7fff as the CRT's rand. PORT:
-  no srand(time) (the port seeds nothing); a line is a quad facing the camera, as wide as one of the original's
+  around the camera as drawn (interpolated); the particles move per tick. crt_rand() (src/crt.h) is the CRT's rand,
+  reseeded from time(NULL) as prt_alloc_pool does. PORT: a line is a quad facing the camera, as wide as one of the original's
   pixels (1/480 of the 640x480 mode's picture height, at least one window pixel; the 8-bit modes: one pixel of their
   target); untextured, with the vertex colour also under TEXTUREMAPBLEND COPY (fog = 1, the 8-bit modes), where the
   original's colour came from texture 0 at undefined UVs (MODULATE: grey times that texel; COPY: the texel) (?);
