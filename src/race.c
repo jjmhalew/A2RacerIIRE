@@ -15,6 +15,7 @@
 #include "ini.h"
 #include "model.h"
 #include "pad.h"
+#include "particles.h"
 #include "paths.h"
 #include "plat.h"
 #include "radar.h"
@@ -688,6 +689,7 @@ int race_init(Race *r, int etappe, int car)
     paths_load(etappe);
     fx_reset();
     shadow_init(); lights_init(r); fog_init();         /* init_game / init_player_car: shadows, brake lights, fog */
+    prt_init();                                        /* init_game 0x42423b: the rain (Game.ini particles) */
     sfx_init();
     static const RulesHooks hooks = { ai_player_position, ai_save_racers };
     rules_init(r, &hooks);                             /* state 1: the start camera and the countdown */
@@ -710,6 +712,7 @@ void race_free(Race *r)
     rules_free();
     paths_free();
     fx_free();
+    prt_free();
     ai_free();
     objects_free(&r->objects);
     track_free(&r->track);
@@ -755,6 +758,7 @@ static void race_tick(void)
         fx_smoke(&fc, R->skid, R->dt);
         fx_tick(R->dt);
     }
+    prt_tick();                 /* prt_frame 0x431f60 (render_game): the rain's particles move, new ones */
     camera_update();
     for (int o = 0; o < R->nobj; o++) {
         Obj *c = &R->obj[o];
@@ -961,6 +965,10 @@ static void race_draw(float alpha)
     {   /* the effects' billboards copy the camera's orientation */
         Vec3 f = v3_norm(v3_sub(tgt, eye)), rt = v3_norm(v3_cross(v3(0, 1, 0), f)), up = v3_cross(f, rt);
         fx_draw(eye, rt, up);
+        /* render_game: the particles after the clouds, before the flag; one of the original's pixels: the 640x480
+         * mode's 480 lines (at least one of the window's), an 8-bit mode's own lines */
+        int lines = scr_8bit() || h < 480 ? h : 480;
+        prt_draw(eye, f, 2 * tanf(fovy / 2) / (lines > 0 ? lines : 480));
     }
     rules_draw_3d(R);                                   /* after the effects as in render_game: flag, 3D letters */
     gfx_set_model(NULL);

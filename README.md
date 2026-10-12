@@ -15,8 +15,8 @@ Playable from start to end, still being polished. What runs today:
   options, standings, help), the seven *etappes* (city races and highway qualifications), prize money and results
 - all tracks with their scenery, traffic lights, trams, boats, the helicopter and the aircraft
 - the player's car with the original's handling (both steering models, ported 1:1), the four cameras, the in-race
-  overlay in the original's fonts, car shadows, brake lights, skid marks, tyre smoke and sparks, and the optional fog
-  (Game.ini `fog`)
+  overlay in the original's fonts, car shadows, brake lights, skid marks, tyre smoke and sparks, the optional fog
+  (Game.ini `fog`) and the rain the CD leaves switched off (Game.ini `particles=1`)
 - traffic, the three opponents and the police (speed checks, pursuit, arrest), collisions and damage
 - the race rules: start sequence, laps and records, checkpoints and the highway time limit, speed cameras, quick
   service, game over, pause and quit

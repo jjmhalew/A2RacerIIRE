@@ -7,7 +7,7 @@ set -e
 cd "$(dirname "$0")"
 CC=${CC:-cc}
 OUT=${1:-a2racerre}
-SRC="src/main.c src/plat_sdl.c src/pad.c src/touch.c src/gfx_gl.c src/res.c src/image.c src/ini.c src/audio.c src/smk.c src/film.c src/texture.c src/track.c src/datasetup.c src/exetab.c src/model.c src/objects.c src/race.c src/hud.c src/paths.c src/effects.c src/sfx.c src/rules.c src/font3d.c src/flag.c src/car_old.c src/wheels.c src/shadow.c src/lights.c src/fog.c src/ai.c src/collide.c src/menu.c src/menu_ui.c src/menu_screens.c src/game.c src/txcopy.c src/radar.c src/screen.c"
+SRC="src/main.c src/plat_sdl.c src/pad.c src/touch.c src/gfx_gl.c src/res.c src/image.c src/ini.c src/audio.c src/smk.c src/film.c src/texture.c src/track.c src/datasetup.c src/exetab.c src/model.c src/objects.c src/race.c src/hud.c src/paths.c src/effects.c src/particles.c src/sfx.c src/rules.c src/font3d.c src/flag.c src/car_old.c src/wheels.c src/shadow.c src/lights.c src/fog.c src/ai.c src/collide.c src/menu.c src/menu_ui.c src/menu_screens.c src/game.c src/txcopy.c src/radar.c src/screen.c"
 # -ffp-contract=off: no fused multiply-adds (ARM and newer x86 have them), so the physics rounds the same everywhere
 echo "Building $OUT ..."
 # shellcheck disable=SC2086

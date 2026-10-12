@@ -304,14 +304,23 @@
 0x485c28 g_brake_light_pos ; float[7][2][3]: per car type the left and right brake light (car space)
 0x48b458 g_brake_light ; [2] light indices
 0x4d9e10 g_brake_lights_lit ; handle_player_car switches the lights only on a change
-0x431f20 prt_init
-0x431f60 prt_frame
-0x431fb0 prt_alloc_pool ; 4000
-0x432150 prt_spawn
-0x4325b0 prt_build_lines
-0x4326e0 prt_draw ; LINELIST, ZENABLE off
-0x4328b0 prt_rain_setup
-0x432990 prt_rain_follow_cam
+0x431f20 prt_init ; (init_game) only with g_opt_particles: pool, emitter, rain
+0x431f60 prt_frame ; (render_game, after the clouds) per active emitter: update, update callback, draw callback
+0x431fb0 prt_alloc_pool ; srand(time(NULL)), malloc 4000 x 0x54, free list
+0x432000 prt_emitter_ctor ; (emitter) name "Emitter", defaults, matrix = identity, draw = prt_draw
+0x432130 prt_emitter_init ; ctor + particle list +0x78 = 0
+0x432150 prt_spawn ; (emitter) one particle from the free list, 10 rand(); none when count >= max
+0x432410 prt_particle_update ; (particle, emitter) life > 0: move, accelerate, colour step, life--; life 0: freed
+0x432520 prt_emitter_update ; every particle, then ftol(rnd * +0x88) + +0x84 spawns
+0x432590 prt_emitter_set_matrix ; (emitter, Mat4 *) -> +0xd4
+0x4325b0 prt_build_lines ; (emitter, LVERTEX *, max) 2 per particle: now and last frame; tu/tv not written
+0x4326e0 prt_draw ; texture 0, WORLD = emitter matrix, ZENABLE off, LINELIST, ZENABLE on
+0x4328b0 prt_rain_setup ; the rain's emitter values (RENDER.md), active = g_opt_part_rain
+0x432990 prt_rain_follow_cam ; emitter matrix = identity + camera position + (0, 20, 0)
+0x4e0460 g_prt_emitters ; [1] x 0x11c bytes (array end 0x4e057c)
+0x4e057c g_prt_free ; the pool's free list (particles 0x54 bytes, link +4)
+0x4ea468 g_mat_identity ; the identity matrix (math3d_init_tables 0x450391), copied as a start by many
+0x49661c s_prt_emitter_name ; "Emitter"
 0x4d9a80 g_opt_background ; Game.ini [OPTIONS] BACKGROUND (disables sw sky)
 0x4d9b04 g_srcblendcaps
 0x4d9b08 g_destblendcaps

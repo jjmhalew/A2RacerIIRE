@@ -171,7 +171,7 @@ TEXTUREHANDLE. D3DBLEND: 2 ONE, 5 SRCALPHA, 6 INVSRCALPHA.
 | `0x4203d0` | clouds | 1 -> 0 | SRCALPHA / **ONE** (additive) | LVERTEX fans |
 | `0x41aee0` | finish flag | 1 -> 0 | SRCALPHA / INVSRCALPHA | ZENABLE 0 then 1, own filter |
 | `0x417870` | 3D font (gfx_3dft = "3D font", not 3dfx) | | | ZENABLE 0 then 1 |
-| `0x4325b0` | particles (rain) | | | ZENABLE toggled, LINELIST |
+| `0x4326e0` | particles (rain) | - (0 from the clouds) | - | ZENABLE 0 then 1, LVERTEX LINELIST, texture 0 |
 
 Textures: table `g_textures [0x4eaa28]`, 0x48 bytes per entry, +0 = D3DTEXTUREHANDLE; the last bound handle is
 cached in `0x4ea834` (every draw function compares before calling SetRenderState(TEXTUREHANDLE)).
@@ -489,12 +489,79 @@ Port: src/lights.c.
   is not drawn and its lights (behind the camera) are skipped.
 
 ### Particles / rain (prt_main.cpp)
-- The whole module is gated by `particles` (0 in the shipped Game.ini, so off); the emitter by `part_rain`.
-- Pool 4000 (`0x431fb0`), one emitter. Rain (`0x4328b0`): max 200, 10+-5 new per frame, life 50+-15 frames,
-  random yaw, speed 2.0, gravity (0, -0.1, 0) per frame, grey 0.5+-0.1; the emitter follows the camera position
-  + (0, 20, 0) (`0x432990`).
-- Draw `0x4326e0`: 2 LVERTEX per particle (current and previous position), ZENABLE off,
-  DrawPrimitive(LINELIST), ZENABLE on: depth-less streaks.
+Port: src/particles.c (names in docs/names/spel_render.txt). A general particle module with one emitter, set up as
+"rain": a spray of grey 1-pixel streaks around the camera. The CD's Game.ini switches it off (`particles=0`, comment
+"Currently the module isn't used"); `part_rain=1` only matters when `particles` is not 0. Both are read by
+`gm_ini_load_gfx_options` 0x421fd0 with GetPrivateProfileInt, default 0 (`g_opt_particles` 0x4d9af4, `g_opt_part_rain`
+0x4d9af8). Nothing else reads them: the rain does not depend on the etappe, the track, the sky or the fog, and it is
+the same in the 3D-card mode and the 8-bit (RAMP) modes (render_game calls prt_frame on both paths).
+
+- `prt_init` 0x431f20 (init_game 0x42423b, before light_init and init_bkg; only with `particles`):
+  `prt_alloc_pool` 0x431fb0 calls **srand(time(NULL))** (0x470640 / 0x470110 = the CRT's time / srand: every later
+  rand() of the race - the fog coin of init_bkg, the traffic - is then seeded from the clock), mallocs 4000 particles
+  of 0x54 bytes (0x52080) and links them into the free list `g_prt_free` 0x4e057c (via +4). Then per emitter of the
+  array 0x4e0460..0x4e057c (stride 0x11c: one emitter) `prt_emitter_init` 0x432130 (`prt_emitter_ctor` 0x432000 and
+  the list head +0x78 = 0), then `prt_rain_setup` 0x4328b0 on it.
+- Emitter (0x11c bytes): +0 0, +4 name "Emitter" (0x49661c), +0x54..+0x5c 0, +0x60/+0x64 yaw base/range, +0x68/+0x6c
+  pitch base/range (radians), +0x70/+0x74 speed base/range, +0x78 particle list, +0x7c max particles, +0x80 count,
+  +0x84/+0x88 new per frame base/range, +0x8c/+0x90 life base/range (frames), +0x94/+0xa0 start RGB base/range,
+  +0xac/+0xb8 end RGB base/range, +0xc4 acceleration (vec3, per frame), +0xd0 active, +0xd4 matrix (16 floats, the
+  emitter's world matrix; the identity 0x4ea468 of math3d_init_tables at first), +0x114 draw callback, +0x118 update
+  callback. The constructor's values (yaw 0 / 2 pi, pitch pi/2 / 0.698, speed 0.5 / 0.05, max 500, new 15 / 5, life
+  80 / 15, white, acceleration (0, -0.007, 0), inactive, draw = prt_draw, no update) are all replaced by the rain's:
+
+  | Field | Rain (`prt_rain_setup` 0x4328b0) |
+  |---|---|
+  | yaw / pitch | 0 + rnd * 2 pi / 0 + rnd * 0: horizontal, every direction |
+  | speed | 2.0 + rnd * 0.05 units per frame |
+  | max | 200 |
+  | new per frame | 10 + ftol(rnd * 5): 5..15 |
+  | life | 50 + ftol(rnd * 15): 35..65 frames |
+  | start / end colour | 0.5 + rnd * 0.1 per channel (each drawn on its own) |
+  | acceleration | (0, -0.1, 0) |
+  | active | g_opt_part_rain |
+  | update callback | `prt_rain_follow_cam` 0x432990 |
+
+  rnd = (rand() - 0x3fff) * [0x47f920] (1/16383): -1 .. 1.00006, the MSVC CRT rand() (0..32767).
+- `prt_frame` 0x431f60 (render_game, after cloud_draw, before flag_draw; returns at once without `particles`): per
+  emitter with active (+0xd0) set: `prt_emitter_update` 0x432520, the update callback, the draw callback. Inactive:
+  nothing, not even drawn. It runs once per rendered frame; while the pause dialog is up (handle_pause 0x4248d0 blocks)
+  nothing is rendered, so the rain stops with the game. The game has no replay and no split screen.
+- `prt_emitter_update` 0x432520: `prt_particle_update` 0x432410 on every particle of the list, then
+  n = ftol(rnd * range +0x88) + base +0x84 times `prt_spawn` 0x432150.
+- `prt_particle_update` 0x432410: life > 0: old position (+0x14) = position (+0x08), position += velocity (+0x20),
+  velocity += the emitter's acceleration, old colour (+0x3c) = colour (+0x30), colour += step (+0x48), life (+0x2c)
+  -1. Life 0: unlinked, back to the free list, count -1 (so a particle is drawn in life + 1 frames).
+- `prt_spawn` 0x432150: nothing (and no rand()) when the free list is empty or count >= max. Else the head of the free
+  list goes to the front of the emitter's list; position = old position = (0, 0, 0); yaw = rnd * yaw range + base,
+  pitch = rnd * pitch range + base, velocity = (-sin yaw cos pitch, sin pitch, cos yaw cos pitch) * (rnd * speed
+  range + base); start colour = 3 x (rnd * range + base), end colour likewise; life = ftol(rnd * life range) + base;
+  colour = start, step = (end - start) / life per channel; count +1. 10 rand() per particle. The old colour is not
+  set (a new particle is a zero-length line).
+- `prt_rain_follow_cam` 0x432990: the emitter's matrix (`prt_emitter_set_matrix` 0x432590) = the identity with the
+  translation = the position of the active camera (g_cameras 0x4e66a0 [g_cam_slot[g_active_cam_slot]] +8) + (0, 20, 0).
+  The particles live in the emitter's space, so the spray is not left behind: it moves with the camera every frame
+  (translation only, the world's axes).
+- `prt_draw` 0x4326e0 (+0x114; 0x3e800 bytes of stack = 8000 LVERTEX): the default material and the texture state get
+  **texture 0** (g_textures[0], the cache 0x4ea834 = 0); SetTransform(WORLD, emitter +0xd4); `prt_build_lines`
+  0x4325b0 (fatal "No emitter!" / "Incorrect index current vertex!" past 8000) writes two D3DLVERTEX per particle:
+  x, y, z of the position with colour 0x00RRGGBB = ftol(c * 255) of the colour, then the old position with the old
+  colour; specular 0, **tu / tv not written** (whatever is on the stack). ZENABLE 0 (only when g_zenable 0x4ea83c is
+  on), DrawPrimitive(LINELIST, LVERTEX, D3DDP_WAIT) ("DramPrimitive error"), ZENABLE 1. No blending
+  (ALPHABLENDENABLE is 0 again after the clouds; alpha 0 is not used), no depth test or write: streaks drawn over
+  everything, even below the road and behind walls.
+- What it looks like: 200 streaks (the cap is reached after about 20 frames and kept, a few new ones as old ones die)
+  start 20 above the camera and fly outwards at 2 units per frame while falling (y = 20 - 0.05 t (t + 1) after t
+  frames): about 40 out at the camera's height, 70..130 out and 40..195 below it when they die. Each frame a line of
+  one frame's movement, so short and slanted at first, nearly vertical and about 5 long later; grey 102..153.
+- Port (src/particles.c): prt_init from race_init (keys missing: the CD's values 0 and 1), prt_tick from race_tick
+  after the effects (one game tick = one original frame), prt_draw from race_draw after fx_draw, before the flag,
+  around the camera as drawn (interpolated); the particles move per tick. rand() & 0x7fff as the CRT's rand. PORT:
+  no srand(time) (the port seeds nothing); a line is a quad facing the camera, as wide as one of the original's
+  pixels (1/480 of the 640x480 mode's picture height, at least one window pixel; the 8-bit modes: one pixel of their
+  target); untextured, with the vertex colour also under TEXTUREMAPBLEND COPY (fog = 1, the 8-bit modes), where the
+  original's colour came from texture 0 at undefined UVs (MODULATE: grey times that texel; COPY: the texel) (?);
+  drawn with the device's fog like everything else (the original's LVERTEX have specular alpha 0) (?).
 
 ### Finish flag (gfx_flag.cpp)
 Port: src/flag.c (names in docs/names/spel_render.txt). A waving chequered flag, a half transparent grid in front of
