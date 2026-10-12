@@ -1,6 +1,7 @@
 # Builds A2RacerIIRE.exe with build.bat (Windows), a2racerre with build.sh (Linux / Steam Deck, SDL2), the Android APK
 # (android/, Gradle) and a2racerre.nro with build_switch.sh (Nintendo Switch homebrew) on every push and pull request (no
-# game data involved: the programs hold only the port's own code). A pushed tag v* also publishes a GitHub release with
+# game data involved: the programs hold only the port's own code). A tag v* (pushed, or made by release.yml) also
+# publishes a GitHub release with
 # A2RacerIIRE-<tag>.zip (A2RacerIIRE.exe, README.md, LICENSE), A2RacerIIRE-<tag>-linux-x86_64.tar.gz (a2racerre, README.md,
 # LICENSE), A2RacerIIRE-<tag>.apk and A2RacerIIRE-<tag>-switch.zip (switch/a2racerre/a2racerre.nro for the SD card).
 name: build
@@ -10,6 +11,7 @@ on:
     branches: [master]
     tags: ['v*']
   pull_request:
+  workflow_dispatch:   # release.yml starts it on the tag it made
 
 permissions:
   contents: write

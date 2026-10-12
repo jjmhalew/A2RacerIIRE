@@ -49,4 +49,5 @@ spel.dat, by address:
 
 ## Tools
 `tools/disasm.py` (annotated listing per function, xrefs, string search; names from `docs/names/<exe>_<area>.txt`),
-`tools/exe_strings.py`, `tools/pe_info.py`, `tools/imgpack.py`, `tools/srcmap.py`.
+`tools/exe_strings.py`, `tools/pe_info.py`, `tools/imgpack.py`, `tools/srcmap.py`, `tools/coverage.py` (what is not
+analysed yet, [COVERAGE.md](COVERAGE.md)).

@@ -204,7 +204,8 @@ Analysis tools (Python: `pip install pefile capstone pillow numpy ziglang`):
 `tools/disasm.py` (annotated disassembly per function, cross references, string search; function names from
 `docs/names/<exe>_<area>.txt`), `tools/srcmap.py` (functions per original source file), `tools/imgpack.py` (archives),
 `tools/roadparse.py`, `tools/objparse.py`, `tools/d3dparse.py` (format parsers with self-tests and OBJ export),
-`tools/imgconv.py` (all images, fonts and sprites to PNG), `tools/physsim.py`, `tools/mkmanifest.py`.
+`tools/imgconv.py` (all images, fonts and sprites to PNG), `tools/physsim.py`, `tools/mkmanifest.py`,
+`tools/coverage.py` (which functions of the original no doc names yet: [docs/COVERAGE.md](docs/COVERAGE.md)).
 
 Developer switches of `out\a2racer.exe`:
 ```bash
