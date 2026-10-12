@@ -1,0 +1,16 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "A2 Racer II",
+  "wikidata": "Q2054622",
+  "system": "PC (Windows)",
+  "type": "port",
+  "original": { "region": "Netherlands", "revision": "1.01", "sha1": "39cd5d374b7f5553bb70a1b763368730459dd626" },
+  "project": "A2RacerIIRE",
+  "status": "playable",
+  "targets": ["Windows", "Linux", "Steam Deck", "Android", "Switch"],
+  "approach": "Engine reimplemented in C from the reverse-engineered menu and race programs: handling, AI, traffic and police ported 1:1, every data format documented",
+  "maintainers": [{ "name": "jjmhalew", "link": "https://github.com/jjmhalew" }],
+  "notes": "Playable start to end from your own CD: the whole career with all seven etappes, garage and save slots, traffic, opponents and police, Smacker films and sound, and the original's 3D-card and 8-bit software looks, at any resolution and frame rate, with touch controls. Still being polished. The Linux and Android builds come from CI and have not been tried on a device yet; the Switch build is experimental (homebrew).",
+  "help": ["Testing the Linux and Android builds"],
+  "tags": ["engine-rewrite", "racing"]
+}
