@@ -1,0 +1,38 @@
+# Publishes a release without pushing a tag by hand: Actions > release > Run workflow (on master). Tags that commit
+# v<ProductVersion of res/a2racerre.rc> (an annotated tag, its message = the notes given here) and starts build.yml on
+# the tag, which builds everything and publishes the release with those notes. A tag pushed by this workflow's token does
+# not start build.yml by itself (GitHub's rule against workflow loops), a workflow_dispatch does.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: Release notes (the tag message; the build adds how to start)
+        required: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag and build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          v=$(sed -n 's/.*VALUE "ProductVersion", "\([0-9.]*\)".*/\1/p' res/a2racerre.rc)
+          [ -n "$v" ] || { echo "::error::no ProductVersion in res/a2racerre.rc"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/v$v" > /dev/null; then
+            echo "::error::v$v exists already: raise the version in res/a2racerre.rc first"; exit 1; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "v$v" -m "${NOTES:-A2RacerIIRE $v}"
+          git push origin "v$v"
+          gh workflow run build.yml --ref "v$v"
+          echo "tagged v$v; the build and the release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/build.yml"
