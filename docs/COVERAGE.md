@@ -7,7 +7,9 @@ analyse; update it after every round of analysis.
 ## How it is made
 `python tools/coverage.py --write` (needs the CD's files in `extract/data`, like `tools/disasm.py`) rewrites the part
 below the generated marker. `--min N` sets the smallest function in the list (default 30 instructions); without
-`--write` it only prints.
+`--write` it only prints. `--html [FILE]` also writes the **coverage map** (default `out/coverage.html`): one page with
+every function of the three programs by address, coloured by class, with an "Open" table of what is left. It holds the
+original's function names, so it stays out of the repository.
 
 - **Functions** are those of `tools/disasm.py`: call targets, `push ebp; mov ebp, esp` prologues, the entry point and
   pointers in `.data`/`.rdata` (vtables, callback tables).
@@ -23,6 +25,10 @@ below the generated marker. `--min N` sets the smallest function in the list (de
   `win3ddp` up to `0x464000`, then the 2D library `winlib`. The MSVC C runtime is not counted: in spel.dat from
   `0x471000`, in a2_II.exe from `0x401520`, in menu.dat (roughly) from the entry point. The port replaces DirectX, the
   Windows parts of `winlib` and the C runtime, so a gap there often needs no analysis.
+- **Classes** (the map and "By class"): *ported* = cited in `src/`; *read* = cited only in the docs, names files or
+  tools; *helper* = not cited, but only called from ported, read or helper code; *platform* = the C runtime, or a
+  function that calls a Windows / DirectX import itself (the port uses SDL, OpenGL and libc instead); *unused* =
+  nothing calls it or points at it; *open* = the rest: reached by the game and not looked at yet.
 - **Source file** is the original `.cpp` of the nearest assert or debug string at or before the function. MSVC keeps
   the functions of one object file together, so this is usually right, but a file without strings is counted under
   the one before it.
