@@ -1,7 +1,7 @@
 /* unit.c - tests that need no game data (CI: tests/run.sh): the ini reader/writer, the PCX and TGA decoders on images
  * made here, the Smacker decoder on garbage, the WAV reader.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "audio.h"
 #include "image.h"
 #include "ini.h"

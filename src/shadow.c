@@ -9,7 +9,7 @@
  * draw loops 0x4409e0 / 0x440b30 call it (0x441f00) for each visible object with +0x24 != -1, right before
  * obj_draw_with_damage draws the object, i.e. in the opaque pass.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "shadow.h"
 #include "gfx.h"
 #include "ini.h"

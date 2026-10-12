@@ -1,6 +1,6 @@
 /* pad.c - see pad.h.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "pad.h"
 #include "ini.h"
 #include "plat.h"
@@ -41,7 +41,7 @@ static const struct { const char *alias; int a; } AXALIAS[] = { { "L2", GP_LT },
                                                                   { "ZR", GP_RT } };
 
 static const char DEFAULT_FILE[] =
-    "; controller.ini - A2RacerRE: the game controller mapping of the race. The keyboard keys are set in the game's\r\n"
+    "; controller.ini - A2RacerIIRE: the game controller mapping of the race. The keyboard keys are set in the game's\r\n"
     "; controls screen (Besturing); there \"Instellen\" with the joypad or wheel / joystick device chosen writes the\r\n"
     "; first element of the six driving actions here. Everything else is edited by hand; delete the file to get the\r\n"
     "; defaults back. The menus always use the d-pad or left stick, A (confirm), B (back) and Start.\r\n"

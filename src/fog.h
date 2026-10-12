@@ -3,7 +3,7 @@
  * track progress and the race clock like the sky. fog = 1 also switches the device to TEXTUREMAPBLEND COPY (texture
  * colours only: "conflicts with alpha blending"), fog = 2 keeps MODULATE.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_FOG_H
 #define A2_FOG_H
 #include "gfx.h"

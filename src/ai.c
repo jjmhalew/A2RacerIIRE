@@ -4,7 +4,7 @@
  * Timing: the original calls its per-frame code once per drawn frame with the smoothed frame time; here once per
  * game tick of RACE_HZ, with dt() = the tick length (timer_frame_dt 0x441cd0 never returns more than 0.1 s).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "ai.h"
 #include "collide.h"
 #include "exetab.h"

@@ -1,4 +1,4 @@
-# A2RacerRE
+# A2RacerIIRE
 
 A reimplementation of the engine of *A2 Racer II* (Davilex Games, 1998), rebuilt by reverse engineering the original.
 It runs the original game data from **your own CD**: no game files are included in this repository or its releases.
@@ -27,11 +27,11 @@ Linux and Android builds come from CI and have not been tried on a device yet.
 See [docs/](docs) for everything known about the original.
 
 ## Playing
-1. Get `A2RacerRE.exe` from the [Releases](../../releases) page, or build it yourself (below). The exe is not
+1. Get `A2RacerIIRE.exe` from the [Releases](../../releases) page, or build it yourself (below). The exe is not
    signed, so Windows SmartScreen may warn at the first start: *More info*, then *Run anyway*.
 2. Start it. At the first start it looks for the A2 Racer II CD in every drive (a mounted ISO image works too); without
    a CD it asks for an ISO image or a folder with a copy of the CD. It copies the CD's `data` folder (about 115 MB) and
-   checks every file against the Dutch version 1.01 CD (`A2RacerRE.exe --verify` repeats the check).
+   checks every file against the Dutch version 1.01 CD (`A2RacerIIRE.exe --verify` repeats the check).
 
 **Linux and Steam Deck:** download the `linux-x86_64.tar.gz` from the Releases page (or run `./build.sh`), unpack it and
 start `a2racerre`. It needs SDL2 (`libsdl2-2.0-0`; SteamOS has it). The CD is looked for under `/media`, `/run/media` and
@@ -130,7 +130,7 @@ phones from about 2015 on, the Switch); without it they stay off.
 
 ### Files
 Everything the game writes lives in the user folder (`%APPDATA%\A2RacerRE` on Windows, `~/.local/share/A2RacerRE` on
-Linux), or next to `A2RacerRE.exe` when a `data` folder is there (portable). The original's own settings files are kept
+Linux), or next to `A2RacerIIRE.exe` when a `data` folder is there (portable). The original's own settings files are kept
 there in their original formats, so they can be edited the same way: `Game.ini` and `Raser.ini` (commented), `SLOTS.RAS`
 (the nine save slots), `options.ras`. The port adds `controller.ini` (the controller mapping and the touch controls,
 see above) and `graphics.ini` (the extras above).
@@ -144,7 +144,7 @@ A `mods` folder in the user folder (or next to the program) replaces the game's 
   sprites, which have no names),
   films (`.smk`), track and object files.
 
-`A2RacerRE --dump-textures FOLDER` writes all 147 textures of the game as PNG with their names, the starting point of a
+`A2RacerIIRE --dump-textures FOLDER` writes all 147 textures of the game as PNG with their names, the starting point of a
 pack. In *3D Kaart* textures are drawn with mipmaps and 8x anisotropic filtering where the graphics card has it.
 
 ## Building from source
@@ -152,14 +152,14 @@ Windows 10 or 11; nothing needs to be installed first:
 ```bat
 build.bat
 ```
-builds `A2RacerRE.exe`. The C compiler is [Zig](https://ziglang.org): an existing `zig` or `pip install ziglang` is
+builds `A2RacerIIRE.exe`. The C compiler is [Zig](https://ziglang.org): an existing `zig` or `pip install ziglang` is
 used when present, otherwise `build.bat` downloads Zig 0.16.0 into `tools\zig` once and checks its SHA-256. SDL 2.32.10
 (zlib license) is downloaded into `tools\sdl` the same way and linked statically, so the exe is a single file.
 `build.bat dev` builds the developer build `out\a2racer.exe` with a console.
 
-`make_standalone.bat` packs `A2RacerRE.exe` and **your** game files (the copy A2RacerRE.exe made at its first start)
-into a single `A2RacerRE-standalone.exe` that unpacks itself to `%LOCALAPPDATA%\A2RacerRE` at its first start and runs
-from there; settings and saves stay in `%APPDATA%\A2RacerRE`, shared with A2RacerRE.exe. It contains the game's files, so
+`make_standalone.bat` packs `A2RacerIIRE.exe` and **your** game files (the copy A2RacerIIRE.exe made at its first start)
+into a single `A2RacerIIRE-standalone.exe` that unpacks itself to `%LOCALAPPDATA%\A2RacerRE` at its first start and runs
+from there; settings and saves stay in `%APPDATA%\A2RacerRE`, shared with A2RacerIIRE.exe. It contains the game's files, so
 it is for your own use only: never share or upload it.
 
 - Linux: `./build.sh` builds `a2racerre` with the system's C compiler and SDL2 (Debian / Ubuntu:

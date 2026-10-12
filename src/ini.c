@@ -2,7 +2,7 @@
  * GetPrivateProfileString does (which does not strip a trailing "; comment": GetPrivateProfileInt reads the leading
  * number, so "car1 = 15000 ; Trabant" is 15000 - ini_int does the same).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "ini.h"
 #include "plat.h"
 #include <ctype.h>

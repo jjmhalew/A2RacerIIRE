@@ -9,7 +9,7 @@
  * PORT: an 8-bit mode is drawn at its own size into an offscreen target and scaled up into the window with nearest
  * filtering, in a 4:3 rectangle as a monitor of the time showed it; the 16-bit mode draws at the window's size.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_SCREEN_H
 #define A2_SCREEN_H
 #include <stdint.h>

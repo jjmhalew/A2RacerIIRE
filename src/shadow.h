@@ -1,7 +1,7 @@
 /* shadow.h - the car shadows (gfx_shdw.cpp, docs/RENDER.md "Car shadows"): one S_SHADOW_ANIM quad, stretched to the
  * floor rectangle of each car's mesh and laid on the road under it, half transparent black, drawn just before the car.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_SHADOW_H
 #define A2_SHADOW_H
 #include "race.h"

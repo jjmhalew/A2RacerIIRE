@@ -8,7 +8,7 @@
  * switches them with light_set_on 0x41b560 when g_plr_brake_light changes; light_draw 0x41b720 draws the lit ones in
  * render_game after the objects, blended, with the light's matrix times the object's.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "lights.h"
 #include "exetab.h"
 #include "gfx.h"

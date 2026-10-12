@@ -1,7 +1,7 @@
 # The native part of the Android build: SDL2 (fetched; its Java glue is in src/main/java/org/libsdl) and the engine of
 # ../../src as libmain.so on OpenGL ES 2.0. The source list is the same as in build.bat and build.sh.
 cmake_minimum_required(VERSION 3.18)
-project(A2RacerRE C)
+project(A2RacerIIRE C)
 
 include(FetchContent)
 FetchContent_Declare(SDL2

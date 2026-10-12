@@ -1,6 +1,6 @@
 /* datasetup.c - see datasetup.h.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "datasetup.h"
 #include "datafiles.h"
 #include "gfx.h"
@@ -388,20 +388,20 @@ const char *data_find(const char *arg)
         if (d) closedir(d);
     }
     if (!ok) {
-        plat_message("A2RacerRE needs the files of your A2 Racer II CD (they are not included).\n\nPut an ISO image of "
+        plat_message("A2RacerIIRE needs the files of your A2 Racer II CD (they are not included).\n\nPut an ISO image of "
                      "the CD into /switch/a2racerre/ on the SD card, or copy the CD's data folder to "
-                     "/switch/a2racerre/data, and start A2RacerRE again.", 1);
+                     "/switch/a2racerre/data, and start A2RacerIIRE again.", 1);
         return NULL;
     }
 #endif
     while (!ok) {
         if (find_cd(src, sizeof src)) {
-            int r = plat_ask("A2RacerRE needs the files of your A2 Racer II CD. Copy them from the CD now (about 115 MB)?",
+            int r = plat_ask("A2RacerIIRE needs the files of your A2 Racer II CD. Copy them from the CD now (about 115 MB)?",
                              "Copy", "Choose an ISO / folder", "Quit");
             if (r < 0) return NULL;
             if (r == 1) { ok = copy_folder(src, dest); if (!ok) plat_message("Copying from the CD failed.", 1); continue; }
         } else {
-            int r = plat_ask("A2RacerRE needs the files of your A2 Racer II CD (they are not included).\n\n"
+            int r = plat_ask("A2RacerIIRE needs the files of your A2 Racer II CD (they are not included).\n\n"
                              "Insert the CD (or mount its ISO image) and choose Retry, or choose an ISO image or a folder "
                              "with a copy of the CD.", "Retry", "Choose an ISO / folder", "Quit");
             if (r < 0) return NULL;

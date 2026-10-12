@@ -16,7 +16,7 @@
  * Buttons and hats are digital and drive the car like the keys do (DEVICE 2, the original's joypad); stick halves,
  * triggers and raw axes are analogue (DEVICE 3: steering is the position, gas / brake the pressure).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_PAD_H
 #define A2_PAD_H
 #include <stddef.h>

@@ -1,8 +1,8 @@
 /*
  * smk.c - self-contained Smacker (SMK2 / SMK4) video + audio decoder.
  *
- * Part of A2RacerRE, a reimplementation of the "A2 Racer II" engine.
- * Copyright (C) 2026 A2RacerRE contributors
+ * Part of A2RacerIIRE, a reimplementation of the "A2 Racer II" engine.
+ * Copyright (C) 2026 A2RacerIIRE contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * This program is free software: you can redistribute it and/or modify it

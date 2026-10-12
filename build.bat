@@ -1,11 +1,11 @@
 @echo off
-rem build.bat - builds A2RacerRE from source on Windows 10/11; nothing to install first.
-rem   build.bat             A2RacerRE.exe, the game (start it, it asks for the CD the first time)
+rem build.bat - builds A2RacerIIRE from source on Windows 10/11; nothing to install first.
+rem   build.bat             A2RacerIIRE.exe, the game (start it, it asks for the CD the first time)
 rem   build.bat dev         out\a2racer.exe, the developer build (console output, same engine)
-rem   build.bat standalone  A2RacerRE-standalone.exe: A2RacerRE.exe + YOUR game files in one exe, for your own use only
+rem   build.bat standalone  A2RacerIIRE-standalone.exe: A2RacerIIRE.exe + YOUR game files in one exe, for your own use only
 rem The C compiler is Zig (ziglang.org): a zig on PATH or "pip install ziglang" is used when there, otherwise the official
 rem Windows build is downloaded once into tools\zig and checked against its SHA-256. SDL2 (zlib license) is downloaded once
-rem into tools\sdl the same way and linked statically, so A2RacerRE.exe is a single file.
+rem into tools\sdl the same way and linked statically, so A2RacerIIRE.exe is a single file.
 setlocal
 cd /d "%~dp0"
 
@@ -33,28 +33,28 @@ if /i "%~1"=="dev" (
     exit /b 0
 )
 
-echo Building A2RacerRE.exe...
-%ZIG% cc -std=c99 -O2 -s %CPU% %INC% -DA2_GUI -Wl,--subsystem,windows -o A2RacerRE.exe %SRC% res\a2racerre.rc %LIBS% || goto :fail
-echo Done: A2RacerRE.exe
+echo Building A2RacerIIRE.exe...
+%ZIG% cc -std=c99 -O2 -s %CPU% %INC% -DA2_GUI -Wl,--subsystem,windows -o A2RacerIIRE.exe %SRC% res\a2racerre.rc %LIBS% || goto :fail
+echo Done: A2RacerIIRE.exe
 if /i not "%~1"=="standalone" exit /b 0
 
-rem ---- standalone: launcher stub + A2RacerRE.exe + the game files (the copy A2RacerRE.exe made at its first start) ----
+rem ---- standalone: launcher stub + A2RacerIIRE.exe + the game files (the copy A2RacerIIRE.exe made at its first start) ----
 set "GAME="
 if exist "data\RCS.IMG" if exist "data\Raser.ini" set "GAME=data"
 if not defined GAME if exist "%APPDATA%\A2RacerRE\data\RCS.IMG" if exist "%APPDATA%\A2RacerRE\data\Raser.ini" set "GAME=%APPDATA%\A2RacerRE\data"
 if not defined GAME if exist "extract\data\RCS.IMG" if exist "extract\data\Raser.ini" set "GAME=extract\data"
 if not defined GAME (
     echo.
-    echo No game files found. Start A2RacerRE.exe once first: it copies them from your CD into %APPDATA%\A2RacerRE\data.
+    echo No game files found. Start A2RacerIIRE.exe once first: it copies them from your CD into %APPDATA%\A2RacerRE\data.
     goto :fail
 )
 if not exist build mkdir build
 %ZIG% cc -std=c99 -O2 -s %CPU% -Wl,--subsystem,windows -o build\bundle_stub.exe tools\native\bundle.c res\a2racerre.rc -luser32 -lgdi32 || goto :fail
 %ZIG% cc -std=c99 -O2 %CPU% -o build\pack.exe tools\native\pack.c || goto :fail
 echo Packing the game files from %GAME% ...
-build\pack.exe build\bundle_stub.exe A2RacerRE.exe "%GAME%" A2RacerRE-standalone.exe || goto :fail
+build\pack.exe build\bundle_stub.exe A2RacerIIRE.exe "%GAME%" A2RacerIIRE-standalone.exe || goto :fail
 echo.
-echo Done: A2RacerRE-standalone.exe. It contains the game's files - keep it for yourself, do not share it.
+echo Done: A2RacerIIRE-standalone.exe. It contains the game's files - keep it for yourself, do not share it.
 exit /b 0
 
 :find_zig

@@ -2,7 +2,7 @@
  * ini exchange with the race (ini_io.cpp), the standings (hiscore_*), and the start-up / exit sequence of
  * menu_winmain 0x4098f0 and menu_session 0x401220. The screens are in menu_screens.c, the 2D machinery in menu_ui.c.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "menu.h"
 #include "menu_int.h"
 #include "audio.h"

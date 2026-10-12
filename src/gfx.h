@@ -2,7 +2,7 @@
  * The original draws with Direct3D 5 (immediate mode, 640x480x16 or 320x200/640x480x8); here everything is drawn as
  * textured triangles with a vertex colour, plus 2D quads for the overlay in the original's 640x480 screen space.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_GFX_H
 #define A2_GFX_H
 #include <stdint.h>

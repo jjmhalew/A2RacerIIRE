@@ -1,6 +1,6 @@
 /* track.c - see track.h; the file layouts and the original's functions are in docs/FORMAT_ROAD.md.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "track.h"
 #include "ini.h"
 #include "plat.h"

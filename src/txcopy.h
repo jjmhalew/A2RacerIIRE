@@ -3,7 +3,7 @@
  * blinking police lights, the speed-limit matrix signs and the direction signs above the highway. Game.ini [OPTIONS]
  * texturecopy=1 switches them on, together with the radar (radar.c), as g_radar_enabled 0x4d9aa4 does.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_TXCOPY_H
 #define A2_TXCOPY_H
 #include "race.h"

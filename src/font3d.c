@@ -1,6 +1,6 @@
 /* font3d.c - see font3d.h; docs/RENDER.md "3D font (gfx_3dft.cpp)" has the original's code.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "font3d.h"
 #include "exetab.h"
 #include "gfx.h"

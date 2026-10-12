@@ -1,7 +1,7 @@
 /* effects.c - see effects.h. Lifetimes are counted in frames (the original converts seconds with the frame time at
  * creation); one game tick is one of the original's frames.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "effects.h"
 #include "gfx.h"
 #include "screen.h"

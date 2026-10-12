@@ -1,7 +1,7 @@
 /* res.h - the game's files: loose files in the data dir and the resource archives (<name>.IND index + <name>.IMG
  * data, docs/FORMAT_IMG.md). Names are matched ignoring case, as on the original's file system.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_RES_H
 #define A2_RES_H
 #include <stddef.h>
@@ -34,7 +34,7 @@ uint8_t *res_load(const char *name, size_t *size);
 /* Mods: a "mods" folder in the user folder or next to the program (the user folder wins).
  *   mods/data/NAME       replaces the game file NAME, loose or in a named archive (RCS, Mrcs): sounds, images, ...
  *   mods/textures/NAME.png (.tga .pcx .jpg .bmp)   replaces texture NAME at any size (texture.c), alpha or the
- *                        colour key (255,0,127) for transparency; A2RacerRE --dump-textures DIR writes the originals.
+ *                        colour key (255,0,127) for transparency; A2RacerIIRE --dump-textures DIR writes the originals.
  * res_mod_find puts the path of mods/SUB/NAME in out; 0 = no such file. */
 int res_mod_find(char *out, size_t cap, const char *sub, const char *name);
 uint8_t *res_load_path(const char *path, size_t *size);     /* a whole file by path; NULL when missing */

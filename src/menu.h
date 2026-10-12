@@ -4,7 +4,7 @@
  * (docs/GAMEFLOW.md); the save games are SLOTS.RAS and options.ras, byte-compatible with the original's files. All of
  * them live in the user folder (res_user_path).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_MENU_H
 #define A2_MENU_H
 

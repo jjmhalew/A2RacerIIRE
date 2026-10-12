@@ -2,7 +2,7 @@
  * WritePrivateProfileString: [SECTION] and KEY=value, ';' comments, names compared ignoring case. Writing keeps
  * the file's comments and order (the CD's Game.ini and Raser.ini document every setting in their comments).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_INI_H
 #define A2_INI_H
 #include <stddef.h>

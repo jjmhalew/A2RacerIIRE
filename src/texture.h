@@ -3,7 +3,7 @@
  * the 8-bit modes (tex_set_mode, screen.h) the .pcx shown through the etappe's palette, with nearest filtering; else
  * the .tga, mipmapped. Each mode has its own textures (a name's texture id stays the same within a mode).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_TEXTURE_H
 #define A2_TEXTURE_H
 #include "image.h"

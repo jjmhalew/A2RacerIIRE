@@ -3,7 +3,7 @@
  * (LEFT=37 is VK_LEFT). Files are opened through plat_fopen, which on case-sensitive file systems looks a name up again
  * ignoring case (the CD writes "RCS.IMG" next to "Mrcs.img" and the code asks for "rcs.img").
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_PLAT_H
 #define A2_PLAT_H
 #include <stdint.h>

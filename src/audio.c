@@ -2,7 +2,7 @@
  * relative to the sample's own rate) and an equal-power-ish linear pan; changes from the game thread go under the
  * device lock.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "audio.h"
 #include "plat.h"
 #include "res.h"

@@ -4,7 +4,7 @@
  * Drawn without depth test, so always on top of the world. Counted in frames like the original (which converts
  * seconds with the frame time when an effect starts); one game tick is one of its frames.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_FONT3D_H
 #define A2_FONT3D_H
 #include "vmath.h"

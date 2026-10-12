@@ -1,6 +1,6 @@
 /* race.c - see race.h. Function names and addresses refer to spel.dat (docs/PHYSICS.md, INPUT.md, RENDER.md).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #include "race.h"
 #include "ai.h"
 #include "car_old.h"

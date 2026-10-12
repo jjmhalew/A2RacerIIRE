@@ -7,7 +7,7 @@
  * them; pylons, barriers and speed-camera poles (2, 3, 7) fly off when the player hits them; arrows (8) blink; and the
  * road-side objects play their sample (the .omp variant: 1 road works, 2 church bell).
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_OBJECTS_H
 #define A2_OBJECTS_H
 #include "track.h"

@@ -4,7 +4,7 @@
  * finish event 1500 ms after the finish (flag_start(1)) and shown until the race ends; Game.ini [GFX OPTIONS]
  * finish_flag switches the drawing.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_FLAG_H
 #define A2_FLAG_H
 #include "vmath.h"

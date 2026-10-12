@@ -1,18 +1,18 @@
 /* bundle.c - the single-file launcher of make_standalone.bat (not part of the engine). tools/native/pack.c appends
- * A2RacerRE.exe and the game files to this exe; at start it unpacks them once to %LOCALAPPDATA%\A2RacerRE (again only
- * when the bundle changes), then runs A2RacerRE.exe from there with that data folder and passes its own command line on
- * (e.g. "A2RacerRE-standalone.exe --windowed"). The settings and saves stay in the user folder of A2RacerRE.exe
+ * A2RacerIIRE.exe and the game files to this exe; at start it unpacks them once to %LOCALAPPDATA%\A2RacerRE (again only
+ * when the bundle changes), then runs A2RacerIIRE.exe from there with that data folder and passes its own command line on
+ * (e.g. "A2RacerIIRE-standalone.exe --windowed"). The settings and saves stay in the user folder of A2RacerIIRE.exe
  * (%APPDATA%\A2RacerRE), shared with a normal install. The data inside makes the result for your own use only: never
  * share it. A2_BUNDLE_DIR unpacks somewhere else (tests); A2_HIDDEN shows no progress window.
  *
  * Payload layout (after the launcher itself): the file bodies, then the index (per entry: u32 name length, name with
  * '/', u64 offset from the start of the exe, u64 size), then the trailer: u64 index offset, u32 count, u64 bundle id,
- * "A2RCPK01". Entry 0 is A2RacerRE.exe, the others data/<name>.
+ * "A2RCPK01". Entry 0 is A2RacerIIRE.exe, the others data/<name>.
  *
  * Build (build.bat standalone): zig cc -std=c99 -O2 -Wl,--subsystem,windows tools/native/bundle.c res/a2racerre.rc
  * -luser32 -lgdi32
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
@@ -32,8 +32,8 @@ static void fail(const wchar_t *what)
 {
     wchar_t msg[1024];
     swprintf(msg, 1024, L"%ls (error %lu)", what, GetLastError());
-    if (g_console || GetEnvironmentVariableW(L"A2_HIDDEN", NULL, 0)) fwprintf(stderr, L"A2RacerRE: %ls\n", msg);
-    else MessageBoxW(NULL, msg, L"A2RacerRE", MB_ICONERROR);
+    if (g_console || GetEnvironmentVariableW(L"A2_HIDDEN", NULL, 0)) fwprintf(stderr, L"A2RacerIIRE: %ls\n", msg);
+    else MessageBoxW(NULL, msg, L"A2RacerIIRE", MB_ICONERROR);
     ExitProcess(1);
 }
 
@@ -58,7 +58,7 @@ static void progress(uint64_t done, uint64_t total)
 static void show_window(void)
 {
     if (g_console || GetEnvironmentVariableW(L"A2_HIDDEN", NULL, 0)) return;
-    g_win = CreateWindowExW(WS_EX_TOPMOST, L"STATIC", L"A2RacerRE", WS_POPUP | WS_BORDER | WS_VISIBLE,
+    g_win = CreateWindowExW(WS_EX_TOPMOST, L"STATIC", L"A2RacerIIRE", WS_POPUP | WS_BORDER | WS_VISIBLE,
                             (GetSystemMetrics(SM_CXSCREEN) - 440) / 2, (GetSystemMetrics(SM_CYSCREEN) - 70) / 2, 440, 70,
                             NULL, NULL, NULL, NULL);
     g_text = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE, 0, 0, 440, 70, g_win,
@@ -111,7 +111,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show)
     if (!n || n >= MAX_PATH - 64) {
         n = GetEnvironmentVariableW(L"LOCALAPPDATA", base, MAX_PATH);
         if (!n || n >= MAX_PATH - 64) fail(L"LOCALAPPDATA is not set");
-        wcscat(base, L"\\A2RacerRE");
+        wcscat(base, L"\\A2RacerRE");   /* the folder keeps the project's first name */
     }
     CreateDirectoryW(base, NULL);
     swprintf(idpath, MAX_PATH, L"%ls\\.bundle_id", base);
@@ -176,17 +176,17 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE hp, LPSTR cmd, int show)
     }
     CloseHandle(f);
 
-    /* A2RacerRE.exe <base>\data [the arguments this exe got], run in <base> */
+    /* A2RacerIIRE.exe <base>\data [the arguments this exe got], run in <base> */
     const wchar_t *args = skip_argv0(GetCommandLineW());
     size_t cl = wcslen(args) + 3 * MAX_PATH;
     wchar_t *line = malloc(cl * sizeof *line), exe[MAX_PATH];
-    swprintf(exe, MAX_PATH, L"%ls\\A2RacerRE.exe", base);
+    swprintf(exe, MAX_PATH, L"%ls\\A2RacerIIRE.exe", base);
     swprintf(line, cl, L"\"%ls\" \"%ls\\data\" %ls", exe, base, args);
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
     memset(&si, 0, sizeof si);
     si.cb = sizeof si;
-    if (!CreateProcessW(exe, line, NULL, NULL, FALSE, 0, NULL, base, &si, &pi)) fail(L"cannot start A2RacerRE.exe");
+    if (!CreateProcessW(exe, line, NULL, NULL, FALSE, 0, NULL, base, &si, &pi)) fail(L"cannot start A2RacerIIRE.exe");
     WaitForSingleObject(pi.hProcess, INFINITE);
     DWORD code = 0;
     GetExitCodeProcess(pi.hProcess, &code);

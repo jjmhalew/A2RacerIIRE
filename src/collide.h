@@ -3,7 +3,7 @@
  * around a car, a swept test that stops the motion at the first contact, a slide-out, impulse responses, the
  * collision callbacks and the player's damage.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #ifndef A2_COLLIDE_H
 #define A2_COLLIDE_H
 #include "race.h"

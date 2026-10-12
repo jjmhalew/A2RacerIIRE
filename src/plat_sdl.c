@@ -3,7 +3,7 @@
  * touch screen (also as SDL's emulated mouse, outside the race), the accelerometer, the audio device, time and
  * case-insensitive file lookup.
  *
- * This file is part of A2RacerRE, licensed under the GNU GPL v3 or later (see LICENSE). */
+ * This file is part of A2RacerIIRE, licensed under the GNU GPL v3 or later (see LICENSE). */
 #define SDL_MAIN_HANDLED
 #include "plat.h"
 #include <SDL.h>
@@ -139,7 +139,7 @@ void plat_message(const char *text, int warn)
 {
     fprintf(stderr, "%s\n", text);
     if (getenv("A2_HIDDEN")) return;                          /* tests: no window */
-    SDL_ShowSimpleMessageBox(warn ? SDL_MESSAGEBOX_WARNING : SDL_MESSAGEBOX_INFORMATION, "A2RacerRE", text, g_win);
+    SDL_ShowSimpleMessageBox(warn ? SDL_MESSAGEBOX_WARNING : SDL_MESSAGEBOX_INFORMATION, "A2RacerIIRE", text, g_win);
 }
 #endif
 
@@ -206,11 +206,11 @@ int plat_init(const PlatConfig *cfg)
     if (getenv("A2_HIDDEN")) flags |= SDL_WINDOW_HIDDEN;      /* tests and screenshots without a window on screen */
     else if (cfg->fullscreen) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 #endif
-    g_win = SDL_CreateWindow(cfg->title ? cfg->title : "A2RacerRE", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    g_win = SDL_CreateWindow(cfg->title ? cfg->title : "A2RacerIIRE", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                              w, h, flags);
     if (!g_win) {
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-        g_win = SDL_CreateWindow("A2RacerRE", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, flags);
+        g_win = SDL_CreateWindow("A2RacerIIRE", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h, flags);
     }
     if (!g_win || !(g_gl = SDL_GL_CreateContext(g_win))) {
         char msg[300];
@@ -1040,7 +1040,7 @@ const char *plat_user_dir(void)
         if (ext) { size_t n = strlen(ext) + 2; dir = SDL_malloc(n); snprintf(dir, n, "%s/", ext); }
         if (!dir)
 #endif
-        dir = SDL_GetPrefPath("", "A2RacerRE");
+        dir = SDL_GetPrefPath("", "A2RacerRE");   /* the folder keeps the project's first name: existing saves stay */
         if (!dir) dir = SDL_strdup("./");
     }
     return dir;
@@ -1075,7 +1075,7 @@ int plat_ask(const char *text, const char *b1, const char *b2, const char *b3)
     if (b3) { btn[n].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT; btn[n].buttonid = -1; btn[n].text = b3; n++; }
     if (b2) { btn[n].flags = 0; btn[n].buttonid = 0; btn[n].text = b2; n++; }
     if (b1) { btn[n].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT; btn[n].buttonid = 1; btn[n].text = b1; n++; }
-    SDL_MessageBoxData box = { SDL_MESSAGEBOX_INFORMATION, g_win, "A2RacerRE", text, n, btn, NULL };
+    SDL_MessageBoxData box = { SDL_MESSAGEBOX_INFORMATION, g_win, "A2RacerIIRE", text, n, btn, NULL };
     int hit = -1;
     if (SDL_ShowMessageBox(&box, &hit) != 0) return -1;
     return hit;
